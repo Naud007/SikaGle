@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 import os
-from supabase import create_client, Client
 
 app = FastAPI(
     title="SikaGlé API",
@@ -8,16 +7,17 @@ app = FastAPI(
     description="Backend officiel pour la plateforme SikaGlé"
 )
 
-# Initialisation du client Supabase
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
-
-supabase: Client = None
-if SUPABASE_URL and SUPABASE_KEY:
-    try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    except Exception as e:
-        print(f"Erreur de connexion Supabase: {e}")
+def get_supabase():
+    url = os.getenv("SUPABASE_URL", "")
+    key = os.getenv("SUPABASE_KEY", "")
+    if url and key:
+        try:
+            from supabase import create_client
+            return create_client(url, key)
+        except Exception as e:
+            print(f"Erreur Supabase: {e}")
+            return None
+    return None
 
 @app.get("/")
 def root():
@@ -29,15 +29,15 @@ def root():
 
 @app.get("/db-status")
 def db_status():
-    if not supabase:
+    client = get_supabase()
+    if not client:
         return {
             "database": "disconnected", 
-            "reason": "Variables SUPABASE_URL ou SUPABASE_KEY non configurées"
+            "reason": "Variables SUPABASE_URL ou SUPABASE_KEY manquantes"
         }
     
     try:
-        # Test de lecture de la table users
-        response = supabase.table("users").select("count", count="exact").execute()
+        response = client.table("users").select("count", count="exact").execute()
         return {
             "database": "connected",
             "status": "ok",
