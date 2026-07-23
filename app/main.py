@@ -1,8 +1,14 @@
 from fastapi import FastAPI, Request, Response
 from supabase import create_client, Client
+from datetime import date, datetime
 import os
 
 app = FastAPI(title="SikaGlé API", version="1.0.0")
+
+# Quotas quotidiens selon l'ancienneté
+TRIAL_PERIOD_DAYS = 31
+TRIAL_DAILY_LIMIT = 15
+REGULAR_DAILY_LIMIT = 5
 
 # Variables d'environnement
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "sikagle_secret_token_2026")
@@ -63,10 +69,8 @@ async def receive_webhook(request: Request):
                 if messages and supabase:
                     msg = messages[0]
                     sender_phone = msg.get("from")
-                    msg_id = msg.get("id")  # <--- msg_id est bien défini ici !
+                    msg_id = msg.get("id")
                     msg_type = msg.get("type", "text")
-                    
-                    # Nom du contact dans WhatsApp
                     sender_name = contacts[0].get("profile", {}).get("name") if contacts else "Inconnu"
 
                     # Extrait le contenu du message
@@ -76,26 +80,68 @@ async def receive_webhook(request: Request):
                     elif msg_type in ["image", "audio", "voice", "document"]:
                         content = f"[{msg_type.upper()}] ID: " + str(msg.get(msg_type, {}).get("id", ""))
 
-                    # 1. Obtenir ou créer l'utilisateur (colonne full_name)
-                    user_res = supabase.table("users").select("id").eq("phone_number", sender_phone).execute()
+                    today_date = date.today()
+                    today_str = today_date.isoformat()
+
+                    # 1. Vérifier si l'utilisateur existe
+                    user_res = supabase.table("users").select("id, credits, last_active_date, created_at").eq("phone_number", sender_phone).execute()
                     
                     if user_res.data:
-                        user_id = user_res.data[0]["id"]
+                        user = user_res.data[0]
+                        user_id = user["id"]
+                        user_credits = user.get("credits")
+                        last_active = user.get("last_active_date")
+                        
+                        # Calcul de l'ancienneté du compte en jours
+                        created_at_str = user.get("created_at")
+                        if created_at_str:
+                            created_at_dt = datetime.fromisoformat(created_at_str.replace("Z", "+00:00")).date()
+                            days_old = (today_date - created_at_dt).days
+                        else:
+                            days_old = 0
+
+                        # Détermination de la limite quotidienne selon l'ancienneté
+                        daily_limit = TRIAL_DAILY_LIMIT if days_old <= TRIAL_PERIOD_DAYS else REGULAR_DAILY_LIMIT
+
+                        # Réinitialisation quotidienne des crédits si changement de jour
+                        if last_active != today_str:
+                            user_credits = daily_limit
+                        elif user_credits is None:
+                            user_credits = daily_limit
+
                     else:
+                        # Nouvel utilisateur (Période d'essai de 31 jours -> 15 crédits/jour)
+                        daily_limit = TRIAL_DAILY_LIMIT
                         new_user = supabase.table("users").insert({
                             "phone_number": sender_phone,
-                            "full_name": sender_name
+                            "full_name": sender_name,
+                            "credits": daily_limit,
+                            "last_active_date": today_str
                         }).execute()
                         user_id = new_user.data[0]["id"]
+                        user_credits = daily_limit
 
-                    # 2. Enregistrer le message
+                    # 2. Vérification du quota
+                    if user_credits <= 0:
+                        print(f"⚠️ Utilisateur {user_id} a épuisé ses crédits du jour (Limite: {daily_limit}).")
+                        continue
+
+                    # 3. Décrémenter 1 crédit et mettre à jour la date d'activité
+                    remaining_credits = user_credits - 1
+                    supabase.table("users").update({
+                        "credits": remaining_credits,
+                        "last_active_date": today_str
+                    }).eq("id", user_id).execute()
+
+                    # 4. Enregistrer le message
                     supabase.table("messages").insert({
                         "user_id": user_id,
                         "whatsapp_message_id": msg_id,
                         "message_type": msg_type,
                         "content": content
                     }).execute()
-                    print(f"✅ Message enregistré avec succès pour l'utilisateur ID: {user_id}")
+
+                    print(f"✅ Message enregistré. Crédits restants pour l'utilisateur {user_id} : {remaining_credits}/{daily_limit}")
 
     except Exception as e:
         print("❌ Erreur lors du traitement du message :", str(e))
