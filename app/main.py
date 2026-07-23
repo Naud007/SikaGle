@@ -87,9 +87,10 @@ async def receive_webhook(request: Request):
                         }).execute()
                         user_id = new_user.data[0]["id"]
 
-                    # 2. Enregistrer le message
+                    # 2. Enregistrer le message (avec whatsapp_message_id)
                     supabase.table("messages").insert({
                         "user_id": user_id,
+                        "whatsapp_message_id": msg_id,
                         "message_type": msg_type,
                         "content": content
                     }).execute()
