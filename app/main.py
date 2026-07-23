@@ -52,7 +52,6 @@ async def receive_webhook(request: Request):
     data = await request.json()
     print("Notification WhatsApp reçue :", data)
 
-    # Traitement du payload Meta
     try:
         entries = data.get("entry", [])
         for entry in entries:
@@ -64,10 +63,9 @@ async def receive_webhook(request: Request):
                 if messages and supabase:
                     msg = messages[0]
                     sender_phone = msg.get("from")
-                    msg_id = msg.get("id")
                     msg_type = msg.get("type", "text")
                     
-                    # Extrait le nom si disponible
+                    # Nom du contact dans WhatsApp
                     sender_name = contacts[0].get("profile", {}).get("name") if contacts else "Inconnu"
 
                     # Extrait le contenu du message
@@ -75,9 +73,9 @@ async def receive_webhook(request: Request):
                     if msg_type == "text":
                         content = msg.get("text", {}).get("body", "")
                     elif msg_type in ["image", "audio", "voice", "document"]:
-                        content = msg.get(msg_type, {}).get("id", "")
+                        content = f"[{msg_type.upper()}] ID: " + msg.get(msg_type, {}).get("id", "")
 
-                    # 1. Obtenir ou créer l'utilisateur dans Supabase
+                    # 1. Obtenir ou créer l'utilisateur (colonne full_name)
                     user_res = supabase.table("users").select("id").eq("phone_number", sender_phone).execute()
                     
                     if user_res.data:
@@ -85,20 +83,19 @@ async def receive_webhook(request: Request):
                     else:
                         new_user = supabase.table("users").insert({
                             "phone_number": sender_phone,
-                            "name": sender_name
+                            "full_name": sender_name
                         }).execute()
                         user_id = new_user.data[0]["id"]
 
                     # 2. Enregistrer le message
                     supabase.table("messages").insert({
                         "user_id": user_id,
-                        "whatsapp_message_id": msg_id,
                         "message_type": msg_type,
                         "content": content
                     }).execute()
-                    print(f"✅ Message enregistré en BDD pour l'utilisateur {user_id}")
+                    print(f"✅ Message enregistré avec succès pour l'utilisateur ID: {user_id}")
 
     except Exception as e:
-        print("❌ Erreur traitement message :", str(e))
+        print("❌ Erreur lors du traitement du message :", str(e))
 
     return {"status": "success"}
