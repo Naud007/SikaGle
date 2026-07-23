@@ -63,6 +63,7 @@ async def receive_webhook(request: Request):
                 if messages and supabase:
                     msg = messages[0]
                     sender_phone = msg.get("from")
+                    msg_id = msg.get("id")  # <--- msg_id est bien défini ici !
                     msg_type = msg.get("type", "text")
                     
                     # Nom du contact dans WhatsApp
@@ -73,7 +74,7 @@ async def receive_webhook(request: Request):
                     if msg_type == "text":
                         content = msg.get("text", {}).get("body", "")
                     elif msg_type in ["image", "audio", "voice", "document"]:
-                        content = f"[{msg_type.upper()}] ID: " + msg.get(msg_type, {}).get("id", "")
+                        content = f"[{msg_type.upper()}] ID: " + str(msg.get(msg_type, {}).get("id", ""))
 
                     # 1. Obtenir ou créer l'utilisateur (colonne full_name)
                     user_res = supabase.table("users").select("id").eq("phone_number", sender_phone).execute()
@@ -87,7 +88,7 @@ async def receive_webhook(request: Request):
                         }).execute()
                         user_id = new_user.data[0]["id"]
 
-                    # 2. Enregistrer le message (avec whatsapp_message_id)
+                    # 2. Enregistrer le message
                     supabase.table("messages").insert({
                         "user_id": user_id,
                         "whatsapp_message_id": msg_id,
