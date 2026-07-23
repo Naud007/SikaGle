@@ -6,9 +6,9 @@ import os
 app = FastAPI(title="SikaGlé API", version="1.0.0")
 
 # Quotas quotidiens selon l'ancienneté
-TRIAL_PERIOD_DAYS = 31
-TRIAL_DAILY_LIMIT = 15
-REGULAR_DAILY_LIMIT = 5
+TRIAL_PERIOD_DAYS = 31  # Nombre de jours d'essai gratuit
+TRIAL_DAILY_LIMIT = 15  # Crédits par jour pendant l'essai
+REGULAR_DAILY_LIMIT = 5 # Crédits par jour après la période d'essai
 
 # Variables d'environnement
 VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "sikagle_secret_token_2026")
