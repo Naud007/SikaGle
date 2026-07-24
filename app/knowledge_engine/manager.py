@@ -131,7 +131,92 @@ def test_fao_ods():
             "message": str(e)
         }
 
+def test_fao_parser():
 
+    print("=" * 50)
+    print("SikaGlé - Test Parser FAO AGRIS")
+    print("=" * 50)
+
+    try:
+
+        from app.knowledge_engine.connectors.fao_ods import (
+            FAOODSDownloader
+        )
+
+        from app.knowledge_engine.parser.fao_ods_parser import (
+            FAOODSParser
+        )
+
+        # 1. Télécharger le fichier AGRIS
+        downloader = FAOODSDownloader()
+
+        xml_path = downloader.download()
+
+        if not xml_path:
+
+            print(
+                "❌ Téléchargement AGRIS impossible."
+            )
+
+            return
+
+        # 2. Lire le fichier XML
+        parser = FAOODSParser(
+            xml_path
+        )
+
+        documents = parser.parse()
+
+        print(
+            "=" * 50
+        )
+
+        print(
+            "Résultat du parsing :",
+            len(documents),
+            "document(s)"
+        )
+
+        print(
+            "=" * 50
+        )
+
+        # 3. Afficher les 10 premières notices
+        for index, document in enumerate(
+            documents[:10],
+            start=1
+        ):
+
+            print(
+                f"\nDocument {index}"
+            )
+
+            print(
+                "Titre :",
+                document.title
+            )
+
+            print(
+                "URL :",
+                document.url
+            )
+
+            if hasattr(
+                document,
+                "description"
+            ):
+
+                print(
+                    "Description :",
+                    document.description
+                )
+
+    except Exception as e:
+
+        print(
+            "❌ Erreur parser FAO :",
+            e
+        )
 if __name__ == "__main__":
 
     run()
