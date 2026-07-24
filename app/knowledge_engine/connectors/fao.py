@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from pathlib import Path
+from urllib.parse import urljoin, urlparse
 
 from app.knowledge_engine.connectors.base import BaseConnector
 from app.knowledge_engine.connectors.registry import registry
@@ -12,152 +13,302 @@ class FAOConnector(BaseConnector):
     def __init__(self):
         super().__init__("fao")
 
-    def discover(self):
-        self.log("Recherche des publications FAO...")
+        # Dépôt officiel de connaissances de la FAO
+        self.base_url = "https://openknowledge.fao.org"
 
-        url = "https://www.fao.org/publications/en/"
+        # Page d'accueil du dépôt
+        self.repository_url = f"{self.base_url}/home"
+
+        self.headers = {
+            "User-Agent": (
+                "Mozilla/5.0 "
+                "(compatible; SikaGle-KnowledgeEngine/1.0)"
+            )
+        }
+
+    # =========================================================
+    # DÉCOUVERTE DES DOCUMENTS
+    # =========================================================
+
+    def discover(self):
+
+        self.log(
+            "Recherche des documents dans le FAO Knowledge Repository..."
+        )
 
         response = requests.get(
-            url,
-            timeout=30,
-            headers={
-                "User-Agent": "Mozilla/5.0"
-            }
+            self.repository_url,
+            headers=self.headers,
+            timeout=60
         )
 
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.text, "lxml")
+        self.log(
+            f"Statut HTTP : {response.status_code}"
+        )
+
+        self.log(
+            f"Taille de la réponse : {len(response.text)} caractères"
+        )
+
+        soup = BeautifulSoup(
+            response.text,
+            "html.parser"
+        )
 
         documents = []
 
-        # Parcours des liens de la page
-        for link in soup.find_all("a", href=True):
+        # Parcours des liens présents sur la page
+        for link in soup.find_all(
+            "a",
+            href=True
+        ):
 
             href = link["href"].strip()
-            title = link.get_text(" ", strip=True)
 
-            # Ignorer les liens non HTTP
-            if not href.startswith(("http://", "https://", "/")):
-                continue
-
-            # Ignorer les titres trop courts
-            if len(title) < 15:
-                continue
-
-            # Construire une URL complète
-            if href.startswith("/"):
-                href = "https://www.fao.org" + href
-
-            # Garder uniquement les pages de publications
-            if "/publications/" not in href:
-                continue
-
-            # Exclure les pages générales
-            excluded = [
-                "/publications/en/",
-                "/publications/about-fao-publishing/",
-                "/publications/news-archive/",
-                "/publications/library/",
-                "/publications/wikiproject/",
-                "/publications/fao-flagship-publications/",
-                "/publications/fao-corporate-brochures/",
-            ]
-
-            if any(path in href for path in excluded):
-                continue
-
-            documents.append(
-                DocumentMetadata(
-                    title=title,
-                    source="FAO",
-                    url=href,
-                    document_type="publication",
-                )
+            title = link.get_text(
+                " ",
+                strip=True
             )
 
-        # Supprimer les doublons
+            # Ignorer les liens sans titre
+            if not title:
+                continue
+
+            # Ignorer les liens trop courts
+            if len(title) < 10:
+                continue
+
+            # Construire une URL absolue
+            full_url = urljoin(
+                self.base_url,
+                href
+            )
+
+            # Vérifier que l'URL est HTTP/HTTPS
+            parsed_url = urlparse(
+                full_url
+            )
+
+            if parsed_url.scheme not in (
+                "http",
+                "https"
+            ):
+                continue
+
+            # Ne conserver que les liens du dépôt FAO
+            if "openknowledge.fao.org" not in full_url:
+                continue
+
+            # Ignorer les pages générales
+            excluded_words = [
+                "home",
+                "about",
+                "contact",
+                "login",
+                "register",
+                "privacy",
+                "terms"
+            ]
+
+            url_lower = full_url.lower()
+
+            if any(
+                word in url_lower
+                for word in excluded_words
+            ):
+                continue
+
+            # Créer les métadonnées
+            try:
+
+                document = DocumentMetadata(
+                    title=title,
+                    source="FAO",
+                    url=full_url,
+                    document_type="publication"
+                )
+
+                documents.append(
+                    document
+                )
+
+            except Exception as e:
+
+                self.log(
+                    f"⚠️ Document ignoré : {e}"
+                )
+
+        # Suppression des doublons
         unique_documents = {}
 
         for document in documents:
-            unique_documents[document.url] = document
 
-        documents = list(unique_documents.values())
+            unique_documents[
+                str(document.url)
+            ] = document
 
-        self.log(
-            f"{len(documents)} publication(s) pertinente(s) trouvée(s)."
+        documents = list(
+            unique_documents.values()
         )
 
+        self.log(
+            f"{len(documents)} document(s) découvert(s)."
+        )
+
+        # Affichage des 10 premiers
         for document in documents[:10]:
+
             self.log(
-                f"- {document.title} → {document.url}"
+                f"- {document.title} "
+                f"→ {document.url}"
             )
 
         return documents
 
-    def download(self, document: DocumentMetadata) -> Path:
-        self.log(f"Analyse de la page : {document.title}")
+    # =========================================================
+    # TÉLÉCHARGEMENT DU DOCUMENT
+    # =========================================================
+
+    def download(
+        self,
+        document: DocumentMetadata
+    ) -> Path:
+
+        self.log(
+            f"Analyse du document : "
+            f"{document.title}"
+        )
 
         response = requests.get(
             str(document.url),
-            timeout=60,
-            headers={
-                "User-Agent": "Mozilla/5.0"
-            }
+            headers=self.headers,
+            timeout=60
         )
 
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.text, "lxml")
+        soup = BeautifulSoup(
+            response.text,
+            "html.parser"
+        )
 
         pdf_url = None
 
         # Recherche d'un lien PDF
-        for link in soup.find_all("a", href=True):
+        for link in soup.find_all(
+            "a",
+            href=True
+        ):
 
             href = link["href"].strip()
 
-            if ".pdf" in href.lower():
+            full_url = urljoin(
+                str(document.url),
+                href
+            )
 
-                pdf_url = href
+            if ".pdf" in full_url.lower():
 
-                if pdf_url.startswith("/"):
-                    pdf_url = "https://www.fao.org" + pdf_url
+                pdf_url = full_url
 
                 break
 
+        # Aucun PDF trouvé
         if not pdf_url:
+
             self.log(
-                f"⚠️ Aucun PDF trouvé pour : {document.title}"
+                f"⚠️ Aucun PDF trouvé pour : "
+                f"{document.title}"
             )
 
             return None
 
-        self.log(f"PDF trouvé : {pdf_url}")
+        self.log(
+            f"PDF trouvé : {pdf_url}"
+        )
 
+        # Création d'un nom de fichier propre
         safe_name = "".join(
-            c if c.isalnum() or c in (" ", "-", "_") else "_"
-            for c in document.title
+            character
+            if character.isalnum()
+            or character in (
+                " ",
+                "-",
+                "_"
+            )
+            else "_"
+
+            for character
+            in document.title
         ).strip()
 
-        filename = self.storage_dir / f"{safe_name}.pdf"
+        # Limiter la longueur
+        safe_name = safe_name[:150]
 
+        filename = (
+            self.storage_dir
+            / f"{safe_name}.pdf"
+        )
+
+        # Téléchargement du PDF
         pdf_response = requests.get(
             pdf_url,
-            timeout=60,
-            headers={
-                "User-Agent": "Mozilla/5.0"
-            }
+            headers=self.headers,
+            timeout=120
         )
 
         pdf_response.raise_for_status()
 
-        with open(filename, "wb") as file:
-            file.write(pdf_response.content)
+        # Vérification du contenu
+        content_type = (
+            pdf_response
+            .headers
+            .get(
+                "content-type",
+                ""
+            )
+            .lower()
+        )
 
-        self.log(f"✅ PDF téléchargé : {filename}")
+        if (
+            "pdf" not in content_type
+            and not pdf_url.lower().endswith(
+                ".pdf"
+            )
+        ):
+
+            self.log(
+                "⚠️ Le fichier téléchargé "
+                "ne semble pas être un PDF."
+            )
+
+            return None
+
+        # Sauvegarde
+        with open(
+            filename,
+            "wb"
+        ) as file:
+
+            file.write(
+                pdf_response.content
+            )
+
+        self.log(
+            f"✅ PDF téléchargé : "
+            f"{filename}"
+        )
 
         return filename
 
 
-registry.register("fao", FAOConnector)
+# =============================================================
+# ENREGISTREMENT DU CONNECTEUR
+# =============================================================
+
+registry.register(
+    "fao",
+    FAOConnector
+)
