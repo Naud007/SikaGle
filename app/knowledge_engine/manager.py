@@ -143,7 +143,7 @@ def test_fao_parser():
             FAOODSDownloader
         )
 
-        from app.knowledge_engine.parser.fao_ods_parser import (
+        from app.knowledge_engine.parsers.fao_ods_parser import (
             FAOODSParser
         )
 
