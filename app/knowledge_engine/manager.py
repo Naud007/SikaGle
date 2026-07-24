@@ -29,15 +29,15 @@ def run():
                 try:
                     file_path = connector.download(document)
 
-                        if file_path and file_path.exists():
-                            print(f"✅ Téléchargé : {file_path}")
-                        else:
-                            print("⚠️ Aucun fichier téléchargé.")
+                    if file_path and file_path.exists():
+                        print(f"✅ Téléchargé : {file_path}")
+                    else:
+                        print("⚠️ Aucun fichier téléchargé.")
 
-                        except Exception as e:
-                            print(
-                                f"❌ Erreur téléchargement : {e}"
-                            )
+                except Exception as e:
+                    print(
+                        f"❌ Erreur téléchargement : {e}"
+                    )
 
         except Exception as e:
             print(
