@@ -5,6 +5,7 @@ import os
 import requests
 from app.ai.gemini_client import test_gemini
 from app.ai.embeddings import test_embedding
+from app.ai.gemini_client import list_gemini_models
 
 from app.knowledge_engine.manager import (
     run,
@@ -191,7 +192,10 @@ def send_whatsapp_message(
 
         return False
 
+@app.get("/ai/models")
+def gemini_models():
 
+    return list_gemini_models()
 # =========================================================
 # TEST GEMINI
 # =========================================================
