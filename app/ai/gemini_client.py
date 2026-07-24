@@ -26,15 +26,22 @@ class GeminiClient:
             api_key=self.api_key
         )
 
-        # Modèle temporaire.
-        # Nous le remplacerons après avoir vérifié
-        # les modèles réellement disponibles.
-        self.model = "gemini-2.5-flash"
+        # =====================================================
+        # MODÈLE GEMINI
+        # =====================================================
+        #
+        # Modèle utilisé pour les réponses quotidiennes
+        # de SikaGlé.
+        #
+        # Nous testons actuellement Gemini 1.5 Flash.
+        #
+
+        self.model = "gemini-1.5-flash"
 
 
-    # =====================================================
+    # =========================================================
     # GÉNÉRATION DE TEXTE
-    # =====================================================
+    # =========================================================
 
     def generate_text(
         self,
@@ -89,10 +96,14 @@ def test_gemini():
             "status":
                 "success",
 
+            "model":
+                gemini.model,
+
             "response":
                 response
 
         }
+
 
     except Exception as e:
 
@@ -100,6 +111,9 @@ def test_gemini():
 
             "status":
                 "error",
+
+            "model":
+                "gemini-1.5-flash",
 
             "message":
                 str(e)
