@@ -55,7 +55,7 @@ class FAOConnector(BaseConnector):
     def download(self, document: DocumentMetadata) -> Path:
         self.log(f"Téléchargement : {document.title}")
 
-         filename = self.storage_dir / "document.pdf"
+        filename = self.storage_dir / "document.pdf"
 
         response = requests.get(
             str(document.url),
@@ -63,7 +63,7 @@ class FAOConnector(BaseConnector):
             stream=True,
             headers={
                 "User-Agent": "SikaGle-KnowledgeEngine/1.0"
-             }
+            }
         )
 
         response.raise_for_status()
