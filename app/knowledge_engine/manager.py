@@ -131,10 +131,10 @@ def test_fao_ods():
             "message": str(e)
         }
 
-def test_fao_parser():
+def test_fao_datasets():
 
     print("=" * 50)
-    print("SikaGlé - Test Parser FAO AGRIS")
+    print("SikaGlé - Téléchargement des datasets FAO AGRIS")
     print("=" * 50)
 
     try:
@@ -147,75 +147,64 @@ def test_fao_parser():
             FAOODSParser
         )
 
-        # 1. Télécharger le fichier AGRIS
+        from app.knowledge_engine.connectors.fao_datasets import (
+            FAODatasetsDownloader
+        )
+
+        # 1. Télécharger le catalogue AGRIS
         downloader = FAOODSDownloader()
 
         xml_path = downloader.download()
 
         if not xml_path:
-
-            print(
-                "❌ Téléchargement AGRIS impossible."
-            )
-
+            print("❌ Téléchargement AGRIS impossible.")
             return
 
-        # 2. Lire le fichier XML
-        parser = FAOODSParser(
-            xml_path
-        )
+        # 2. Parser le catalogue
+        parser = FAOODSParser(xml_path)
 
         documents = parser.parse()
 
         print(
-            "=" * 50
+            f"[FAO DATASET] "
+            f"{len(documents)} dataset(s) à télécharger."
         )
 
-        print(
-            "Résultat du parsing :",
-            len(documents),
-            "document(s)"
-        )
+        # 3. Downloader des datasets
+        dataset_downloader = FAODatasetsDownloader()
 
-        print(
-            "=" * 50
-        )
+        # Pour commencer, télécharger seulement les 10 premiers
+        for document in documents[:10]:
 
-        # 3. Afficher les 10 premières notices
-        for index, document in enumerate(
-            documents[:10],
-            start=1
-        ):
+            try:
 
-            print(
-                f"\nDocument {index}"
-            )
+                filename = document.url.split("/")[-1]
 
-            print(
-                "Titre :",
-                document.title
-            )
-
-            print(
-                "URL :",
-                document.url
-            )
-
-            if hasattr(
-                document,
-                "description"
-            ):
+                file_path = dataset_downloader.download(
+                    document.url,
+                    filename
+                )
 
                 print(
-                    "Description :",
-                    document.description
+                    f"✅ Dataset téléchargé : "
+                    f"{file_path}"
                 )
+
+            except Exception as e:
+
+                print(
+                    f"❌ Erreur téléchargement "
+                    f"{document.url} : {e}"
+                )
+
+        print("=" * 50)
+        print("Téléchargement des 10 premiers datasets terminé.")
+        print("=" * 50)
 
     except Exception as e:
 
         print(
-            "❌ Erreur parser FAO :",
-            e
+            f"❌ Erreur datasets FAO : {e}"
         )
 if __name__ == "__main__":
 
