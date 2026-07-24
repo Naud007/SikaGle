@@ -12,17 +12,19 @@ class FAOConnector(BaseConnector):
     def __init__(self):
         super().__init__("fao")
 
-    def discover(self):
-        self.log("Recherche des nouveaux documents FAO...")
+   def discover(self):
+    self.log("Recherche des publications FAO...")
 
-        # Temporaire (sera remplacé par le scraping/API)
-        return [
-            DocumentMetadata(
-                title="Guide de production du maïs",
-                source="FAO",
-                url="https://www.fao.org/3/example.pdf",
-                crop="Maïs",
-            )
+    url = "https://www.fao.org/publications/en/"
+
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.text, "lxml")
+
+    self.log("Connexion réussie.")
+
+    return []
         ]
 
     def download(self, document: DocumentMetadata) -> Path:
