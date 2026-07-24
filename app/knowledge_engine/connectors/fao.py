@@ -1,7 +1,6 @@
 import requests
-from bs4 import BeautifulSoup
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 from app.knowledge_engine.connectors.base import BaseConnector
 from app.knowledge_engine.connectors.registry import registry
@@ -13,11 +12,10 @@ class FAOConnector(BaseConnector):
     def __init__(self):
         super().__init__("fao")
 
-        # Dépôt officiel de connaissances de la FAO
         self.base_url = "https://openknowledge.fao.org"
-
-        # Page d'accueil du dépôt
-        self.repository_url = f"{self.base_url}/home"
+        self.api_url = (
+            f"{self.base_url}/server/api"
+        )
 
         self.headers = {
             "User-Agent": (
@@ -26,107 +24,81 @@ class FAOConnector(BaseConnector):
             )
         }
 
-    # =========================================================
-    # DÉCOUVERTE DES DOCUMENTS
-    # =========================================================
-
     def discover(self):
 
         self.log(
-            "Recherche des documents dans le FAO Knowledge Repository..."
+            "Recherche via l'API REST DSpace de la FAO..."
+        )
+
+        url = (
+            f"{self.api_url}/core/items"
         )
 
         response = requests.get(
-            self.repository_url,
+            url,
             headers=self.headers,
+            params={
+                "size": 20
+            },
             timeout=60
+        )
+
+        self.log(
+            f"Statut HTTP API : "
+            f"{response.status_code}"
+        )
+
+        self.log(
+            f"Taille réponse API : "
+            f"{len(response.text)} caractères"
         )
 
         response.raise_for_status()
 
-        self.log(
-            f"Statut HTTP : {response.status_code}"
-        )
-
-        self.log(
-            f"Taille de la réponse : {len(response.text)} caractères"
-        )
-
-        soup = BeautifulSoup(
-            response.text,
-            "html.parser"
-        )
+        data = response.json()
 
         documents = []
 
-        # Parcours des liens présents sur la page
-        for link in soup.find_all(
-            "a",
-            href=True
-        ):
+        # DSpace renvoie les éléments dans _embedded
+        embedded = data.get(
+            "_embedded",
+            {}
+        )
 
-            href = link["href"].strip()
+        items = embedded.get(
+            "items",
+            []
+        )
 
-            title = link.get_text(
-                " ",
-                strip=True
+        self.log(
+            f"{len(items)} élément(s) reçu(s) de DSpace."
+        )
+
+        for item in items:
+
+            uuid = item.get(
+                "uuid"
             )
 
-            # Ignorer les liens sans titre
-            if not title:
-                continue
-
-            # Ignorer les liens trop courts
-            if len(title) < 10:
-                continue
-
-            # Construire une URL absolue
-            full_url = urljoin(
-                self.base_url,
-                href
+            name = item.get(
+                "name"
             )
 
-            # Vérifier que l'URL est HTTP/HTTPS
-            parsed_url = urlparse(
-                full_url
+            if not uuid or not name:
+                continue
+
+            # URL publique de l'item
+            item_url = (
+                f"{self.base_url}"
+                f"/items/{uuid}"
             )
 
-            if parsed_url.scheme not in (
-                "http",
-                "https"
-            ):
-                continue
-
-            # Ne conserver que les liens du dépôt FAO
-            if "openknowledge.fao.org" not in full_url:
-                continue
-
-            # Ignorer les pages générales
-            excluded_words = [
-                "home",
-                "about",
-                "contact",
-                "login",
-                "register",
-                "privacy",
-                "terms"
-            ]
-
-            url_lower = full_url.lower()
-
-            if any(
-                word in url_lower
-                for word in excluded_words
-            ):
-                continue
-
-            # Créer les métadonnées
             try:
 
                 document = DocumentMetadata(
-                    title=title,
+                    title=name,
                     source="FAO",
-                    url=full_url,
+                    url=item_url,
                     document_type="publication"
                 )
 
@@ -137,39 +109,21 @@ class FAOConnector(BaseConnector):
             except Exception as e:
 
                 self.log(
-                    f"⚠️ Document ignoré : {e}"
+                    f"⚠️ Élément ignoré : {e}"
                 )
 
-        # Suppression des doublons
-        unique_documents = {}
-
-        for document in documents:
-
-            unique_documents[
-                str(document.url)
-            ] = document
-
-        documents = list(
-            unique_documents.values()
-        )
-
         self.log(
-            f"{len(documents)} document(s) découvert(s)."
+            f"{len(documents)} document(s) "
+            f"FAO découvert(s)."
         )
 
-        # Affichage des 10 premiers
         for document in documents[:10]:
 
             self.log(
-                f"- {document.title} "
-                f"→ {document.url}"
+                f"- {document.title}"
             )
 
         return documents
-
-    # =========================================================
-    # TÉLÉCHARGEMENT DU DOCUMENT
-    # =========================================================
 
     def download(
         self,
@@ -177,50 +131,144 @@ class FAOConnector(BaseConnector):
     ) -> Path:
 
         self.log(
-            f"Analyse du document : "
+            f"Recherche du PDF : "
             f"{document.title}"
         )
 
+        # Extraire l'UUID depuis l'URL publique
+        uuid = str(
+            document.url
+        ).rstrip(
+            "/"
+        ).split(
+            "/"
+        )[-1]
+
+        item_api_url = (
+            f"{self.api_url}"
+            f"/core/items/{uuid}"
+        )
+
         response = requests.get(
-            str(document.url),
+            item_api_url,
             headers=self.headers,
             timeout=60
         )
 
         response.raise_for_status()
 
-        soup = BeautifulSoup(
-            response.text,
-            "html.parser"
+        item_data = response.json()
+
+        # Chercher les bitstreams liés à l'item
+        bitstreams_url = (
+            f"{self.api_url}"
+            f"/core/items/{uuid}"
+            f"/bundles"
+        )
+
+        bundles_response = requests.get(
+            bitstreams_url,
+            headers=self.headers,
+            timeout=60
+        )
+
+        bundles_response.raise_for_status()
+
+        bundles_data = bundles_response.json()
+
+        bundles = (
+            bundles_data
+            .get(
+                "_embedded",
+                {}
+            )
+            .get(
+                "bundles",
+                []
+            )
         )
 
         pdf_url = None
 
-        # Recherche d'un lien PDF
-        for link in soup.find_all(
-            "a",
-            href=True
-        ):
+        for bundle in bundles:
 
-            href = link["href"].strip()
-
-            full_url = urljoin(
-                str(document.url),
-                href
+            bundle_uuid = bundle.get(
+                "uuid"
             )
 
-            if ".pdf" in full_url.lower():
+            if not bundle_uuid:
+                continue
 
-                pdf_url = full_url
+            bitstreams_response = requests.get(
+                f"{self.api_url}"
+                f"/core/bundles/"
+                f"{bundle_uuid}/bitstreams",
+                headers=self.headers,
+                timeout=60
+            )
+
+            if (
+                bitstreams_response.status_code
+                != 200
+            ):
+                continue
+
+            bitstreams_data = (
+                bitstreams_response.json()
+            )
+
+            bitstreams = (
+                bitstreams_data
+                .get(
+                    "_embedded",
+                    {}
+                )
+                .get(
+                    "bitstreams",
+                    []
+                )
+            )
+
+            for bitstream in bitstreams:
+
+                bitstream_name = (
+                    bitstream
+                    .get(
+                        "name",
+                        ""
+                    )
+                    .lower()
+                )
+
+                if ".pdf" not in bitstream_name:
+                    continue
+
+                bitstream_uuid = (
+                    bitstream
+                    .get(
+                        "uuid"
+                    )
+                )
+
+                if not bitstream_uuid:
+                    continue
+
+                pdf_url = (
+                    f"{self.api_url}"
+                    f"/core/bitstreams/"
+                    f"{bitstream_uuid}"
+                    f"/content"
+                )
 
                 break
 
-        # Aucun PDF trouvé
+            if pdf_url:
+                break
+
         if not pdf_url:
 
             self.log(
-                f"⚠️ Aucun PDF trouvé pour : "
-                f"{document.title}"
+                "⚠️ Aucun PDF trouvé."
             )
 
             return None
@@ -229,22 +277,18 @@ class FAOConnector(BaseConnector):
             f"PDF trouvé : {pdf_url}"
         )
 
-        # Création d'un nom de fichier propre
         safe_name = "".join(
-            character
-            if character.isalnum()
-            or character in (
+            c
+            if c.isalnum()
+            or c in (
                 " ",
                 "-",
                 "_"
             )
             else "_"
-
-            for character
-            in document.title
+            for c in document.title
         ).strip()
 
-        # Limiter la longueur
         safe_name = safe_name[:150]
 
         filename = (
@@ -252,7 +296,6 @@ class FAOConnector(BaseConnector):
             / f"{safe_name}.pdf"
         )
 
-        # Téléchargement du PDF
         pdf_response = requests.get(
             pdf_url,
             headers=self.headers,
@@ -261,32 +304,6 @@ class FAOConnector(BaseConnector):
 
         pdf_response.raise_for_status()
 
-        # Vérification du contenu
-        content_type = (
-            pdf_response
-            .headers
-            .get(
-                "content-type",
-                ""
-            )
-            .lower()
-        )
-
-        if (
-            "pdf" not in content_type
-            and not pdf_url.lower().endswith(
-                ".pdf"
-            )
-        ):
-
-            self.log(
-                "⚠️ Le fichier téléchargé "
-                "ne semble pas être un PDF."
-            )
-
-            return None
-
-        # Sauvegarde
         with open(
             filename,
             "wb"
@@ -303,10 +320,6 @@ class FAOConnector(BaseConnector):
 
         return filename
 
-
-# =============================================================
-# ENREGISTREMENT DU CONNECTEUR
-# =============================================================
 
 registry.register(
     "fao",
