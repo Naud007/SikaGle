@@ -1,44 +1,188 @@
 import os
+
 from google import genai
 
 
-def list_gemini_models():
+# =========================================================
+# CLIENT GEMINI
+# =========================================================
 
-    api_key = os.getenv("GEMINI_API_KEY", "")
+class GeminiClient:
 
-    if not api_key:
-        return {
-            "status": "error",
-            "message": "GEMINI_API_KEY manquante"
-        }
+    def __init__(self):
+
+        self.api_key = os.getenv(
+            "GEMINI_API_KEY",
+            ""
+        )
+
+        if not self.api_key:
+
+            raise ValueError(
+                "GEMINI_API_KEY est manquante."
+            )
+
+        self.client = genai.Client(
+            api_key=self.api_key
+        )
+
+        # Modèle temporaire.
+        # Nous le remplacerons après avoir vérifié
+        # les modèles réellement disponibles.
+        self.model = "gemini-2.5-flash"
+
+
+    # =====================================================
+    # GÉNÉRATION DE TEXTE
+    # =====================================================
+
+    def generate_text(
+        self,
+        prompt: str
+    ) -> str:
+
+        response = (
+
+            self.client
+            .models
+            .generate_content(
+
+                model=self.model,
+
+                contents=prompt
+
+            )
+
+        )
+
+        if not response.text:
+
+            raise ValueError(
+
+                "Gemini n'a retourné "
+                "aucune réponse."
+
+            )
+
+        return response.text.strip()
+
+
+# =========================================================
+# TEST GEMINI
+# =========================================================
+
+def test_gemini():
 
     try:
 
-        client = genai.Client(
-            api_key=api_key
+        gemini = GeminiClient()
+
+        response = gemini.generate_text(
+
+            "Réponds simplement : "
+            "SikaGlé fonctionne."
+
         )
 
-        models = []
-
-        for model in client.models.list():
-
-            models.append({
-                "name": model.name,
-                "display_name": getattr(
-                    model,
-                    "display_name",
-                    None
-                )
-            })
-
         return {
-            "status": "success",
-            "models": models
+
+            "status":
+                "success",
+
+            "response":
+                response
+
         }
 
     except Exception as e:
 
         return {
-            "status": "error",
-            "message": str(e)
+
+            "status":
+                "error",
+
+            "message":
+                str(e)
+
+        }
+
+
+# =========================================================
+# LISTE DES MODÈLES GEMINI DISPONIBLES
+# =========================================================
+
+def list_gemini_models():
+
+    api_key = os.getenv(
+        "GEMINI_API_KEY",
+        ""
+    )
+
+    if not api_key:
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                "GEMINI_API_KEY manquante"
+
+        }
+
+
+    try:
+
+        client = genai.Client(
+
+            api_key=api_key
+
+        )
+
+
+        models = []
+
+
+        for model in client.models.list():
+
+            models.append({
+
+                "name":
+                    model.name,
+
+                "display_name":
+                    getattr(
+
+                        model,
+
+                        "display_name",
+
+                        None
+
+                    )
+
+            })
+
+
+        return {
+
+            "status":
+                "success",
+
+            "models":
+                models
+
+        }
+
+
+    except Exception as e:
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(e)
+
         }
