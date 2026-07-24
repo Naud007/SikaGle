@@ -3,6 +3,7 @@ from supabase import create_client, Client
 from datetime import date, datetime
 import os
 import requests
+from app.knowledge_engine.manager import run
 
 app = FastAPI(title="SikaGlé API", version="1.0.0")
 
