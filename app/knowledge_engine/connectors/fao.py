@@ -1,3 +1,5 @@
+import requests
+from bs4 import BeautifulSoup
 from pathlib import Path
 
 from app.knowledge_engine.connectors.base import BaseConnector
