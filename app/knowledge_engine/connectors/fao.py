@@ -19,6 +19,9 @@ class FAOConnector(BaseConnector):
 
         response = requests.get(url, timeout=30)
         response.raise_for_status()
+        self.log(f"Statut HTTP : {response.status_code}")
+        self.log(f"Taille de la réponse : {len(response.text)} caractères")
+        self.log(f"URL finale : {response.url}")
 
         soup = BeautifulSoup(response.text, "lxml")
 
@@ -49,7 +52,7 @@ class FAOConnector(BaseConnector):
             documents.append(document)
 
         self.log(f"{len(documents)} document(s) PDF trouvé(s).")
-
+        self.log(f"Nombre de liens trouvés : {len(soup.find_all('a', href=True))}")
         return documents
 
     def download(self, document: DocumentMetadata) -> Path:
