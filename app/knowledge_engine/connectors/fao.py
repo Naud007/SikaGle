@@ -121,7 +121,7 @@ class FAOConnector(BaseConnector):
                 f"⚠️ Aucun PDF trouvé pour : {document.title}"
             )
 
-            return Path("")
+            return None
 
         self.log(f"PDF trouvé : {pdf_url}")
 
