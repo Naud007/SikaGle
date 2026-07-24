@@ -1,52 +1,35 @@
-from pathlib import Path
 import xml.etree.ElementTree as ET
+
+from app.schemas.document import DocumentMetadata
 
 
 class FAODatasetParser:
 
-    def __init__(self, datasets_dir=None):
+    def __init__(self):
+        """
+        Parser des fichiers XML individuels
+        provenant des datasets AGRIS de la FAO.
+        """
+        pass
 
-        # ---------------------------------------------------------
-        # DÉFINITION DU DOSSIER DES DATASETS
-        # ---------------------------------------------------------
-
-        if datasets_dir is None:
-
-            datasets_dir = (
-                Path(__file__).resolve()
-                .parents[3]
-                / "knowledge"
-                / "raw"
-                / "fao"
-                / "datasets"
-            )
-
-        self.datasets_dir = Path(
-            datasets_dir
-        )
-
-        # Création automatique du dossier
-        self.datasets_dir.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-    # ---------------------------------------------------------
-    # PARSER UN FICHIER XML
-    # ---------------------------------------------------------
-
-    def parse_file(self, xml_path):
-
-        xml_path = Path(
-            xml_path
-        )
+    def parse(self, xml_path):
+        """
+        Parse un fichier XML AGRIS et retourne
+        une liste de DocumentMetadata.
+        """
 
         print(
             f"[FAO DATASET PARSER] "
-            f"Lecture : {xml_path.name}"
+            f"Lecture : {xml_path}"
         )
 
+        documents = []
+
         try:
+
+            # -------------------------------------------------
+            # 1. Charger le XML
+            # -------------------------------------------------
 
             tree = ET.parse(
                 xml_path
@@ -54,124 +37,427 @@ class FAODatasetParser:
 
             root = tree.getroot()
 
-            print(
-                f"[FAO DATASET PARSER] "
-                f"Racine XML : {root.tag}"
-            )
+            # -------------------------------------------------
+            # 2. Namespaces possibles AGRIS
+            # -------------------------------------------------
 
-            return {
-                "file": xml_path,
-                "root": root
+            namespaces = {
+                "dc": "http://purl.org/dc/elements/1.1/",
+                "dct": "http://purl.org/dc/terms/",
+                "dcat": "http://www.w3.org/ns/dcat#",
+                "agr": "http://purl.org/agris/",
             }
 
-        except Exception as e:
+            # -------------------------------------------------
+            # 3. Rechercher les ressources
+            # -------------------------------------------------
 
-            print(
-                f"❌ Erreur lecture "
-                f"{xml_path.name} : {e}"
+            records = []
+
+            # Cas 1 : RDF Description
+            records.extend(
+                root.findall(
+                    ".//rdf:Description",
+                    {
+                        "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                    }
+                )
             )
 
-            return None
-
-    # ---------------------------------------------------------
-    # PARSER TOUS LES DATASETS
-    # ---------------------------------------------------------
-
-    def parse_all(self):
-
-        print("=" * 50)
-
-        print(
-            "[FAO DATASET PARSER] "
-            "Analyse des datasets FAO"
-        )
-
-        print("=" * 50)
-
-        # S'assurer que le dossier existe
-        self.datasets_dir.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        print(
-            f"[FAO DATASET PARSER] "
-            f"Dossier : {self.datasets_dir}"
-        )
-
-        # Rechercher les fichiers XML
-        files = sorted(
-            self.datasets_dir.glob(
-                "*.xml"
+            # Cas 2 : Dataset
+            records.extend(
+                root.findall(
+                    ".//dcat:Dataset",
+                    namespaces
+                )
             )
-        )
 
-        print(
-            f"[FAO DATASET PARSER] "
-            f"{len(files)} fichier(s) XML trouvé(s)."
-        )
+            # Cas 3 : Tout élément contenant un titre
+            if not records:
 
-        # Aucun fichier
-        if not files:
+                for element in root.iter():
+
+                    title = (
+                        element.find(
+                            "dc:title",
+                            namespaces
+                        )
+                    )
+
+                    if (
+                        title is not None
+                        and title.text
+                    ):
+
+                        records.append(
+                            element
+                        )
 
             print(
-                "⚠️ Aucun dataset XML trouvé."
+                f"[FAO DATASET PARSER] "
+                f"{len(records)} notice(s) potentielle(s) trouvée(s)."
+            )
+
+            # -------------------------------------------------
+            # 4. Parcourir les notices
+            # -------------------------------------------------
+
+            for record in records:
+
+                try:
+
+                    # -----------------------------------------
+                    # TITRE
+                    # -----------------------------------------
+
+                    title = self._get_text(
+                        record,
+                        [
+                            "dc:title",
+                            "dct:title",
+                            "title",
+                        ],
+                        namespaces
+                    )
+
+                    if not title:
+
+                        title = (
+                            "Document AGRIS"
+                        )
+
+                    # -----------------------------------------
+                    # DESCRIPTION / ABSTRACT
+                    # -----------------------------------------
+
+                    description = self._get_text(
+                        record,
+                        [
+                            "dc:description",
+                            "dct:description",
+                            "description",
+                            "agr:abstract",
+                        ],
+                        namespaces
+                    )
+
+                    # -----------------------------------------
+                    # URL
+                    # -----------------------------------------
+
+                    url = self._get_url(
+                        record,
+                        namespaces
+                    )
+
+                    # -----------------------------------------
+                    # IDENTIFIANT
+                    # -----------------------------------------
+
+                    identifier = self._get_text(
+                        record,
+                        [
+                            "dc:identifier",
+                            "dct:identifier",
+                        ],
+                        namespaces
+                    )
+
+                    # -----------------------------------------
+                    # SOURCE
+                    # -----------------------------------------
+
+                    source = self._get_text(
+                        record,
+                        [
+                            "dc:source",
+                            "dct:source",
+                        ],
+                        namespaces
+                    )
+
+                    if not source:
+
+                        source = (
+                            "FAO AGRIS"
+                        )
+
+                    # -----------------------------------------
+                    # SI PAS D'URL
+                    # -----------------------------------------
+
+                    if not url:
+
+                        if identifier:
+
+                            url = (
+                                f"https://agris.fao.org/"
+                                f"search/en/providers/"
+                                f"122436/records/"
+                                f"{identifier}"
+                            )
+
+                        else:
+
+                            url = (
+                                "https://agris.fao.org/"
+                            )
+
+                    # -----------------------------------------
+                    # CRÉATION DOCUMENT
+                    # -----------------------------------------
+
+                    document_data = {
+                        "title": title,
+                        "url": url,
+                        "description": description,
+                        "source": source,
+                    }
+
+                    document = (
+                        DocumentMetadata(
+                            **document_data
+                        )
+                    )
+
+                    documents.append(
+                        document
+                    )
+
+                except Exception as e:
+
+                    print(
+                        f"[FAO DATASET PARSER] "
+                        f"Notice ignorée : {e}"
+                    )
+
+            print(
+                f"[FAO DATASET PARSER] "
+                f"{len(documents)} document(s) analysé(s)."
+            )
+
+            return documents
+
+        except ET.ParseError as e:
+
+            print(
+                f"[FAO DATASET PARSER] "
+                f"Erreur XML : {e}"
             )
 
             return []
 
-        results = []
+        except Exception as e:
 
-        # Parser chaque fichier
-        for xml_file in files:
-
-            result = self.parse_file(
-                xml_file
+            print(
+                f"[FAO DATASET PARSER] "
+                f"Erreur lecture : {e}"
             )
 
-            if result is not None:
+            return []
 
-                results.append(
-                    result
+    # =========================================================
+    # OUTILS INTERNES
+    # =========================================================
+
+    def _get_text(
+        self,
+        element,
+        paths,
+        namespaces
+    ):
+        """
+        Recherche le premier texte disponible
+        parmi plusieurs chemins XML.
+        """
+
+        for path in paths:
+
+            # Recherche avec namespace
+            try:
+
+                child = element.find(
+                    path,
+                    namespaces
                 )
 
-        print(
-            "=" * 50
-        )
+                if (
+                    child is not None
+                    and child.text
+                ):
 
-        print(
-            f"[FAO DATASET PARSER] "
-            f"{len(results)} dataset(s) analysé(s)."
-        )
+                    return child.text.strip()
 
-        print(
-            "=" * 50
-        )
+            except Exception:
 
-        return results
+                pass
 
+            # Recherche directe dans les enfants
+            for child in element:
 
-# ---------------------------------------------------------
-# TEST DIRECT DU PARSER
-# ---------------------------------------------------------
+                tag = child.tag
 
-if __name__ == "__main__":
+                if not isinstance(
+                    tag,
+                    str
+                ):
+                    continue
 
-    parser = FAODatasetParser()
+                local_name = (
+                    tag.split("}")[-1]
+                )
 
-    datasets = parser.parse_all()
+                expected_name = (
+                    path.split(":")[-1]
+                )
 
-    print(
-        f"\nTotal : "
-        f"{len(datasets)} dataset(s)"
-    )
+                if (
+                    local_name
+                    == expected_name
+                ):
 
-    for index, dataset in enumerate(
-        datasets[:10],
-        start=1
+                    if (
+                        child.text
+                        and child.text.strip()
+                    ):
+
+                        return (
+                            child.text.strip()
+                        )
+
+        return None
+
+    def _get_url(
+        self,
+        element,
+        namespaces
     ):
+        """
+        Recherche une URL dans une notice AGRIS.
+        """
 
-        print(
-            f"{index}. "
-            f"{dataset['file'].name}"
+        # -----------------------------------------
+        # 1. dc:identifier
+        # -----------------------------------------
+
+        identifier = self._get_text(
+            element,
+            [
+                "dc:identifier",
+                "dct:identifier",
+            ],
+            namespaces
         )
+
+        if identifier:
+
+            if identifier.startswith(
+                (
+                    "http://",
+                    "https://"
+                )
+            ):
+
+                return identifier
+
+        # -----------------------------------------
+        # 2. dcat:landingPage
+        # -----------------------------------------
+
+        landing_page = (
+            element.find(
+                "dcat:landingPage",
+                namespaces
+            )
+        )
+
+        if (
+            landing_page is not None
+            and landing_page.text
+        ):
+
+            url = (
+                landing_page.text.strip()
+            )
+
+            if url.startswith(
+                (
+                    "http://",
+                    "https://"
+                )
+            ):
+
+                return url
+
+        # -----------------------------------------
+        # 3. dcat:accessURL
+        # -----------------------------------------
+
+        access_url = (
+            element.find(
+                "dcat:accessURL",
+                namespaces
+            )
+        )
+
+        if (
+            access_url is not None
+            and access_url.text
+        ):
+
+            url = (
+                access_url.text.strip()
+            )
+
+            if url.startswith(
+                (
+                    "http://",
+                    "https://"
+                )
+            ):
+
+                return url
+
+        # -----------------------------------------
+        # 4. Recherche générique
+        # -----------------------------------------
+
+        for child in element.iter():
+
+            if not isinstance(
+                child.tag,
+                str
+            ):
+
+                continue
+
+            local_name = (
+                child.tag.split("}")[-1]
+            )
+
+            if local_name.lower() in [
+                "identifier",
+                "url",
+                "landingPage",
+                "accessURL",
+            ]:
+
+                if (
+                    child.text
+                    and child.text.strip()
+                ):
+
+                    value = (
+                        child.text.strip()
+                    )
+
+                    if value.startswith(
+                        (
+                            "http://",
+                            "https://"
+                        )
+                    ):
+
+                        return value
+
+        return None
