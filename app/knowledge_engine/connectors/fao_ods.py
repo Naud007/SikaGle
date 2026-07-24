@@ -22,8 +22,8 @@ class FAOODSDownloader:
             exist_ok=True
         )
 
-        self.page_url = (
-            "https://www.fao.org/agris/agris-ods"
+        self.catalog_url = (
+            "https://data.apps.fao.org/catalog/dcat/agris"
         )
 
         self.headers = {
@@ -37,12 +37,12 @@ class FAOODSDownloader:
     def find_download_links(self):
 
         print(
-            "[FAO ODS] Analyse de la page "
-            "FAO AGRIS ODS..."
+            "[FAO ODS] Accès au catalogue "
+            "de données FAO..."
         )
 
         response = requests.get(
-            self.page_url,
+            self.catalog_url,
             headers=self.headers,
             timeout=120
         )
@@ -50,6 +50,12 @@ class FAOODSDownloader:
         print(
             "[FAO ODS] Statut HTTP :",
             response.status_code
+        )
+
+        print(
+            "[FAO ODS] Taille réponse :",
+            len(response.content),
+            "octets"
         )
 
         response.raise_for_status()
@@ -74,40 +80,16 @@ class FAOODSDownloader:
             )
 
             full_url = urljoin(
-                self.page_url,
+                self.catalog_url,
                 href
             )
 
-            text_lower = text.lower()
-            url_lower = full_url.lower()
-
-            # On cherche les liens qui semblent
-            # correspondre à un téléchargement
-            keywords = [
-                "download",
-                "ods",
-                "xml",
-                "rdf",
-                "zip",
-                "csv",
-                "data",
-                "dataset"
-            ]
-
-            is_candidate = any(
-                keyword in text_lower
-                or keyword in url_lower
-                for keyword in keywords
+            links.append(
+                {
+                    "text": text,
+                    "url": full_url
+                }
             )
-
-            if is_candidate:
-
-                links.append(
-                    {
-                        "text": text,
-                        "url": full_url
-                    }
-                )
 
         # Supprimer les doublons
         unique_links = {}
@@ -123,7 +105,7 @@ class FAOODSDownloader:
         )
 
         print(
-            "[FAO ODS] Liens potentiels :",
+            "[FAO ODS] Nombre total de liens :",
             len(links)
         )
 
@@ -145,14 +127,13 @@ class FAOODSDownloader:
         if not links:
 
             print(
-                "[FAO ODS] ⚠️ Aucun lien "
-                "de téléchargement trouvé."
+                "[FAO ODS] ⚠️ Aucun lien trouvé."
             )
 
             return None
 
         print(
-            "[FAO ODS] Analyse terminée."
+            "[FAO ODS] Catalogue analysé."
         )
 
         return links
@@ -163,7 +144,7 @@ def test_fao_ods():
     print("=" * 50)
 
     print(
-        "SikaGlé - Test FAO AGRIS ODS"
+        "SikaGlé - Test FAO AGRIS Data Catalog"
     )
 
     print("=" * 50)
@@ -177,8 +158,7 @@ def test_fao_ods():
         if links:
 
             print(
-                "✅ Liens trouvés :",
-                len(links)
+                "✅ Catalogue FAO accessible."
             )
 
             return {
@@ -186,18 +166,15 @@ def test_fao_ods():
                 "links": links
             }
 
-        print(
-            "⚠️ Aucun lien trouvé."
-        )
-
         return {
-            "status": "warning"
+            "status": "warning",
+            "message": "Aucun lien trouvé"
         }
 
     except Exception as e:
 
         print(
-            "❌ Erreur FAO AGRIS ODS :",
+            "❌ Erreur catalogue FAO :",
             e
         )
 
