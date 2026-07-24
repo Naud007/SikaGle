@@ -55,9 +55,25 @@ class FAOConnector(BaseConnector):
     def download(self, document: DocumentMetadata) -> Path:
         self.log(f"Téléchargement : {document.title}")
 
-        filename = self.storage_dir / "example.pdf"
+         filename = self.storage_dir / "document.pdf"
 
-        filename.touch(exist_ok=True)
+        response = requests.get(
+            str(document.url),
+            timeout=60,
+            stream=True,
+            headers={
+                "User-Agent": "SikaGle-KnowledgeEngine/1.0"
+             }
+        )
+
+        response.raise_for_status()
+
+        with open(filename, "wb") as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    file.write(chunk)
+
+        self.log(f"Document téléchargé : {filename}")
 
         return filename
 
