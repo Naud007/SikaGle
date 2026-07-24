@@ -33,7 +33,11 @@ class FAOConnector(BaseConnector):
 
         for link in soup.find_all("a", href=True):
 
-            href = link["href"]
+            href = link["href"].strip()
+
+            if not href.startswith(("http://", "https://", "/")):
+                continue
+
             title = link.get_text(" ", strip=True)
 
             if not title:
