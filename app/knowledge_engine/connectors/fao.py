@@ -31,42 +31,52 @@ class FAOConnector(BaseConnector):
 
         documents = []
 
+        # Parcours des liens de la page
         for link in soup.find_all("a", href=True):
 
             href = link["href"].strip()
+            title = link.get_text(" ", strip=True)
 
+            # Ignorer les liens non HTTP
             if not href.startswith(("http://", "https://", "/")):
                 continue
 
-            title = link.get_text(" ", strip=True)
-
-            if not title:
+            # Ignorer les titres trop courts
+            if len(title) < 15:
                 continue
 
-        # On ignore les liens génériques
-            if len(title) < 10:
+            # Construire une URL complète
+            if href.startswith("/"):
+                href = "https://www.fao.org" + href
+
+            # Garder uniquement les pages de publications
+            if "/publications/" not in href:
                 continue
 
-            # On garde les liens qui semblent être des publications
-            if (
-                "publication" in href.lower()
-                or "/3/" in href
-                or "/faostat/" in href.lower()
-            ):
+            # Exclure les pages générales
+            excluded = [
+                "/publications/en/",
+                "/publications/about-fao-publishing/",
+                "/publications/news-archive/",
+                "/publications/library/",
+                "/publications/wikiproject/",
+                "/publications/fao-flagship-publications/",
+                "/publications/fao-corporate-brochures/",
+            ]
 
-                if href.startswith("/"):
-                    href = "https://www.fao.org" + href
+            if any(path in href for path in excluded):
+                continue
 
-                documents.append(
-                    DocumentMetadata(
-                        title=title,
-                        source="FAO",
-                        url=href,
-                        document_type="publication",
-                    )
+            documents.append(
+                DocumentMetadata(
+                    title=title,
+                    source="FAO",
+                    url=href,
+                    document_type="publication",
                 )
+            )
 
-        # Éliminer les doublons
+        # Supprimer les doublons
         unique_documents = {}
 
         for document in documents:
@@ -75,7 +85,7 @@ class FAOConnector(BaseConnector):
         documents = list(unique_documents.values())
 
         self.log(
-            f"{len(documents)} publication(s) trouvée(s)."
+            f"{len(documents)} publication(s) pertinente(s) trouvée(s)."
         )
 
         for document in documents[:10]:
