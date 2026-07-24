@@ -11,6 +11,10 @@ class GeminiClient:
 
     def __init__(self):
 
+        # =====================================================
+        # RÉCUPÉRER LA CLÉ API
+        # =====================================================
+
         self.api_key = os.getenv(
             "GEMINI_API_KEY",
             ""
@@ -22,21 +26,31 @@ class GeminiClient:
                 "GEMINI_API_KEY est manquante."
             )
 
+
+        # =====================================================
+        # INITIALISER LE CLIENT GEMINI
+        # =====================================================
+
         self.client = genai.Client(
             api_key=self.api_key
         )
 
+
         # =====================================================
         # MODÈLE GEMINI
         # =====================================================
-        #
-        # Modèle utilisé pour les réponses quotidiennes
-        # de SikaGlé.
-        #
-        # Nous testons actuellement Gemini 1.5 Flash.
-        #
 
         self.model = "gemini-1.5-flash"
+
+
+        # =====================================================
+        # LOG DE VÉRIFICATION
+        # =====================================================
+
+        print(
+            "🔥 GEMINI MODEL ACTUEL :",
+            self.model
+        )
 
 
     # =========================================================
@@ -48,30 +62,63 @@ class GeminiClient:
         prompt: str
     ) -> str:
 
-        response = (
-
-            self.client
-            .models
-            .generate_content(
-
-                model=self.model,
-
-                contents=prompt
-
-            )
-
+        print(
+            "🤖 Gemini reçoit une requête..."
         )
 
-        if not response.text:
+        print(
+            "🤖 Modèle utilisé :",
+            self.model
+        )
 
-            raise ValueError(
 
-                "Gemini n'a retourné "
-                "aucune réponse."
+        try:
+
+            response = (
+
+                self.client
+                .models
+                .generate_content(
+
+                    model=self.model,
+
+                    contents=prompt
+
+                )
 
             )
 
-        return response.text.strip()
+
+            # =================================================
+            # VÉRIFIER LA RÉPONSE
+            # =================================================
+
+            if not response.text:
+
+                raise ValueError(
+
+                    "Gemini n'a retourné "
+                    "aucune réponse."
+
+                )
+
+
+            print(
+                "✅ Réponse Gemini reçue."
+            )
+
+
+            return response.text.strip()
+
+
+        except Exception as e:
+
+            print(
+                "❌ Erreur Gemini :",
+                str(e)
+            )
+
+            raise
 
 
 # =========================================================
@@ -80,16 +127,72 @@ class GeminiClient:
 
 def test_gemini():
 
+    print(
+        "=================================================="
+    )
+
+    print(
+        "🧪 TEST GEMINI SikaGlé"
+    )
+
+    print(
+        "=================================================="
+    )
+
+
     try:
+
+        # -----------------------------------------------------
+        # Créer le client
+        # -----------------------------------------------------
 
         gemini = GeminiClient()
 
-        response = gemini.generate_text(
 
-            "Réponds simplement : "
+        # -----------------------------------------------------
+        # Prompt de test
+        # -----------------------------------------------------
+
+        prompt = (
+
+            "Réponds simplement et brièvement : "
             "SikaGlé fonctionne."
 
         )
+
+
+        # -----------------------------------------------------
+        # Envoyer la requête
+        # -----------------------------------------------------
+
+        response = (
+
+            gemini
+            .generate_text(
+                prompt
+            )
+
+        )
+
+
+        # -----------------------------------------------------
+        # Résultat
+        # -----------------------------------------------------
+
+        print(
+            "✅ TEST GEMINI RÉUSSI"
+        )
+
+        print(
+            "Modèle :",
+            gemini.model
+        )
+
+        print(
+            "Réponse :",
+            response
+        )
+
 
         return {
 
@@ -106,6 +209,12 @@ def test_gemini():
 
 
     except Exception as e:
+
+        print(
+            "❌ TEST GEMINI ÉCHOUÉ :",
+            str(e)
+        )
+
 
         return {
 
@@ -127,10 +236,28 @@ def test_gemini():
 
 def list_gemini_models():
 
+    print(
+        "=================================================="
+    )
+
+    print(
+        "🔎 LISTE DES MODÈLES GEMINI"
+    )
+
+    print(
+        "=================================================="
+    )
+
+
+    # =====================================================
+    # RÉCUPÉRER LA CLÉ API
+    # =====================================================
+
     api_key = os.getenv(
         "GEMINI_API_KEY",
         ""
     )
+
 
     if not api_key:
 
@@ -147,6 +274,10 @@ def list_gemini_models():
 
     try:
 
+        # =================================================
+        # INITIALISER CLIENT
+        # =================================================
+
         client = genai.Client(
 
             api_key=api_key
@@ -157,9 +288,13 @@ def list_gemini_models():
         models = []
 
 
+        # =================================================
+        # RÉCUPÉRER LES MODÈLES
+        # =================================================
+
         for model in client.models.list():
 
-            models.append({
+            model_data = {
 
                 "name":
                     model.name,
@@ -175,7 +310,20 @@ def list_gemini_models():
 
                     )
 
-            })
+            }
+
+
+            models.append(
+                model_data
+            )
+
+
+        print(
+
+            f"✅ {len(models)} modèle(s) "
+            f"Gemini trouvé(s)."
+
+        )
 
 
         return {
@@ -190,6 +338,16 @@ def list_gemini_models():
 
 
     except Exception as e:
+
+        print(
+
+            "❌ Erreur récupération "
+            "des modèles Gemini :",
+
+            str(e)
+
+        )
+
 
         return {
 
