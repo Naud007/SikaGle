@@ -2,46 +2,36 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from app.knowledge_engine.config import config
+from app.schemas.document import DocumentMetadata
 
 
 class BaseConnector(ABC):
     """
     Classe de base pour tous les connecteurs du Knowledge Engine.
-
-    Chaque connecteur (FAO, INRAB, BRAB...) devra hériter de cette classe
-    et implémenter les méthodes abstraites.
     """
 
     def __init__(self, source_name: str):
         self.source_name = source_name
 
-        # Dossier où seront enregistrés les documents de cette source
+        # Dossier de stockage propre à chaque source
         self.storage_dir = config.raw_dir / source_name
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
     @abstractmethod
-    def discover(self):
+    def discover(self) -> list[DocumentMetadata]:
         """
-        Recherche les nouveaux documents disponibles.
+        Recherche les documents disponibles auprès de la source.
 
-        Retour attendu :
-        [
-            {
-                "title": "...",
-                "url": "...",
-                "published_at": "..."
-            }
-        ]
+        Retourne une liste de DocumentMetadata.
         """
         pass
 
     @abstractmethod
-    def download(self, document: dict):
+    def download(self, document: DocumentMetadata) -> Path:
         """
         Télécharge un document.
 
-        Retour :
-        Path vers le PDF téléchargé.
+        Retourne le chemin du fichier téléchargé.
         """
         pass
 
