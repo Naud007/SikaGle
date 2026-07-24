@@ -7,7 +7,7 @@ from google import genai
 # CONFIGURATION
 # =========================================================
 
-GEMINI_MODEL = "gemini-3.5-flash"
+GEMINI_MODEL = "gemini-3.6-flash"
 
 
 # =========================================================
