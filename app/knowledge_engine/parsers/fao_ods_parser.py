@@ -1,16 +1,11 @@
 import xml.etree.ElementTree as ET
-from pathlib import Path
+
+from app.schemas.document import DocumentMetadata
 
 
 class FAOODSParser:
 
-    NS = {
-        "dcat": "http://www.w3.org/ns/dcat#",
-        "dc": "http://purl.org/dc/elements/1.1/",
-        "dct": "http://purl.org/dc/terms/",
-    }
-
-    def __init__(self, xml_path: Path):
+    def __init__(self, xml_path):
         self.xml_path = xml_path
 
     def parse(self):
@@ -20,40 +15,93 @@ class FAOODSParser:
         tree = ET.parse(self.xml_path)
         root = tree.getroot()
 
+        # Namespaces XML
+        namespaces = {
+            "dcat": "http://www.w3.org/ns/dcat#",
+            "dc": "http://purl.org/dc/elements/1.1/",
+            "dct": "http://purl.org/dc/terms/",
+        }
+
         datasets = root.findall(
             ".//dcat:Dataset",
-            self.NS
+            namespaces
         )
 
         print(
             f"[FAO PARSER] {len(datasets)} dataset(s) trouvé(s)."
         )
 
-        # Afficher la structure du premier dataset
-        if datasets:
+        documents = []
 
-            print("\n" + "=" * 50)
-            print("[FAO PARSER] STRUCTURE DU PREMIER DATASET")
-            print("=" * 50)
+        for dataset in datasets:
 
-            first_dataset = datasets[0]
+            # Titre
+            title_element = dataset.find(
+                "dc:title",
+                namespaces
+            )
 
-            for element in first_dataset.iter():
+            title = (
+                title_element.text.strip()
+                if title_element is not None
+                and title_element.text
+                else "Dataset AGRIS"
+            )
 
-                tag = element.tag
-                text = element.text.strip() if element.text else ""
+            # Description
+            description_element = dataset.find(
+                "dc:description",
+                namespaces
+            )
 
-                print(
-                    f"TAG : {tag}"
+            description = (
+                description_element.text.strip()
+                if description_element is not None
+                and description_element.text
+                else None
+            )
+
+            # URL de téléchargement
+            download_element = dataset.find(
+                ".//dcat:downloadURL",
+                namespaces
+            )
+
+            if (
+                download_element is None
+                or not download_element.text
+            ):
+                continue
+
+            url = download_element.text.strip()
+
+            # Vérification URL
+            if not url.startswith(
+                ("http://", "https://")
+            ):
+                continue
+
+            # Création du document
+            try:
+
+                document = DocumentMetadata(
+                    title=title,
+                    url=url,
+                    description=description,
                 )
 
-                if text:
-                    print(
-                        f"TEXT : {text[:300]}"
-                    )
+                documents.append(document)
 
-                print("-" * 30)
+            except Exception as e:
 
-            print("=" * 50)
+                print(
+                    f"[FAO PARSER] "
+                    f"Document ignoré : {e}"
+                )
 
-        return []
+        print(
+            f"[FAO PARSER] "
+            f"{len(documents)} document(s) analysé(s)."
+        )
+
+        return documents
