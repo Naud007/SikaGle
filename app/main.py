@@ -5,6 +5,7 @@ import os
 import requests
 from app.knowledge_engine.manager import run
 from app.knowledge_engine.manager import test_fao_ods
+from app.knowledge_engine.manager import test_fao_parser
 
 app = FastAPI(title="SikaGlé API", version="1.0.0")
 
@@ -61,7 +62,15 @@ def send_whatsapp_message(to_phone: str, text_body: str):
     except Exception as e:
         print("❌ Erreur de connexion lors de l'envoi WhatsApp:", str(e))
         return False
+@app.get("/knowledge/fao-parser-test")
+def fao_parser_test():
 
+    test_fao_parser()
+
+    return {
+        "status": "success",
+        "message": "Test parser FAO terminé"
+    }
 @app.get("/knowledge/fao-ods-test")
 def fao_ods_test():
 
