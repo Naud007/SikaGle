@@ -13,44 +13,44 @@ class FAOConnector(BaseConnector):
         super().__init__("fao")
 
     def discover(self):
-    self.log("Recherche des publications FAO...")
+        self.log("Recherche des publications FAO...")
 
-    url = "https://www.fao.org/publications/en/"
+        url = "https://www.fao.org/publications/en/"
 
-    response = requests.get(url, timeout=30)
-    response.raise_for_status()
+        response = requests.get(url, timeout=30)
+        response.raise_for_status()
 
-    soup = BeautifulSoup(response.text, "lxml")
+        soup = BeautifulSoup(response.text, "lxml")
 
-    documents = []
+        documents = []
 
-    for link in soup.find_all("a", href=True):
+        for link in soup.find_all("a", href=True):
 
-        href = link["href"]
+            href = link["href"]
 
-        if ".pdf" not in href.lower():
-            continue
+            if ".pdf" not in href.lower():
+                continue
 
-        title = link.get_text(strip=True)
+            title = link.get_text(strip=True)
 
-        if not title:
-            title = "Publication FAO"
+            if not title:
+                title = "Publication FAO"
 
-        if href.startswith("/"):
-            href = "https://www.fao.org" + href
+            if href.startswith("/"):
+                href = "https://www.fao.org" + href
 
-        document = DocumentMetadata(
-            title=title,
-            source="FAO",
-            url=href,
-            document_type="publication",
-        )
+            document = DocumentMetadata(
+                title=title,
+                source="FAO",
+                url=href,
+                document_type="publication",
+            )
 
-        documents.append(document)
+            documents.append(document)
 
-    self.log(f"{len(documents)} document(s) PDF trouvé(s).")
+        self.log(f"{len(documents)} document(s) PDF trouvé(s).")
 
-    return documents
+        return documents
 
     def download(self, document: DocumentMetadata) -> Path:
         self.log(f"Téléchargement : {document.title}")
