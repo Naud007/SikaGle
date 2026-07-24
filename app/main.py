@@ -3,6 +3,8 @@ from supabase import create_client, Client
 from datetime import date, datetime
 import os
 import requests
+from app.ai.gemini_client import test_gemini
+from app.ai.embeddings import test_embedding
 
 from app.knowledge_engine.manager import (
     run,
@@ -190,6 +192,24 @@ def send_whatsapp_message(
         return False
 
 
+# =========================================================
+# TEST GEMINI
+# =========================================================
+
+@app.get("/ai/gemini-test")
+def gemini_test():
+
+    return test_gemini()
+
+
+# =========================================================
+# TEST EMBEDDING GEMINI
+# =========================================================
+
+@app.get("/ai/embedding-test")
+def embedding_test():
+
+    return test_embedding()
 # =========================================================
 # ROUTES KNOWLEDGE ENGINE
 # =========================================================
