@@ -6,6 +6,7 @@ import requests
 from app.knowledge_engine.manager import run
 from app.knowledge_engine.manager import test_fao_ods
 from app.knowledge_engine.manager import test_fao_datasets
+from app.knowledge_engine.manager import test_fao_dataset_parser
 
 app = FastAPI(title="SikaGlé API", version="1.0.0")
 
@@ -62,6 +63,11 @@ def send_whatsapp_message(to_phone: str, text_body: str):
     except Exception as e:
         print("❌ Erreur de connexion lors de l'envoi WhatsApp:", str(e))
         return False
+
+@app.get("/knowledge/fao-dataset-parser-test")
+def fao_dataset_parser_test():
+
+    return test_fao_dataset_parser()
 @app.get("/knowledge/fao-datasets-test")
 def fao_datasets_test():
 
