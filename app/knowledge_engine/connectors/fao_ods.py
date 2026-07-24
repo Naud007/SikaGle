@@ -1,5 +1,5 @@
 import requests
-from pathlib import Path
+from bs4 import BeautifulSoup
 
 from app.knowledge_engine.config import config
 
@@ -21,28 +21,24 @@ class FAOODSDownloader:
             exist_ok=True
         )
 
-        self.file_path = (
-            self.download_dir
-            / "agris_ods_download"
-        )
-
-        self.download_url = (
+        self.page_url = (
             "https://www.fao.org/agris/"
         )
 
-    def download(self):
+    def find_ods_links(self):
 
         print(
-            "[FAO ODS] Accès à la page officielle AGRIS..."
+            "[FAO ODS] Recherche des liens ODS..."
         )
 
         response = requests.get(
-            self.download_url,
+            self.page_url,
             timeout=120,
             headers={
                 "User-Agent":
                 "Mozilla/5.0 "
-                "(compatible; SikaGle-KnowledgeEngine/1.0)"
+                "(compatible; "
+                "SikaGle-KnowledgeEngine/1.0)"
             }
         )
 
@@ -53,39 +49,91 @@ class FAOODSDownloader:
 
         response.raise_for_status()
 
-        content_type = response.headers.get(
-            "content-type",
-            ""
+        soup = BeautifulSoup(
+            response.text,
+            "html.parser"
         )
 
-        print(
-            "[FAO ODS] Type de contenu :",
-            content_type
-        )
+        links = []
 
-        print(
-            "[FAO ODS] Taille réponse :",
-            len(response.content),
-            "octets"
-        )
+        for link in soup.find_all(
+            "a",
+            href=True
+        ):
 
-        # Pour l'instant, on sauvegarde la réponse
-        # afin d'analyser la structure réelle de la page.
-        with open(
-            self.file_path,
-            "wb"
-        ) as file:
+            href = link["href"]
 
-            file.write(
-                response.content
+            text = link.get_text(
+                " ",
+                strip=True
             )
 
+            href_lower = href.lower()
+            text_lower = text.lower()
+
+            if (
+                "ods" in href_lower
+                or "ods" in text_lower
+                or "open data" in text_lower
+                or "download" in text_lower
+            ):
+
+                if href.startswith("/"):
+
+                    href = (
+                        "https://www.fao.org"
+                        + href
+                    )
+
+                elif href.startswith("./"):
+
+                    href = (
+                        "https://www.fao.org/agris/"
+                        + href[2:]
+                    )
+
+                links.append(
+                    {
+                        "text": text,
+                        "url": href
+                    }
+                )
+
         print(
-            "[FAO ODS] Réponse sauvegardée :",
-            self.file_path
+            "[FAO ODS] Liens potentiels trouvés :",
+            len(links)
         )
 
-        return self.file_path
+        for link in links:
+
+            print(
+                "[FAO ODS] -",
+                link["text"],
+                "→",
+                link["url"]
+            )
+
+        return links
+
+    def download(self):
+
+        links = self.find_ods_links()
+
+        if not links:
+
+            print(
+                "[FAO ODS] ⚠️ Aucun lien ODS "
+                "trouvé automatiquement."
+            )
+
+            return None
+
+        print(
+            "[FAO ODS] Un lien potentiel "
+            "a été trouvé."
+        )
+
+        return links
 
 
 def test_fao_ods():
@@ -94,20 +142,40 @@ def test_fao_ods():
 
     try:
 
-        file_path = downloader.download()
+        links = downloader.download()
 
-        print(
-            "✅ Connexion AGRIS réussie :",
-            file_path
-        )
+        if links:
 
-        return file_path
+            print(
+                "✅ Liens AGRIS trouvés :",
+                len(links)
+            )
+
+            return {
+                "status": "success",
+                "links": links
+            }
+
+        else:
+
+            print(
+                "⚠️ Aucun lien ODS trouvé."
+            )
+
+            return {
+                "status": "warning",
+                "message":
+                    "Aucun lien ODS trouvé"
+            }
 
     except Exception as e:
 
         print(
-            "❌ Erreur FAO AGRIS ODS :",
+            "❌ Erreur FAO AGRIS :",
             e
         )
 
-        return None
+        return {
+            "status": "error",
+            "message": str(e)
+        }
