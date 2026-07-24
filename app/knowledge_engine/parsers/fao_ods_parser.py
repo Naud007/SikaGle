@@ -15,27 +15,32 @@ class FAOODSParser:
         tree = ET.parse(self.xml_path)
         root = tree.getroot()
 
-        # Namespaces XML
+        # Namespaces XML utilisés par AGRIS
         namespaces = {
             "dcat": "http://www.w3.org/ns/dcat#",
             "dc": "http://purl.org/dc/elements/1.1/",
             "dct": "http://purl.org/dc/terms/",
         }
 
+        # Recherche des datasets
         datasets = root.findall(
             ".//dcat:Dataset",
             namespaces
         )
 
         print(
-            f"[FAO PARSER] {len(datasets)} dataset(s) trouvé(s)."
+            f"[FAO PARSER] "
+            f"{len(datasets)} dataset(s) trouvé(s)."
         )
 
         documents = []
 
         for dataset in datasets:
 
-            # Titre
+            # -------------------------------------------------
+            # TITRE
+            # -------------------------------------------------
+
             title_element = dataset.find(
                 "dc:title",
                 namespaces
@@ -48,7 +53,10 @@ class FAOODSParser:
                 else "Dataset AGRIS"
             )
 
-            # Description
+            # -------------------------------------------------
+            # DESCRIPTION
+            # -------------------------------------------------
+
             description_element = dataset.find(
                 "dc:description",
                 namespaces
@@ -61,7 +69,42 @@ class FAOODSParser:
                 else None
             )
 
-            # URL de téléchargement
+            # -------------------------------------------------
+            # DATE DE MODIFICATION
+            # -------------------------------------------------
+
+            modified_element = dataset.find(
+                "dct:modified",
+                namespaces
+            )
+
+            published_at = (
+                modified_element.text.strip()
+                if modified_element is not None
+                and modified_element.text
+                else None
+            )
+
+            # -------------------------------------------------
+            # IDENTIFIANT
+            # -------------------------------------------------
+
+            identifier_element = dataset.find(
+                "dc:identifier",
+                namespaces
+            )
+
+            identifier = (
+                identifier_element.text.strip()
+                if identifier_element is not None
+                and identifier_element.text
+                else None
+            )
+
+            # -------------------------------------------------
+            # URL DE TÉLÉCHARGEMENT
+            # -------------------------------------------------
+
             download_element = dataset.find(
                 ".//dcat:downloadURL",
                 namespaces
@@ -75,19 +118,27 @@ class FAOODSParser:
 
             url = download_element.text.strip()
 
-            # Vérification URL
+            # -------------------------------------------------
+            # VÉRIFICATION DE L'URL
+            # -------------------------------------------------
+
             if not url.startswith(
                 ("http://", "https://")
             ):
                 continue
 
-            # Création du document
+            # -------------------------------------------------
+            # CRÉATION DU DOCUMENT
+            # -------------------------------------------------
+
             try:
 
                 document = DocumentMetadata(
                     title=title,
                     url=url,
                     description=description,
+                    published_at=published_at,
+                    source="FAO AGRIS",
                 )
 
                 documents.append(document)
@@ -98,6 +149,10 @@ class FAOODSParser:
                     f"[FAO PARSER] "
                     f"Document ignoré : {e}"
                 )
+
+        # -------------------------------------------------
+        # RÉSULTAT FINAL
+        # -------------------------------------------------
 
         print(
             f"[FAO PARSER] "
