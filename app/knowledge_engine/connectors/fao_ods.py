@@ -1,5 +1,4 @@
 import requests
-import zipfile
 from pathlib import Path
 
 from app.knowledge_engine.config import config
@@ -22,39 +21,28 @@ class FAOODSDownloader:
             exist_ok=True
         )
 
-        self.zip_path = (
+        self.file_path = (
             self.download_dir
-            / "agris_ods.zip"
+            / "agris_ods_download"
         )
 
-        self.extract_dir = (
-            self.download_dir
-            / "extracted"
-        )
-
-        self.extract_dir.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        # Adresse officielle de téléchargement
         self.download_url = (
-            "https://agris.fao.org/agris_ods/"
+            "https://www.fao.org/agris/"
         )
 
     def download(self):
 
         print(
-            "[FAO ODS] Téléchargement "
-            "de l'Open Data Set AGRIS..."
+            "[FAO ODS] Accès à la page officielle AGRIS..."
         )
 
         response = requests.get(
             self.download_url,
-            timeout=300,
+            timeout=120,
             headers={
                 "User-Agent":
-                "SikaGle-KnowledgeEngine/1.0"
+                "Mozilla/5.0 "
+                "(compatible; SikaGle-KnowledgeEngine/1.0)"
             }
         )
 
@@ -65,8 +53,26 @@ class FAOODSDownloader:
 
         response.raise_for_status()
 
+        content_type = response.headers.get(
+            "content-type",
+            ""
+        )
+
+        print(
+            "[FAO ODS] Type de contenu :",
+            content_type
+        )
+
+        print(
+            "[FAO ODS] Taille réponse :",
+            len(response.content),
+            "octets"
+        )
+
+        # Pour l'instant, on sauvegarde la réponse
+        # afin d'analyser la structure réelle de la page.
         with open(
-            self.zip_path,
+            self.file_path,
             "wb"
         ) as file:
 
@@ -75,38 +81,33 @@ class FAOODSDownloader:
             )
 
         print(
-            "[FAO ODS] Fichier téléchargé :",
-            self.zip_path
+            "[FAO ODS] Réponse sauvegardée :",
+            self.file_path
         )
 
-        return self.zip_path
+        return self.file_path
 
-    def extract(self):
 
-        if not self.zip_path.exists():
+def test_fao_ods():
 
-            raise FileNotFoundError(
-                "Le fichier AGRIS ODS "
-                "n'existe pas encore."
-            )
+    downloader = FAOODSDownloader()
+
+    try:
+
+        file_path = downloader.download()
 
         print(
-            "[FAO ODS] Extraction "
-            "des données..."
+            "✅ Connexion AGRIS réussie :",
+            file_path
         )
 
-        with zipfile.ZipFile(
-            self.zip_path,
-            "r"
-        ) as zip_file:
+        return file_path
 
-            zip_file.extractall(
-                self.extract_dir
-            )
+    except Exception as e:
 
         print(
-            "[FAO ODS] Extraction terminée :",
-            self.extract_dir
+            "❌ Erreur FAO AGRIS ODS :",
+            e
         )
 
-        return self.extract_dir
+        return None
