@@ -195,3 +195,8 @@ async def receive_webhook(request: Request):
         print("❌ Erreur lors du traitement du message :", str(e))
 
     return {"status": "success"}
+    
+    @app.get("/knowledge/test")
+def test_knowledge_engine():
+    run()
+    return {"status": "Knowledge Engine exécuté"}
