@@ -5,7 +5,6 @@ import os
 import requests
 from app.knowledge_engine.manager import run
 from app.knowledge_engine.manager import test_fao_ods
-from app.knowledge_engine.manager import test_fao_parser
 from app.knowledge_engine.manager import test_fao_datasets
 
 app = FastAPI(title="SikaGlé API", version="1.0.0")
