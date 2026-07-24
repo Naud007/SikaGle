@@ -86,14 +86,7 @@ class FAOConnector(BaseConnector):
         return documents
 
     def download(self, document: DocumentMetadata) -> Path:
-        self.log(f"Téléchargement : {document.title}")
-
-        safe_name = "".join(
-            c if c.isalnum() or c in (" ", "-", "_") else "_"
-            for c in document.title
-        ).strip()
-
-        filename = self.storage_dir / f"{safe_name}.html"
+        self.log(f"Analyse de la page : {document.title}")
 
         response = requests.get(
             str(document.url),
@@ -105,17 +98,54 @@ class FAOConnector(BaseConnector):
 
         response.raise_for_status()
 
-        content_type = response.headers.get("content-type", "").lower()
+        soup = BeautifulSoup(response.text, "lxml")
 
-        if "text/html" not in content_type:
+        pdf_url = None
+
+        # Recherche d'un lien PDF
+        for link in soup.find_all("a", href=True):
+
+            href = link["href"].strip()
+
+            if ".pdf" in href.lower():
+
+                pdf_url = href
+
+                if pdf_url.startswith("/"):
+                    pdf_url = "https://www.fao.org" + pdf_url
+
+                break
+
+        if not pdf_url:
             self.log(
-                f"⚠️ Type inattendu pour {document.title}: {content_type}"
+                f"⚠️ Aucun PDF trouvé pour : {document.title}"
             )
 
-        with open(filename, "wb") as file:
-            file.write(response.content)
+            return Path("")
 
-        self.log(f"Page sauvegardée : {filename}")
+        self.log(f"PDF trouvé : {pdf_url}")
+
+        safe_name = "".join(
+            c if c.isalnum() or c in (" ", "-", "_") else "_"
+            for c in document.title
+        ).strip()
+
+        filename = self.storage_dir / f"{safe_name}.pdf"
+
+        pdf_response = requests.get(
+            pdf_url,
+            timeout=60,
+            headers={
+                "User-Agent": "Mozilla/5.0"
+            }
+        )
+
+        pdf_response.raise_for_status()
+
+        with open(filename, "wb") as file:
+            file.write(pdf_response.content)
+
+        self.log(f"✅ PDF téléchargé : {filename}")
 
         return filename
 
