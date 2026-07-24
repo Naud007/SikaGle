@@ -1,13 +1,14 @@
 from app.knowledge_engine.connectors.registry import registry
-from app.knowledge_engine.connectors.fao_ods import (
-    FAOODSDownloader
-)
 
-# Charge les connecteurs
+# Charger les connecteurs
 import app.knowledge_engine.connectors.fao
 
 
 def run():
+    """
+    Lance le Knowledge Engine et exécute
+    tous les connecteurs enregistrés.
+    """
 
     print("=" * 50)
     print("SikaGlé Knowledge Engine")
@@ -18,6 +19,8 @@ def run():
         connector = connector_class()
 
         try:
+
+            # Recherche des documents
             documents = connector.discover()
 
             print(
@@ -25,64 +28,110 @@ def run():
                 f"{len(documents)} document(s) trouvé(s)"
             )
 
+            # Téléchargement des documents
             for document in documents:
 
-                print(f"Document : {document.title}")
+                print(
+                    f"Document : {document.title}"
+                )
 
                 try:
-                    file_path = connector.download(document)
 
-                    if file_path and file_path.exists():
-                        print(f"✅ Téléchargé : {file_path}")
+                    file_path = connector.download(
+                        document
+                    )
+
+                    if (
+                        file_path
+                        and file_path.exists()
+                    ):
+
+                        print(
+                            f"✅ Téléchargé : "
+                            f"{file_path}"
+                        )
+
                     else:
-                        print("⚠️ Aucun fichier téléchargé.")
+
+                        print(
+                            "⚠️ Aucun fichier "
+                            "téléchargé."
+                        )
 
                 except Exception as e:
+
                     print(
-                        f"❌ Erreur téléchargement : {e}"
+                        f"❌ Erreur téléchargement : "
+                        f"{e}"
                     )
 
         except Exception as e:
+
             print(
                 f"❌ Erreur connecteur "
-                f"{connector.source_name} : {e}"
+                f"{connector.source_name} : "
+                f"{e}"
             )
+
 
 def test_fao_ods():
 
     print("=" * 50)
 
     print(
-        "SikaGlé - Test FAO AGRIS ODS"
+        "SikaGlé - Test FAO AGRIS"
     )
 
     print("=" * 50)
 
-    downloader = FAOODSDownloader()
-
     try:
 
-        zip_path = downloader.download()
-
-        print(
-            "✅ Téléchargement réussi :",
-            zip_path
+        # Import local pour éviter les problèmes
+        # de chargement au démarrage de l'API
+        from app.knowledge_engine.connectors.fao_ods import (
+            FAOODSDownloader
         )
 
-        extract_path = (
-            downloader.extract()
-        )
+        downloader = FAOODSDownloader()
 
-        print(
-            "✅ Extraction réussie :",
-            extract_path
-        )
+        file_path = downloader.download()
+
+        if file_path:
+
+            print(
+                "✅ Réponse AGRIS reçue :",
+                file_path
+            )
+
+            return {
+                "status": "success",
+                "file": str(file_path)
+            }
+
+        else:
+
+            print(
+                "⚠️ Aucune réponse reçue."
+            )
+
+            return {
+                "status": "warning",
+                "message": "Aucune réponse reçue"
+            }
 
     except Exception as e:
 
         print(
-            "❌ Erreur FAO ODS :",
+            "❌ Erreur FAO AGRIS :",
             e
         )
+
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
 if __name__ == "__main__":
+
     run()
