@@ -13,18 +13,44 @@ class FAOConnector(BaseConnector):
         super().__init__("fao")
 
     def discover(self):
-        self.log("Recherche des publications FAO...")
+    self.log("Recherche des publications FAO...")
 
-        url = "https://www.fao.org/publications/en/"
+    url = "https://www.fao.org/publications/en/"
 
-        response = requests.get(url, timeout=30)
-        response.raise_for_status()
+    response = requests.get(url, timeout=30)
+    response.raise_for_status()
 
-        soup = BeautifulSoup(response.text, "lxml")
+    soup = BeautifulSoup(response.text, "lxml")
 
-        self.log("Connexion réussie.")
+    documents = []
 
-        return []
+    for link in soup.find_all("a", href=True):
+
+        href = link["href"]
+
+        if ".pdf" not in href.lower():
+            continue
+
+        title = link.get_text(strip=True)
+
+        if not title:
+            title = "Publication FAO"
+
+        if href.startswith("/"):
+            href = "https://www.fao.org" + href
+
+        document = DocumentMetadata(
+            title=title,
+            source="FAO",
+            url=href,
+            document_type="publication",
+        )
+
+        documents.append(document)
+
+    self.log(f"{len(documents)} document(s) PDF trouvé(s).")
+
+    return documents
 
     def download(self, document: DocumentMetadata) -> Path:
         self.log(f"Téléchargement : {document.title}")
