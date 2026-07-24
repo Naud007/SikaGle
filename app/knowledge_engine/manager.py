@@ -7,21 +7,57 @@ import app.knowledge_engine.connectors.fao
 
 
 # =========================================================
+# CHEMINS
+# =========================================================
+
+BASE_DIR = Path("/app/knowledge")
+
+FAO_RAW_DIR = BASE_DIR / "raw" / "fao"
+FAO_ODS_DIR = FAO_RAW_DIR / "ods"
+FAO_DATASETS_DIR = FAO_RAW_DIR / "datasets"
+
+
+# =========================================================
+# INITIALISATION DES DOSSIERS
+# =========================================================
+
+def init_knowledge_directories():
+
+    FAO_ODS_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    FAO_DATASETS_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    print(
+        f"[KNOWLEDGE] Dossier ODS : "
+        f"{FAO_ODS_DIR}"
+    )
+
+    print(
+        f"[KNOWLEDGE] Dossier datasets : "
+        f"{FAO_DATASETS_DIR}"
+    )
+
+
+# =========================================================
 # KNOWLEDGE ENGINE PRINCIPAL
 # =========================================================
 
 def run():
-    """
-    Lance le Knowledge Engine.
-
-    1. Découvre les documents via les connecteurs.
-    2. Télécharge les documents.
-    """
 
     print("=" * 50)
     print("SikaGlé Knowledge Engine")
     print("=" * 50)
 
+    # Créer les dossiers nécessaires
+    init_knowledge_directories()
+
+    # Parcourir tous les connecteurs enregistrés
     for connector_class in registry.all():
 
         connector = connector_class()
@@ -29,7 +65,7 @@ def run():
         try:
 
             # -------------------------------------------------
-            # 1. RECHERCHE DES DOCUMENTS
+            # 1. DÉCOUVERTE
             # -------------------------------------------------
 
             documents = connector.discover()
@@ -40,13 +76,14 @@ def run():
             )
 
             # -------------------------------------------------
-            # 2. TÉLÉCHARGEMENT DES DOCUMENTS
+            # 2. TÉLÉCHARGEMENT
             # -------------------------------------------------
 
             for document in documents:
 
                 print(
-                    f"Document : {document.title}"
+                    f"Document : "
+                    f"{document.title}"
                 )
 
                 try:
@@ -57,7 +94,7 @@ def run():
 
                     if (
                         file_path
-                        and Path(file_path).exists()
+                        and file_path.exists()
                     ):
 
                         print(
@@ -89,7 +126,7 @@ def run():
 
 
 # =========================================================
-# TEST TÉLÉCHARGEMENT FAO AGRIS ODS
+# TEST TÉLÉCHARGEMENT AGRIS ODS
 # =========================================================
 
 def test_fao_ods():
@@ -100,19 +137,15 @@ def test_fao_ods():
 
     try:
 
+        # Créer les dossiers
+        init_knowledge_directories()
+
+        # Import local
         from app.knowledge_engine.connectors.fao_ods import (
             FAOODSDownloader
         )
 
-        # -------------------------------------------------
-        # 1. INITIALISER LE DOWNLOADER
-        # -------------------------------------------------
-
         downloader = FAOODSDownloader()
-
-        # -------------------------------------------------
-        # 2. TÉLÉCHARGER LE CATALOGUE AGRIS
-        # -------------------------------------------------
 
         file_path = downloader.download()
 
@@ -151,7 +184,7 @@ def test_fao_ods():
 
 
 # =========================================================
-# TEST PARSER DU CATALOGUE AGRIS
+# TEST PARSER AGRIS ODS
 # =========================================================
 
 def test_fao_parser():
@@ -162,6 +195,8 @@ def test_fao_parser():
 
     try:
 
+        init_knowledge_directories()
+
         from app.knowledge_engine.connectors.fao_ods import (
             FAOODSDownloader
         )
@@ -171,7 +206,7 @@ def test_fao_parser():
         )
 
         # -------------------------------------------------
-        # 1. TÉLÉCHARGER LE CATALOGUE AGRIS
+        # 1. Télécharger AGRIS ODS
         # -------------------------------------------------
 
         downloader = FAOODSDownloader()
@@ -190,7 +225,7 @@ def test_fao_parser():
             }
 
         # -------------------------------------------------
-        # 2. PARSER LE CATALOGUE
+        # 2. Parser AGRIS ODS
         # -------------------------------------------------
 
         parser = FAOODSParser(
@@ -210,7 +245,7 @@ def test_fao_parser():
         print("=" * 50)
 
         # -------------------------------------------------
-        # 3. AFFICHER LES 10 PREMIERS DATASETS
+        # 3. Afficher les 10 premiers datasets
         # -------------------------------------------------
 
         for index, document in enumerate(
@@ -261,10 +296,12 @@ def test_fao_parser():
 
 
 # =========================================================
-# TÉLÉCHARGEMENT DES DATASETS AGRIS
+# TÉLÉCHARGEMENT DES DATASETS FAO
 # =========================================================
 
-def test_fao_datasets():
+def download_fao_datasets(
+    limit=10
+):
 
     print("=" * 50)
     print("SikaGlé - Téléchargement des datasets FAO")
@@ -272,48 +309,42 @@ def test_fao_datasets():
 
     try:
 
+        init_knowledge_directories()
+
         # -------------------------------------------------
-        # 1. DOWNLOADER AGRIS
+        # 1. Télécharger le catalogue AGRIS
         # -------------------------------------------------
 
         from app.knowledge_engine.connectors.fao_ods import (
             FAOODSDownloader
         )
 
+        downloader = FAOODSDownloader()
+
+        ods_path = downloader.download()
+
+        if not ods_path:
+
+            print(
+                "❌ Impossible de télécharger "
+                "AGRIS ODS."
+            )
+
+            return {
+                "status": "error",
+                "message": "AGRIS ODS indisponible"
+            }
+
         # -------------------------------------------------
-        # 2. PARSER DU CATALOGUE
+        # 2. Parser le catalogue
         # -------------------------------------------------
 
         from app.knowledge_engine.parsers.fao_ods_parser import (
             FAOODSParser
         )
 
-        # -------------------------------------------------
-        # 3. TÉLÉCHARGEMENT DU CATALOGUE
-        # -------------------------------------------------
-
-        downloader = FAOODSDownloader()
-
-        xml_path = downloader.download()
-
-        if not xml_path:
-
-            print(
-                "❌ Impossible de télécharger "
-                "le catalogue AGRIS."
-            )
-
-            return {
-                "status": "error",
-                "message": "Catalogue AGRIS indisponible"
-            }
-
-        # -------------------------------------------------
-        # 4. PARSING DU CATALOGUE
-        # -------------------------------------------------
-
         parser = FAOODSParser(
-            xml_path
+            ods_path
         )
 
         documents = parser.parse()
@@ -324,51 +355,40 @@ def test_fao_datasets():
         )
 
         # -------------------------------------------------
-        # 5. DOSSIER DE DESTINATION
+        # 3. Limiter le nombre
         # -------------------------------------------------
 
-        datasets_dir = Path(
-            "/app/knowledge/raw/fao/datasets"
-        )
-
-        datasets_dir.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        # -------------------------------------------------
-        # 6. TÉLÉCHARGER LES 10 PREMIERS DATASETS
-        # -------------------------------------------------
+        documents_to_download = documents[:limit]
 
         downloaded_files = []
 
-        for document in documents[:10]:
+        # -------------------------------------------------
+        # 4. Télécharger chaque dataset
+        # -------------------------------------------------
+
+        import requests
+
+        for document in documents_to_download:
 
             try:
 
-                # Pydantic HttpUrl -> str
+                # Conversion Pydantic URL -> str
                 url = str(
                     document.url
                 )
 
-                # Nom du fichier
-                filename = url.rstrip(
-                    "/"
-                ).split(
+                filename = url.split(
                     "/"
                 )[-1]
 
                 if not filename:
 
-                    print(
-                        f"⚠️ Nom de fichier "
-                        f"impossible : {url}"
+                    filename = (
+                        "dataset.xml"
                     )
 
-                    continue
-
-                destination = (
-                    datasets_dir
+                output_path = (
+                    FAO_DATASETS_DIR
                     / filename
                 )
 
@@ -383,46 +403,45 @@ def test_fao_datasets():
                     f"{url}"
                 )
 
-                # Télécharger le fichier
-                import requests
+                # Éviter de télécharger
+                # deux fois le même fichier
+                if output_path.exists():
+
+                    print(
+                        f"⚠️ Déjà présent : "
+                        f"{output_path}"
+                    )
+
+                    downloaded_files.append(
+                        output_path
+                    )
+
+                    continue
 
                 response = requests.get(
                     url,
-                    timeout=120,
-                    stream=True
+                    timeout=120
                 )
 
                 response.raise_for_status()
 
-                # Écriture du fichier
-                with open(
-                    destination,
-                    "wb"
-                ) as file:
-
-                    for chunk in response.iter_content(
-                        chunk_size=1024 * 1024
-                    ):
-
-                        if chunk:
-
-                            file.write(
-                                chunk
-                            )
+                output_path.write_bytes(
+                    response.content
+                )
 
                 print(
                     f"[FAO DATASET] "
                     f"Enregistré : "
-                    f"{destination}"
+                    f"{output_path}"
                 )
 
                 print(
                     f"✅ Dataset téléchargé : "
-                    f"{destination}"
+                    f"{output_path}"
                 )
 
                 downloaded_files.append(
-                    destination
+                    output_path
                 )
 
             except Exception as e:
@@ -432,10 +451,6 @@ def test_fao_datasets():
                     f"{document.url} : "
                     f"{e}"
                 )
-
-        # -------------------------------------------------
-        # 7. RÉSULTAT
-        # -------------------------------------------------
 
         print("=" * 50)
 
@@ -450,16 +465,16 @@ def test_fao_datasets():
             "status": "success",
             "count": len(downloaded_files),
             "files": [
-                str(file)
-                for file in downloaded_files
+                str(path)
+                for path in downloaded_files
             ]
         }
 
     except Exception as e:
 
         print(
-            "❌ Erreur datasets FAO :",
-            e
+            "❌ Erreur téléchargement "
+            f"datasets FAO : {e}"
         )
 
         return {
@@ -472,73 +487,152 @@ def test_fao_datasets():
 # TEST PARSER DES DATASETS FAO
 # =========================================================
 
-def test_fao_dataset_parser():
+def test_fao_dataset_parser(
+    limit=10
+):
 
     print("=" * 50)
-    print("SikaGlé - Test Parser des datasets FAO")
+    print("SikaGlé - Test Parser Datasets FAO")
     print("=" * 50)
 
     try:
+
+        init_knowledge_directories()
+
+        # -------------------------------------------------
+        # 1. Vérifier si les datasets existent
+        # -------------------------------------------------
+
+        dataset_files = list(
+            FAO_DATASETS_DIR.glob(
+                "*.xml"
+            )
+        )
+
+        # -------------------------------------------------
+        # 2. Si aucun dataset :
+        #    les télécharger automatiquement
+        # -------------------------------------------------
+
+        if not dataset_files:
+
+            print(
+                "⚠️ Aucun dataset FAO local trouvé."
+            )
+
+            print(
+                "➡️ Téléchargement automatique "
+                "des datasets..."
+            )
+
+            result = download_fao_datasets(
+                limit=limit
+            )
+
+            if (
+                result.get("status")
+                != "success"
+            ):
+
+                return result
+
+            dataset_files = list(
+                FAO_DATASETS_DIR.glob(
+                    "*.xml"
+                )
+            )
+
+        # -------------------------------------------------
+        # 3. Import du parser
+        # -------------------------------------------------
 
         from app.knowledge_engine.parsers.fao_dataset_parser import (
             FAODatasetParser
         )
 
-        # -------------------------------------------------
-        # 1. DOSSIER DES DATASETS
-        # -------------------------------------------------
+        parser = FAODatasetParser()
 
-        datasets_dir = Path(
-            "/app/knowledge/raw/fao/datasets"
-        )
+        parsed_count = 0
 
         # -------------------------------------------------
-        # 2. VÉRIFIER LE DOSSIER
+        # 4. Parser les datasets
         # -------------------------------------------------
 
-        if not datasets_dir.exists():
+        for dataset_file in dataset_files[:limit]:
+
+            print("=" * 50)
 
             print(
-                "❌ Le dossier des datasets "
-                "FAO n'existe pas."
+                f"[FAO DATASET PARSER] "
+                f"Fichier : "
+                f"{dataset_file.name}"
             )
 
-            return {
-                "status": "error",
-                "message": "Dossier datasets FAO introuvable"
-            }
+            try:
 
-        # -------------------------------------------------
-        # 3. INITIALISER LE PARSER
-        # -------------------------------------------------
+                documents = parser.parse(
+                    dataset_file
+                )
 
-        parser = FAODatasetParser(
-            datasets_dir
-        )
+                print(
+                    f"✅ "
+                    f"{len(documents)} document(s) "
+                    f"trouvé(s)"
+                )
 
-        # -------------------------------------------------
-        # 4. PARSER LES DATASETS
-        # -------------------------------------------------
+                parsed_count += len(
+                    documents
+                )
 
-        datasets = parser.parse_all()
+                # Afficher les 3 premiers
+                # documents du dataset
 
-        # -------------------------------------------------
-        # 5. RÉSULTAT
-        # -------------------------------------------------
+                for index, document in enumerate(
+                    documents[:3],
+                    start=1
+                ):
+
+                    print(
+                        f"\nDocument {index}"
+                    )
+
+                    print(
+                        "Titre :",
+                        document.title
+                    )
+
+                    print(
+                        "URL :",
+                        document.url
+                    )
+
+            except Exception as e:
+
+                print(
+                    f"❌ Erreur parsing "
+                    f"{dataset_file.name} : "
+                    f"{e}"
+                )
 
         print("=" * 50)
 
         print(
-            "Résultat :",
-            len(datasets),
-            "dataset(s) analysé(s)"
+            f"✅ Parsing terminé."
+        )
+
+        print(
+            f"Documents analysés : "
+            f"{parsed_count}"
         )
 
         print("=" * 50)
 
         return {
             "status": "success",
-            "count": len(datasets)
+            "datasets": len(
+                dataset_files[:limit]
+            ),
+            "documents": parsed_count
         }
 
     except Exception as e:
