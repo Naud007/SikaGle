@@ -1,6 +1,5 @@
 import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin
+from pathlib import Path
 
 from app.knowledge_engine.config import config
 
@@ -22,8 +21,13 @@ class FAOODSDownloader:
             exist_ok=True
         )
 
-        self.catalog_url = (
-            "https://data.apps.fao.org/catalog/dcat/agris"
+        self.download_url = (
+            "https://agris.fao.org/ods/AGRIS.ODS.xml"
+        )
+
+        self.file_path = (
+            self.download_dir
+            / "AGRIS.ODS.xml"
         )
 
         self.headers = {
@@ -34,17 +38,18 @@ class FAOODSDownloader:
             )
         }
 
-    def find_download_links(self):
+    def download(self):
 
         print(
-            "[FAO ODS] Accès au catalogue "
-            "de données FAO..."
+            "[FAO ODS] Téléchargement "
+            "du fichier AGRIS.ODS.xml..."
         )
 
         response = requests.get(
-            self.catalog_url,
+            self.download_url,
             headers=self.headers,
-            timeout=120
+            timeout=600,
+            stream=True
         )
 
         print(
@@ -52,91 +57,45 @@ class FAOODSDownloader:
             response.status_code
         )
 
+        response.raise_for_status()
+
+        total_size = 0
+
+        with open(
+            self.file_path,
+            "wb"
+        ) as file:
+
+            for chunk in response.iter_content(
+                chunk_size=1024 * 1024
+            ):
+
+                if chunk:
+
+                    file.write(
+                        chunk
+                    )
+
+                    total_size += len(
+                        chunk
+                    )
+
         print(
-            "[FAO ODS] Taille réponse :",
-            len(response.content),
+            "[FAO ODS] Téléchargement terminé."
+        )
+
+        print(
+            "[FAO ODS] Taille du fichier :",
+            total_size,
             "octets"
         )
 
-        response.raise_for_status()
-
-        soup = BeautifulSoup(
-            response.text,
-            "html.parser"
-        )
-
-        links = []
-
-        for link in soup.find_all(
-            "a",
-            href=True
-        ):
-
-            href = link["href"].strip()
-
-            text = link.get_text(
-                " ",
-                strip=True
-            )
-
-            full_url = urljoin(
-                self.catalog_url,
-                href
-            )
-
-            links.append(
-                {
-                    "text": text,
-                    "url": full_url
-                }
-            )
-
-        # Supprimer les doublons
-        unique_links = {}
-
-        for link in links:
-
-            unique_links[
-                link["url"]
-            ] = link
-
-        links = list(
-            unique_links.values()
-        )
-
         print(
-            "[FAO ODS] Nombre total de liens :",
-            len(links)
+            "[FAO ODS] Fichier enregistré :",
+            self.file_path
         )
 
-        for link in links:
-
-            print(
-                "[FAO ODS] -",
-                link["text"],
-                "→",
-                link["url"]
-            )
-
-        return links
-
-    def download(self):
-
-        links = self.find_download_links()
-
-        if not links:
-
-            print(
-                "[FAO ODS] ⚠️ Aucun lien trouvé."
-            )
-
-            return None
-
-        print(
-            "[FAO ODS] Catalogue analysé."
-        )
-
-        return links
+        return self.file_path
 
 
 def test_fao_ods():
@@ -144,7 +103,8 @@ def test_fao_ods():
     print("=" * 50)
 
     print(
-        "SikaGlé - Test FAO AGRIS Data Catalog"
+        "SikaGlé - Test téléchargement "
+        "FAO AGRIS ODS"
     )
 
     print("=" * 50)
@@ -153,28 +113,35 @@ def test_fao_ods():
 
     try:
 
-        links = downloader.download()
+        file_path = downloader.download()
 
-        if links:
+        if file_path and file_path.exists():
 
             print(
-                "✅ Catalogue FAO accessible."
+                "✅ Fichier AGRIS ODS téléchargé :",
+                file_path
             )
 
             return {
                 "status": "success",
-                "links": links
+                "file": str(
+                    file_path
+                )
             }
 
+        print(
+            "⚠️ Fichier non trouvé."
+        )
+
         return {
-            "status": "warning",
-            "message": "Aucun lien trouvé"
+            "status": "warning"
         }
 
     except Exception as e:
 
         print(
-            "❌ Erreur catalogue FAO :",
+            "❌ Erreur téléchargement "
+            "AGRIS ODS :",
             e
         )
 
