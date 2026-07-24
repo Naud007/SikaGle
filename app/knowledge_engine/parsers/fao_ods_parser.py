@@ -1,145 +1,76 @@
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from app.schemas.document import DocumentMetadata
-
 
 class FAOODSParser:
 
     def __init__(self, xml_path: Path):
-
         self.xml_path = xml_path
 
     def parse(self):
 
         print(
-            "[FAO PARSER] Lecture du fichier AGRIS..."
+            "[FAO PARSER] Inspection de la structure XML..."
         )
 
         if not self.xml_path.exists():
-
             raise FileNotFoundError(
-                f"Fichier introuvable : "
-                f"{self.xml_path}"
+                f"Fichier introuvable : {self.xml_path}"
             )
 
         documents = []
 
-        context = ET.iterparse(
-            self.xml_path,
-            events=("end",)
-        )
+        try:
 
-        for event, element in context:
+            # Lecture du fichier XML
+            tree = ET.parse(self.xml_path)
 
-            # On cherche les notices AGRIS
-            if element.tag.lower().endswith(
-                "record"
-            ):
+            root = tree.getroot()
 
-                try:
-
-                    document = self.parse_record(
-                        element
-                    )
-
-                    if document:
-
-                        documents.append(
-                            document
-                        )
-
-                except Exception as e:
-
-                    print(
-                        "[FAO PARSER] "
-                        "Erreur notice :",
-                        e
-                    )
-
-                element.clear()
-
-        print(
-            "[FAO PARSER]",
-            len(documents),
-            "document(s) analysé(s)."
-        )
-
-        return documents
-
-    def parse_record(
-        self,
-        record
-    ):
-
-        title = ""
-
-        abstract = ""
-
-        url = ""
-
-        # Recherche simple des champs
-        for element in record.iter():
-
-            tag = element.tag.lower()
-
-            text = (
-                element.text.strip()
-                if element.text
-                else ""
+            print(
+                "[FAO PARSER] Racine XML :",
+                root.tag
             )
 
-            if not text:
-                continue
+            print(
+                "[FAO PARSER] Attributs racine :",
+                root.attrib
+            )
 
-            if (
-                "title" in tag
-                and not title
-            ):
+            # Afficher les premières balises
+            print(
+                "[FAO PARSER] Analyse des balises..."
+            )
 
-                title = text
+            tags = set()
 
-            elif (
-                "abstract" in tag
-                and not abstract
-            ):
+            for element in root.iter():
 
-                abstract = text
+                tags.add(element.tag)
 
-            elif (
-                "identifier" in tag
-                and (
-                    text.startswith(
-                        "http://"
-                    )
-                    or text.startswith(
-                        "https://"
-                    )
+                if len(tags) >= 30:
+                    break
+
+            for tag in tags:
+
+                print(
+                    "[FAO PARSER] Balise :",
+                    tag
                 )
-                and not url
-            ):
 
-                url = text
-
-        # Sans titre, on ignore la notice
-        if not title:
-
-            return None
-
-        # Si aucun lien n'est disponible,
-        # on utilise une URL AGRIS générique
-        if not url:
-
-            url = (
-                "https://agris.fao.org/"
+            print(
+                "[FAO PARSER] Nombre total "
+                "d'éléments XML :",
+                len(list(root.iter()))
             )
 
-        return DocumentMetadata(
+            return documents
 
-            title=title,
+        except Exception as e:
 
-            url=url,
+            print(
+                "[FAO PARSER] Erreur lecture XML :",
+                e
+            )
 
-            description=abstract,
-
-        )
+            raise
