@@ -1,4 +1,7 @@
 from app.knowledge_engine.connectors.registry import registry
+from app.knowledge_engine.connectors.fao_ods import (
+    FAOODSDownloader
+)
 
 # Charge les connecteurs
 import app.knowledge_engine.connectors.fao
@@ -45,6 +48,41 @@ def run():
                 f"{connector.source_name} : {e}"
             )
 
+def test_fao_ods():
 
+    print("=" * 50)
+
+    print(
+        "SikaGlé - Test FAO AGRIS ODS"
+    )
+
+    print("=" * 50)
+
+    downloader = FAOODSDownloader()
+
+    try:
+
+        zip_path = downloader.download()
+
+        print(
+            "✅ Téléchargement réussi :",
+            zip_path
+        )
+
+        extract_path = (
+            downloader.extract()
+        )
+
+        print(
+            "✅ Extraction réussie :",
+            extract_path
+        )
+
+    except Exception as e:
+
+        print(
+            "❌ Erreur FAO ODS :",
+            e
+        )
 if __name__ == "__main__":
     run()
