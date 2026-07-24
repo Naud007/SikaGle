@@ -15,6 +15,7 @@ def run():
         connector = connector_class()
 
         documents = connector.discover()
+        print(documents)
 
         print(f"{connector.source_name} : {len(documents)} document(s)")
 
