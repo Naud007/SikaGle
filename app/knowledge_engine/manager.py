@@ -1,6 +1,6 @@
 from app.knowledge_engine.connectors.registry import registry
 
-# importe les connecteurs
+# Charge les connecteurs
 import app.knowledge_engine.connectors.fao
 
 
@@ -14,10 +14,35 @@ def run():
 
         connector = connector_class()
 
-        documents = connector.discover()
-        print(documents)
+        try:
+            documents = connector.discover()
 
-        print(f"{connector.source_name} : {len(documents)} document(s)")
+            print(
+                f"{connector.source_name} : "
+                f"{len(documents)} document(s) trouvé(s)"
+            )
+
+            for document in documents:
+
+                print(f"Document : {document.title}")
+
+                try:
+                    file_path = connector.download(document)
+
+                    print(
+                        f"✅ Téléchargé : {file_path}"
+                    )
+
+                except Exception as e:
+                    print(
+                        f"❌ Erreur téléchargement : {e}"
+                    )
+
+        except Exception as e:
+            print(
+                f"❌ Erreur connecteur "
+                f"{connector.source_name} : {e}"
+            )
 
 
 if __name__ == "__main__":
