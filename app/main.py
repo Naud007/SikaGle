@@ -196,6 +196,49 @@ def send_whatsapp_message(
 
         return False
 
+# =========================================================
+# TEST INGESTION RAG
+# =========================================================
+
+@app.get("/knowledge/rag-ingest-test")
+def rag_ingest_test():
+
+    return test_rag_ingestion()
+
+
+# =========================================================
+# INGESTION RAG PAR BATCH
+# =========================================================
+
+@app.get("/knowledge/rag-ingest")
+def rag_ingest(
+    limit: int = 100,
+    offset: int = 0
+):
+
+    try:
+
+        ingestion = RAGIngestion()
+
+        return ingestion.ingest(
+
+            limit=limit,
+
+            offset=offset
+
+        )
+
+    except Exception as e:
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(e)
+
+        }
 @app.get("/ai/rag-test")
 def rag_test():
 
