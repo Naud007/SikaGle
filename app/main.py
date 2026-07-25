@@ -7,6 +7,9 @@ from app.ai.gemini_client import test_gemini
 from app.ai.embeddings import test_embedding
 from app.ai.gemini_client import list_gemini_models
 from app.ai.rag_service import test_rag
+from app.knowledge_engine.storage.rag_ingestion import (
+    test_rag_ingestion
+)
 
 from app.knowledge_engine.manager import (
     run,
@@ -211,6 +214,10 @@ def gemini_test():
     return test_gemini()
 
 
+@app.get("/knowledge/rag-ingestion-test")
+def rag_ingestion_test():
+
+    return test_rag_ingestion()
 # =========================================================
 # TEST EMBEDDING GEMINI
 # =========================================================
