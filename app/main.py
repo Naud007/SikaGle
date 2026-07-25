@@ -218,6 +218,256 @@ def send_whatsapp_message(
         return False
 
 
+@app.get(
+    "/knowledge/fao-dataset-pipeline-test"
+)
+def fao_dataset_pipeline_test():
+
+    from app.knowledge_engine.connectors.fao_ods import (
+        FAOODSDownloader
+    )
+
+    from app.knowledge_engine.parsers.fao_ods_parser import (
+        FAOODSParser
+    )
+
+    from app.knowledge_engine.connectors.fao_datasets import (
+        FAODatasetsDownloader
+    )
+
+    from app.knowledge_engine.parsers.fao_dataset_parser import (
+        FAODatasetParser
+    )
+
+    try:
+
+        # =====================================================
+        # 1. TÉLÉCHARGER LE CATALOGUE AGRIS
+        # =====================================================
+
+        print(
+            "[PIPELINE TEST] "
+            "Téléchargement catalogue AGRIS..."
+        )
+
+        ods_downloader = (
+            FAOODSDownloader()
+        )
+
+        ods_path = (
+            ods_downloader.download()
+        )
+
+        if not ods_path:
+
+            return {
+                "status": "error",
+                "step": "ods_download",
+                "message": (
+                    "Téléchargement AGRIS impossible."
+                )
+            }
+
+
+        # =====================================================
+        # 2. PARSER LE CATALOGUE
+        # =====================================================
+
+        print(
+            "[PIPELINE TEST] "
+            "Parsing catalogue AGRIS..."
+        )
+
+        ods_parser = (
+            FAOODSParser(
+                ods_path
+            )
+        )
+
+        datasets = (
+            ods_parser.parse()
+        )
+
+
+        if not datasets:
+
+            return {
+                "status": "error",
+                "step": "ods_parse",
+                "message": (
+                    "Aucun dataset trouvé "
+                    "dans le catalogue AGRIS."
+                )
+            }
+
+
+        # =====================================================
+        # 3. PRENDRE LE PREMIER DATASET
+        # =====================================================
+
+        dataset = (
+            datasets[0]
+        )
+
+        dataset_url = str(
+            dataset.url
+        ).strip()
+
+
+        print(
+            "[PIPELINE TEST] "
+            "Dataset sélectionné :",
+            dataset_url
+        )
+
+
+        # =====================================================
+        # 4. TÉLÉCHARGER LE DATASET EN MÉMOIRE
+        # =====================================================
+
+        dataset_downloader = (
+            FAODatasetsDownloader()
+        )
+
+        filename = (
+            dataset_url
+            .rstrip("/")
+            .split("/")
+            [-1]
+        )
+
+
+        downloaded = (
+            dataset_downloader.download(
+                url=dataset_url,
+                filename=filename
+            )
+        )
+
+
+        if not downloaded:
+
+            return {
+                "status": "error",
+                "step": "dataset_download",
+                "message": (
+                    "Dataset impossible à télécharger."
+                )
+            }
+
+
+        # =====================================================
+        # 5. EXTRAIRE LE CONTENU XML
+        # =====================================================
+
+        xml_content = (
+            downloaded.get(
+                "content"
+            )
+        )
+
+
+        if not xml_content:
+
+            return {
+                "status": "error",
+                "step": "dataset_content",
+                "message": (
+                    "Le dataset téléchargé "
+                    "ne contient aucun contenu."
+                )
+            }
+
+
+        # =====================================================
+        # 6. PARSER LE DATASET EN MÉMOIRE
+        # =====================================================
+
+        dataset_parser = (
+            FAODatasetParser()
+        )
+
+
+        documents = (
+            dataset_parser.parse(
+                xml_content=xml_content,
+                filename=filename,
+                source_url=dataset_url
+            )
+        )
+
+
+        # =====================================================
+        # 7. RÉSULTAT
+        # =====================================================
+
+        return {
+
+            "status":
+                "success",
+
+            "dataset_url":
+                dataset_url,
+
+            "dataset_filename":
+                filename,
+
+            "xml_size":
+                len(
+                    xml_content
+                ),
+
+            "documents_parsed":
+                len(
+                    documents
+                ),
+
+            "documents_preview":
+                [
+
+                    {
+
+                        "title":
+                            document.title,
+
+                        "url":
+                            document.url,
+
+                        "description":
+                            getattr(
+                                document,
+                                "description",
+                                None
+                            )
+
+                    }
+
+                    for document
+                    in documents[:3]
+
+                ]
+
+        }
+
+
+    except Exception as e:
+
+        print(
+            "[PIPELINE TEST] "
+            f"Erreur : {e}"
+        )
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(
+                    e
+                )
+
+        }
 # =========================================================
 # DEBUG FICHIERS XML FAO
 # =========================================================
