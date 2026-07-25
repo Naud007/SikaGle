@@ -213,6 +213,81 @@ class DocumentStore:
 
 
     # =========================================================
+    # RÉCUPÉRER UN LOT DE DOCUMENTS
+    # =========================================================
+
+    def get_batch(
+        self,
+        limit=100,
+        offset=0
+    ):
+
+        """
+        Récupère uniquement une portion des documents.
+
+        Exemple :
+
+        get_batch(
+            limit=100,
+            offset=0
+        )
+
+        -> Documents 0 à 99
+
+        get_batch(
+            limit=100,
+            offset=100
+        )
+
+        -> Documents 100 à 199
+        """
+
+        if limit <= 0:
+
+            raise ValueError(
+                "Le paramètre limit doit être supérieur à 0."
+            )
+
+        if offset < 0:
+
+            raise ValueError(
+                "Le paramètre offset ne peut pas être négatif."
+            )
+
+        documents = self._load()
+
+        total_documents = len(
+            documents
+        )
+
+        batch = documents[
+            offset:
+            offset + limit
+        ]
+
+        print(
+            f"[DOCUMENT STORE] "
+            f"Batch demandé : "
+            f"offset={offset}, "
+            f"limit={limit}"
+        )
+
+        print(
+            f"[DOCUMENT STORE] "
+            f"Total documents : "
+            f"{total_documents}"
+        )
+
+        print(
+            f"[DOCUMENT STORE] "
+            f"Documents retournés : "
+            f"{len(batch)}"
+        )
+
+        return batch
+
+
+    # =========================================================
     # COMPTER LES DOCUMENTS
     # =========================================================
 
