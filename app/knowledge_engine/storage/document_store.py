@@ -20,6 +20,11 @@ class DocumentStore:
             exist_ok=True
         )
 
+
+    # =========================================================
+    # CHARGER LES DOCUMENTS
+    # =========================================================
+
     def _load(self):
 
         if not self.storage_path.exists():
@@ -54,6 +59,11 @@ class DocumentStore:
 
             return []
 
+
+    # =========================================================
+    # SAUVEGARDER LES DOCUMENTS
+    # =========================================================
+
     def _save(
         self,
         documents
@@ -71,6 +81,11 @@ class DocumentStore:
                 ensure_ascii=False,
                 indent=2
             )
+
+
+    # =========================================================
+    # AJOUTER DES DOCUMENTS
+    # =========================================================
 
     def add_documents(
         self,
@@ -161,7 +176,12 @@ class DocumentStore:
             )
         }
 
-   def get_all(self):
+
+    # =========================================================
+    # RÉCUPÉRER TOUS LES DOCUMENTS
+    # =========================================================
+
+    def get_all(self):
 
         print(
             f"[DOCUMENT STORE] "
@@ -170,7 +190,8 @@ class DocumentStore:
 
         print(
             f"[DOCUMENT STORE] "
-            f"Fichier existe : {self.storage_path.exists()}"
+            f"Fichier existe : "
+            f"{self.storage_path.exists()}"
         )
 
         if self.storage_path.exists():
@@ -189,6 +210,22 @@ class DocumentStore:
         )
 
         return documents
+
+
+    # =========================================================
+    # COMPTER LES DOCUMENTS
+    # =========================================================
+
+    def count(self):
+
+        return len(
+            self._load()
+        )
+
+
+    # =========================================================
+    # VIDER LE STOCKAGE
+    # =========================================================
 
     def clear(self):
 
