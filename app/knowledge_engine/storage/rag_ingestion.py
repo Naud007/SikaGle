@@ -425,7 +425,7 @@ class RAGIngestion:
                 # -------------------------------------------------
 
                 time.sleep(
-                    0.2
+                    0.7
                 )
 
             except Exception as e:
