@@ -1067,3 +1067,123 @@ class FAODatasetParser:
 
 
         return None
+def debug_fao_dataset(xml_path):
+
+    import xml.etree.ElementTree as ET
+
+    print("=" * 60)
+    print("[DEBUG FAO] Analyse du fichier XML")
+    print("=" * 60)
+
+    print(
+        "[DEBUG FAO] Fichier :",
+        xml_path
+    )
+
+    try:
+
+        tree = ET.parse(
+            xml_path
+        )
+
+        root = tree.getroot()
+
+        print(
+            "[DEBUG FAO] Root tag :",
+            root.tag
+        )
+
+        print(
+            "[DEBUG FAO] Root attrib :",
+            root.attrib
+        )
+
+        print("=" * 60)
+        print("[DEBUG FAO] Enfants directs du root")
+        print("=" * 60)
+
+        for index, child in enumerate(
+            list(root)[:20],
+            start=1
+        ):
+
+            print(
+                f"{index}.",
+                child.tag,
+                child.attrib
+            )
+
+        print("=" * 60)
+        print("[DEBUG FAO] Recherche BibliographicResource")
+        print("=" * 60)
+
+        count = 0
+
+        for element in root.iter():
+
+            if not isinstance(
+                element.tag,
+                str
+            ):
+                continue
+
+            local_name = (
+                element.tag
+                .split("}")[-1]
+                .lower()
+            )
+
+            if local_name == "bibliographicresource":
+
+                count += 1
+
+                print(
+                    f"[DEBUG FAO] "
+                    f"BibliographicResource #{count}"
+                )
+
+                print(
+                    "TAG :",
+                    element.tag
+                )
+
+                print(
+                    "ATTRIB :",
+                    element.attrib
+                )
+
+                for child in list(element)[:10]:
+
+                    print(
+                        "  CHILD :",
+                        child.tag,
+                        "=",
+                        child.text
+                    )
+
+                print("-" * 60)
+
+        print(
+            "[DEBUG FAO] "
+            f"Total BibliographicResource : {count}"
+        )
+
+        print("=" * 60)
+
+        return {
+            "status": "success",
+            "root": root.tag,
+            "bibliographic_resources": count
+        }
+
+    except Exception as e:
+
+        print(
+            "[DEBUG FAO] "
+            f"Erreur : {e}"
+        )
+
+        return {
+            "status": "error",
+            "message": str(e)
+        }
