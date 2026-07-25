@@ -2,21 +2,8 @@ import os
 
 from supabase import create_client, Client
 
-from app.ai.embeddings import GeminiEmbedding
-
-
-# =========================================================
-# CONFIGURATION SUPABASE
-# =========================================================
-
-SUPABASE_URL = os.getenv(
-    "SUPABASE_URL",
-    ""
-)
-
-SUPABASE_KEY = os.getenv(
-    "SUPABASE_KEY",
-    ""
+from app.ai.embeddings import (
+    GeminiEmbeddingService
 )
 
 
@@ -28,30 +15,36 @@ class RAGService:
 
     def __init__(self):
 
-        if not SUPABASE_URL:
+        supabase_url = os.getenv(
+            "SUPABASE_URL"
+        )
+
+        supabase_key = os.getenv(
+            "SUPABASE_KEY"
+        )
+
+        if not supabase_url:
 
             raise ValueError(
                 "SUPABASE_URL est manquante."
             )
 
-        if not SUPABASE_KEY:
+        if not supabase_key:
 
             raise ValueError(
                 "SUPABASE_KEY est manquante."
             )
 
-
         self.supabase: Client = create_client(
-
-            SUPABASE_URL,
-
-            SUPABASE_KEY
-
+            supabase_url,
+            supabase_key
         )
 
-
         self.embedding_service = (
-            GeminiEmbedding()
+            GeminiEmbeddingService(
+                model="gemini-embedding-001",
+                output_dimensionality=1536
+            )
         )
 
 
@@ -65,7 +58,7 @@ class RAGService:
 
         query: str,
 
-        match_threshold: float = 0.5,
+        match_threshold: float = 0.3,
 
         match_count: int = 5
 
@@ -74,30 +67,35 @@ class RAGService:
         if not query or not query.strip():
 
             raise ValueError(
-
-                "La question de recherche "
-                "est vide."
-
+                "La question de recherche est vide."
             )
 
 
-        # ---------------------------------------------
-        # 1. Transformer la question en embedding
-        # ---------------------------------------------
+        # -------------------------------------------------
+        # 1. EMBEDDING DE LA REQUÊTE
+        # -------------------------------------------------
+
+        print(
+            "[RAG] Génération de l'embedding "
+            "de la requête..."
+        )
 
         query_embedding = (
-
             self.embedding_service
-            .generate_embedding(
+            .generate_query_embedding(
                 query
             )
-
         )
 
 
-        # ---------------------------------------------
-        # 2. Recherche dans pgvector
-        # ---------------------------------------------
+        print(
+            "[RAG] Embedding généré."
+        )
+
+
+        # -------------------------------------------------
+        # 2. RECHERCHE VECTORIELLE SUPABASE
+        # -------------------------------------------------
 
         response = (
 
@@ -127,7 +125,19 @@ class RAGService:
 
         if not response.data:
 
+            print(
+                "[RAG] Aucun document trouvé."
+            )
+
             return []
+
+
+        print(
+
+            f"[RAG] "
+            f"{len(response.data)} document(s) trouvé(s)."
+
+        )
 
 
         return response.data
@@ -234,6 +244,10 @@ def test_rag():
 
 
     except Exception as e:
+
+        print(
+            f"[RAG] Erreur : {e}"
+        )
 
         return {
 
