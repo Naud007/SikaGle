@@ -657,13 +657,136 @@ def fao_datasets_test():
 # =========================================================
 
 @app.get(
-    "/knowledge/fao-dataset-parser-test"
+    "/knowledge/fao-datasets-test"
 )
-def fao_dataset_parser_test():
+def fao_datasets_test():
 
-    return test_fao_dataset_parser(
-        limit=10
+    from pathlib import Path
+
+    import os
+
+    print("=" * 60)
+    print("[DEBUG] ENVIRONNEMENT API")
+    print("=" * 60)
+
+    print(
+        "[DEBUG] Current working directory :",
+        os.getcwd()
     )
+
+    print(
+        "[DEBUG] /app existe :",
+        Path("/app").exists()
+    )
+
+    print(
+        "[DEBUG] /app/knowledge existe :",
+        Path("/app/knowledge").exists()
+    )
+
+    print(
+        "[DEBUG] /app/knowledge/raw existe :",
+        Path("/app/knowledge/raw").exists()
+    )
+
+    print(
+        "[DEBUG] /app/knowledge/raw/fao existe :",
+        Path("/app/knowledge/raw/fao").exists()
+    )
+
+    print(
+        "[DEBUG] /app/knowledge/raw/fao/datasets existe :",
+        Path(
+            "/app/knowledge/raw/fao/datasets"
+        ).exists()
+    )
+
+    print("=" * 60)
+    print("[DEBUG] RECHERCHE DES FICHIERS XML")
+    print("=" * 60)
+
+    xml_files = []
+
+    search_roots = [
+
+        Path("/app"),
+
+        Path("/tmp"),
+
+    ]
+
+    for root in search_roots:
+
+        if not root.exists():
+
+            continue
+
+        try:
+
+            for path in root.rglob(
+                "*.xml"
+            ):
+
+                print(
+                    "[DEBUG] XML trouvé :",
+                    path
+                )
+
+                xml_files.append(
+                    str(path)
+                )
+
+        except Exception as e:
+
+            print(
+                "[DEBUG] Erreur recherche dans",
+                root,
+                ":",
+                e
+            )
+
+    return {
+
+        "status":
+            "success",
+
+        "cwd":
+            os.getcwd(),
+
+        "app_exists":
+            Path(
+                "/app"
+            ).exists(),
+
+        "knowledge_exists":
+            Path(
+                "/app/knowledge"
+            ).exists(),
+
+        "raw_exists":
+            Path(
+                "/app/knowledge/raw"
+            ).exists(),
+
+        "fao_exists":
+            Path(
+                "/app/knowledge/raw/fao"
+            ).exists(),
+
+        "datasets_exists":
+            Path(
+                "/app/knowledge/raw/fao/datasets"
+            ).exists(),
+
+        "xml_files":
+            xml_files[:100],
+
+        "xml_count":
+            len(
+                xml_files
+            )
+
+    }
 
 
 # =========================================================
