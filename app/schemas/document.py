@@ -6,11 +6,21 @@ from pydantic import BaseModel, HttpUrl
 
 class DocumentMetadata(BaseModel):
     """
-    Métadonnées standardisées d'un document officiel.
-    Tous les connecteurs retourneront ce modèle.
+    Modèle standardisé représentant un document
+    provenant d'une source de connaissance officielle.
+
+    Ce modèle est volontairement générique afin de permettre
+    plus tard l'ajout de :
+    - agriculture
+    - élevage
+    - pêche
+    - santé animale
+    - météo
+    - etc.
     """
 
     title: str
+
     source: str
 
     url: HttpUrl
@@ -28,3 +38,21 @@ class DocumentMetadata(BaseModel):
     checksum: Optional[str] = None
 
     local_path: Optional[str] = None
+
+    # =========================================================
+    # CONTENU DU DOCUMENT
+    # =========================================================
+
+    content: Optional[str] = None
+
+    # =========================================================
+    # MÉTADONNÉES AGRICOLES
+    # =========================================================
+
+    description: Optional[str] = None
+
+    culture: Optional[str] = None
+
+    zone_geographique: Optional[str] = None
+
+    mots_cles: Optional[list[str]] = None
