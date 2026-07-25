@@ -3,12 +3,18 @@ from supabase import create_client, Client
 from datetime import date, datetime
 import os
 import requests
-from app.ai.gemini_client import test_gemini
-from app.ai.embeddings import test_embedding
-from app.ai.gemini_client import list_gemini_models
-from app.ai.rag_service import test_rag
-from app.knowledge_engine.storage.rag_ingestion import (
-    test_rag_ingestion
+
+from app.ai.gemini_client import (
+    test_gemini,
+    list_gemini_models,
+)
+
+from app.ai.embeddings import (
+    test_embedding,
+)
+
+from app.ai.rag_service import (
+    test_rag,
 )
 
 from app.knowledge_engine.manager import (
@@ -20,15 +26,15 @@ from app.knowledge_engine.manager import (
 )
 
 from app.knowledge_engine.storage.rag_ingestion import (
-    test_rag_ingestion
+    RAGIngestion,
+    test_rag_ingestion,
 )
 
 
-@app.get("/knowledge/rag-ingestion-test")
-def rag_ingestion_test():
+# =========================================================
+# INITIALISATION FASTAPI
+# =========================================================
 
-    return test_rag_ingestion()
-    
 app = FastAPI(
     title="SikaGlé API",
     version="1.0.0"
@@ -40,7 +46,9 @@ app = FastAPI(
 # =========================================================
 
 TRIAL_PERIOD_DAYS = 31
+
 TRIAL_DAILY_LIMIT = 15
+
 REGULAR_DAILY_LIMIT = 5
 
 
@@ -80,6 +88,7 @@ SUPABASE_KEY = os.getenv(
 
 supabase: Client = None
 
+
 if SUPABASE_URL and SUPABASE_KEY:
 
     try:
@@ -89,7 +98,9 @@ if SUPABASE_URL and SUPABASE_KEY:
             SUPABASE_KEY
         )
 
-        print("✅ Connexion Supabase initialisée.")
+        print(
+            "✅ Connexion Supabase initialisée."
+        )
 
     except Exception as e:
 
@@ -205,12 +216,15 @@ def send_whatsapp_message(
 
         return False
 
+
 # =========================================================
-# TEST INGESTION RAG
+# TEST RAG INGESTION
 # =========================================================
 
-@app.get("/knowledge/rag-ingest-test")
-def rag_ingest_test():
+@app.get(
+    "/knowledge/rag-ingestion-test"
+)
+def rag_ingestion_test():
 
     return test_rag_ingestion()
 
@@ -219,7 +233,9 @@ def rag_ingest_test():
 # INGESTION RAG PAR BATCH
 # =========================================================
 
-@app.get("/knowledge/rag-ingest")
+@app.get(
+    "/knowledge/rag-ingest"
+)
 def rag_ingest(
     limit: int = 100,
     offset: int = 0
@@ -248,41 +264,63 @@ def rag_ingest(
                 str(e)
 
         }
-@app.get("/ai/rag-test")
+
+
+# =========================================================
+# TEST RAG
+# =========================================================
+
+@app.get(
+    "/ai/rag-test"
+)
 def rag_test():
 
     return test_rag()
-@app.get("/ai/models")
+
+
+# =========================================================
+# LISTE DES MODÈLES GEMINI
+# =========================================================
+
+@app.get(
+    "/ai/models"
+)
 def gemini_models():
 
     return list_gemini_models()
+
+
 # =========================================================
 # TEST GEMINI
 # =========================================================
 
-@app.get("/ai/gemini-test")
+@app.get(
+    "/ai/gemini-test"
+)
 def gemini_test():
 
     return test_gemini()
 
 
-@app.get("/knowledge/rag-ingestion-test")
-def rag_ingestion_test():
-
-    return test_rag_ingestion()
 # =========================================================
 # TEST EMBEDDING GEMINI
 # =========================================================
 
-@app.get("/ai/embedding-test")
+@app.get(
+    "/ai/embedding-test"
+)
 def embedding_test():
 
     return test_embedding()
+
+
 # =========================================================
 # ROUTES KNOWLEDGE ENGINE
 # =========================================================
 
-@app.get("/knowledge/test")
+@app.get(
+    "/knowledge/test"
+)
 def test_knowledge_engine():
 
     """
@@ -299,31 +337,37 @@ def test_knowledge_engine():
     }
 
 
-# ---------------------------------------------------------
+# =========================================================
 # TEST FAO ODS
-# ---------------------------------------------------------
+# =========================================================
 
-@app.get("/knowledge/fao-ods-test")
+@app.get(
+    "/knowledge/fao-ods-test"
+)
 def fao_ods_test():
 
     return test_fao_ods()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # TEST PARSER FAO AGRIS
-# ---------------------------------------------------------
+# =========================================================
 
-@app.get("/knowledge/fao-parser-test")
+@app.get(
+    "/knowledge/fao-parser-test"
+)
 def fao_parser_test():
 
     return test_fao_parser()
 
 
-# ---------------------------------------------------------
+# =========================================================
 # TÉLÉCHARGEMENT DATASETS FAO
-# ---------------------------------------------------------
+# =========================================================
 
-@app.get("/knowledge/fao-datasets-test")
+@app.get(
+    "/knowledge/fao-datasets-test"
+)
 def fao_datasets_test():
 
     return download_fao_datasets(
@@ -331,11 +375,13 @@ def fao_datasets_test():
     )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # TEST PARSER DES DATASETS FAO
-# ---------------------------------------------------------
+# =========================================================
 
-@app.get("/knowledge/fao-dataset-parser-test")
+@app.get(
+    "/knowledge/fao-dataset-parser-test"
+)
 def fao_dataset_parser_test():
 
     return test_fao_dataset_parser(
@@ -365,7 +411,9 @@ def root():
 # STATUT BASE DE DONNÉES
 # =========================================================
 
-@app.get("/db-status")
+@app.get(
+    "/db-status"
+)
 def db_status():
 
     if not supabase:
@@ -384,13 +432,20 @@ def db_status():
     try:
 
         response = (
+
             supabase
-            .table("users")
+
+            .table(
+                "users"
+            )
+
             .select(
                 "count",
                 count="exact"
             )
+
             .execute()
+
         )
 
 
@@ -426,7 +481,9 @@ def db_status():
 # VÉRIFICATION
 # =========================================================
 
-@app.get("/webhook")
+@app.get(
+    "/webhook"
+)
 def verify_webhook(
     request: Request
 ):
@@ -484,7 +541,9 @@ def verify_webhook(
 # RÉCEPTION DES MESSAGES WHATSAPP
 # =========================================================
 
-@app.post("/webhook")
+@app.post(
+    "/webhook"
+)
 async def receive_webhook(
     request: Request
 ):
@@ -534,10 +593,9 @@ async def receive_webhook(
                 )
 
 
-                # -------------------------------------------------
-                # Vérifier qu'un message existe
-                # et que Supabase est disponible
-                # -------------------------------------------------
+                # =================================================
+                # VÉRIFIER MESSAGE ET SUPABASE
+                # =================================================
 
                 if (
                     not messages
@@ -569,10 +627,12 @@ async def receive_webhook(
                 sender_name = (
 
                     contacts[0]
+
                     .get(
                         "profile",
                         {}
                     )
+
                     .get(
                         "name"
                     )
@@ -586,9 +646,9 @@ async def receive_webhook(
                 )
 
 
-                # -------------------------------------------------
+                # =================================================
                 # EXTRACTION DU CONTENU
-                # -------------------------------------------------
+                # =================================================
 
                 content = ""
 
@@ -596,15 +656,19 @@ async def receive_webhook(
                 if msg_type == "text":
 
                     content = (
+
                         msg
+
                         .get(
                             "text",
                             {}
                         )
+
                         .get(
                             "body",
                             ""
                         )
+
                     )
 
 
@@ -628,10 +692,12 @@ async def receive_webhook(
                         + str(
 
                             msg
+
                             .get(
                                 msg_type,
                                 {}
                             )
+
                             .get(
                                 "id",
                                 ""
@@ -642,37 +708,51 @@ async def receive_webhook(
                     )
 
 
-                # -------------------------------------------------
+                # =================================================
                 # DATE DU JOUR
-                # -------------------------------------------------
+                # =================================================
 
                 today_date = date.today()
 
+
                 today_str = (
-                    today_date.isoformat()
+
+                    today_date
+
+                    .isoformat()
+
                 )
 
 
-                # -------------------------------------------------
+                # =================================================
                 # RECHERCHE UTILISATEUR
-                # -------------------------------------------------
+                # =================================================
 
                 user_res = (
 
                     supabase
+
                     .table(
                         "users"
                     )
+
                     .select(
+
                         "id, "
                         "credits, "
                         "last_active_date, "
                         "created_at"
+
                     )
+
                     .eq(
+
                         "phone_number",
+
                         sender_phone
+
                     )
+
                     .execute()
 
                 )
@@ -685,26 +765,34 @@ async def receive_webhook(
                 if user_res.data:
 
                     user = (
+
                         user_res.data[0]
+
                     )
 
 
                     user_id = (
+
                         user["id"]
+
                     )
 
 
                     user_credits = (
+
                         user.get(
                             "credits"
                         )
+
                     )
 
 
                     last_active = (
+
                         user.get(
                             "last_active_date"
                         )
+
                     )
 
 
@@ -713,9 +801,11 @@ async def receive_webhook(
                     # ---------------------------------------------
 
                     created_at_str = (
+
                         user.get(
                             "created_at"
                         )
+
                     )
 
 
@@ -724,15 +814,18 @@ async def receive_webhook(
                         created_at_dt = (
 
                             datetime
+
                             .fromisoformat(
 
                                 created_at_str
+
                                 .replace(
                                     "Z",
                                     "+00:00"
                                 )
 
                             )
+
                             .date()
 
                         )
@@ -741,6 +834,7 @@ async def receive_webhook(
                         days_old = (
 
                             today_date
+
                             - created_at_dt
 
                         ).days
@@ -784,7 +878,9 @@ async def receive_webhook(
                     ):
 
                         user_credits = (
+
                             daily_limit
+
                         )
 
 
@@ -796,17 +892,22 @@ async def receive_webhook(
 
                     days_old = 0
 
+
                     daily_limit = (
+
                         TRIAL_DAILY_LIMIT
+
                     )
 
 
                     new_user = (
 
                         supabase
+
                         .table(
                             "users"
                         )
+
                         .insert({
 
                             "phone_number":
@@ -822,19 +923,25 @@ async def receive_webhook(
                                 today_str
 
                         })
+
                         .execute()
 
                     )
 
 
                     user_id = (
+
                         new_user
+
                         .data[0]["id"]
+
                     )
 
 
                     user_credits = (
+
                         daily_limit
+
                     )
 
 
@@ -855,8 +962,10 @@ async def receive_webhook(
 
 
                     if (
+
                         days_old
                         <= TRIAL_PERIOD_DAYS
+
                     ):
 
                         alert_msg = (
