@@ -201,3 +201,8 @@ def test_embedding():
                 str(e)
 
         }
+# =========================================================
+# COMPATIBILITÉ ANCIENNE VERSION
+# =========================================================
+
+GeminiEmbedding = GeminiEmbeddingService
