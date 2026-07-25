@@ -1,8 +1,10 @@
+```python
 from fastapi import FastAPI, Request, Response
 from supabase import create_client, Client
 from datetime import date, datetime
 import os
 import requests
+from pathlib import Path
 
 from app.ai.gemini_client import (
     test_gemini,
@@ -215,6 +217,232 @@ def send_whatsapp_message(
         )
 
         return False
+
+
+# =========================================================
+# DEBUG FICHIERS XML FAO
+# =========================================================
+
+@app.get(
+    "/knowledge/fao-xml-debug"
+)
+def fao_xml_debug():
+
+    """
+    Route temporaire de diagnostic.
+
+    Permet de vérifier les fichiers XML FAO
+    présents sur le serveur Render.
+
+    Cette route sera supprimée après le diagnostic.
+    """
+
+    datasets_path = Path(
+        "/app/knowledge/raw/fao/datasets"
+    )
+
+    print(
+        "[FAO XML DEBUG] "
+        f"Recherche dans : {datasets_path}"
+    )
+
+    # ---------------------------------------------------------
+    # VÉRIFIER SI LE DOSSIER EXISTE
+    # ---------------------------------------------------------
+
+    if not datasets_path.exists():
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                "Le dossier des datasets FAO "
+                "n'existe pas.",
+
+            "path":
+                str(
+                    datasets_path
+                )
+
+        }
+
+
+    # ---------------------------------------------------------
+    # RECHERCHER LES FICHIERS XML
+    # ---------------------------------------------------------
+
+    xml_files = sorted(
+
+        datasets_path.rglob(
+            "*.xml"
+        )
+
+    )
+
+
+    print(
+
+        "[FAO XML DEBUG] "
+
+        f"{len(xml_files)} fichier(s) XML trouvé(s)."
+
+    )
+
+
+    # ---------------------------------------------------------
+    # AUCUN FICHIER
+    # ---------------------------------------------------------
+
+    if not xml_files:
+
+        return {
+
+            "status":
+                "success",
+
+            "message":
+                "Aucun fichier XML trouvé.",
+
+            "path":
+                str(
+                    datasets_path
+                ),
+
+            "files_count":
+                0,
+
+            "files":
+                []
+
+        }
+
+
+    # ---------------------------------------------------------
+    # INFORMATIONS SUR LES FICHIERS
+    # ---------------------------------------------------------
+
+    files = []
+
+
+    for xml_file in xml_files[:20]:
+
+        try:
+
+            stat = (
+                xml_file.stat()
+            )
+
+            files.append({
+
+                "name":
+                    xml_file.name,
+
+                "path":
+                    str(
+                        xml_file
+                    ),
+
+                "size_bytes":
+                    stat.st_size
+
+            })
+
+        except Exception as e:
+
+            files.append({
+
+                "name":
+                    xml_file.name,
+
+                "path":
+                    str(
+                        xml_file
+                    ),
+
+                "error":
+                    str(
+                        e
+                    )
+
+            })
+
+
+    # ---------------------------------------------------------
+    # LIRE LE PREMIER FICHIER XML
+    # ---------------------------------------------------------
+
+    first_file = (
+        xml_files[0]
+    )
+
+    preview = ""
+
+
+    try:
+
+        with open(
+
+            first_file,
+
+            "r",
+
+            encoding="utf-8",
+
+            errors="replace"
+
+        ) as file:
+
+            preview = file.read(
+                20000
+            )
+
+
+    except Exception as e:
+
+        preview = (
+
+            "Erreur lecture fichier XML : "
+
+            + str(
+                e
+            )
+
+        )
+
+
+    # ---------------------------------------------------------
+    # RÉSULTAT
+    # ---------------------------------------------------------
+
+    return {
+
+        "status":
+            "success",
+
+        "path":
+            str(
+                datasets_path
+            ),
+
+        "files_count":
+            len(
+                xml_files
+            ),
+
+        "files":
+            files,
+
+        "first_file":
+            str(
+                first_file
+            ),
+
+        "first_file_preview":
+            preview
+
+    }
 
 
 # =========================================================
@@ -1117,3 +1345,4 @@ async def receive_webhook(
             "success"
 
     }
+```
