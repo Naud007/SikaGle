@@ -229,85 +229,71 @@ def fao_dataset_debug():
 
     from pathlib import Path
 
-    from app.knowledge_engine.parsers.fao_dataset_parser import (
-        debug_fao_dataset
-    )
-
     dataset_dir = Path(
         "/app/knowledge/raw/fao/datasets"
     )
 
-    dataset_files = sorted(
-        dataset_dir.glob(
-            "*.xml"
-        )
-    )
-
-    if not dataset_files:
-
-        return {
-            "status": "error",
-            "message": (
-                "Aucun fichier XML trouvé."
-            )
-        }
-
-    return debug_fao_dataset(
-        dataset_files[0]
-    )
-@app.get(
-    "/knowledge/fao-xml-debug"
-)
-@app.get("/knowledge/files-debug")
-def files_debug():
-
-    root_path = Path("/app")
-
-    files = []
-
-    try:
-
-        for path in root_path.rglob("*"):
-
-            if path.is_file():
-
-                files.append(str(path))
-
-                if len(files) >= 500:
-
-                    break
-
-        return {
-            "status": "success",
-            "files_count": len(files),
-            "files": files
-        }
-
-    except Exception as e:
-
-        return {
-            "status": "error",
-            "message": str(e)
-        }
-def fao_xml_debug():
-
-    """
-    Route temporaire de diagnostic.
-
-    Permet de vérifier les fichiers XML FAO
-    présents sur le serveur Render.
-
-    Cette route sera supprimée après le diagnostic.
-    """
-
-    datasets_path = Path(
-        "/app/knowledge/raw/fao/datasets"
+    print(
+        "[DEBUG] Dossier recherché :",
+        dataset_dir
     )
 
     print(
-        "[FAO XML DEBUG] "
-        f"Recherche dans : {datasets_path}"
+        "[DEBUG] Dossier existe :",
+        dataset_dir.exists()
     )
+
+    print(
+        "[DEBUG] Est un dossier :",
+        dataset_dir.is_dir()
+    )
+
+    if dataset_dir.exists():
+
+        print(
+            "[DEBUG] Contenu du dossier :"
+        )
+
+        for item in dataset_dir.iterdir():
+
+            print(
+                "[DEBUG]",
+                item
+            )
+
+    else:
+
+        print(
+            "[DEBUG] "
+            "Le dossier n'existe pas."
+        )
+
+    return {
+
+        "status":
+            "success",
+
+        "dataset_dir":
+            str(
+                dataset_dir
+            ),
+
+        "exists":
+            dataset_dir.exists(),
+
+        "is_dir":
+            dataset_dir.is_dir(),
+
+        "files":
+            [
+                str(path)
+                for path
+                in dataset_dir.glob(
+                    "*"
+                )
+            ]
+
+    }
 
     # ---------------------------------------------------------
     # VÉRIFIER SI LE DOSSIER EXISTE
