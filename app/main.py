@@ -217,7 +217,389 @@ def send_whatsapp_message(
 
         return False
 
+@app.get(
+    "/knowledge/fao-dataset-pipeline-test"
+)
+def fao_dataset_pipeline_test():
 
+    from pathlib import Path
+
+    from app.knowledge_engine.connectors.fao_ods import (
+        FAOODSDownloader
+    )
+
+    from app.knowledge_engine.parsers.fao_ods_parser import (
+        FAOODSParser
+    )
+
+    from app.knowledge_engine.connectors.fao_datasets import (
+        FAODatasetsDownloader
+    )
+
+    from app.knowledge_engine.parsers.fao_dataset_parser import (
+        FAODatasetParser
+    )
+
+    try:
+
+        # =====================================================
+        # 1. TÉLÉCHARGER LE CATALOGUE AGRIS
+        # =====================================================
+
+        print(
+            "[PIPELINE TEST] "
+            "Téléchargement catalogue AGRIS..."
+        )
+
+        ods_downloader = (
+            FAOODSDownloader()
+        )
+
+        ods_path = (
+            ods_downloader.download()
+        )
+
+        if not ods_path:
+
+            return {
+
+                "status":
+                    "error",
+
+                "step":
+                    "ods_download",
+
+                "message":
+                    "Téléchargement AGRIS impossible."
+
+            }
+
+        print(
+            "[PIPELINE TEST] "
+            "Catalogue AGRIS :",
+            ods_path
+        )
+
+
+        # =====================================================
+        # 2. PARSER LE CATALOGUE AGRIS
+        # =====================================================
+
+        print(
+            "[PIPELINE TEST] "
+            "Parsing catalogue AGRIS..."
+        )
+
+        ods_parser = (
+            FAOODSParser(
+                ods_path
+            )
+        )
+
+        datasets = (
+            ods_parser.parse()
+        )
+
+        if not datasets:
+
+            return {
+
+                "status":
+                    "error",
+
+                "step":
+                    "ods_parse",
+
+                "message":
+                    (
+                        "Aucun dataset trouvé "
+                        "dans le catalogue AGRIS."
+                    )
+
+            }
+
+        print(
+            "[PIPELINE TEST] "
+            f"{len(datasets)} dataset(s) trouvé(s)."
+        )
+
+
+        # =====================================================
+        # 3. PRENDRE LE PREMIER DATASET
+        # =====================================================
+
+        dataset = (
+            datasets[0]
+        )
+
+        dataset_url = str(
+            dataset.url
+        ).strip()
+
+        print(
+            "[PIPELINE TEST] "
+            "Dataset sélectionné :",
+            dataset_url
+        )
+
+
+        # =====================================================
+        # 4. TÉLÉCHARGER LE DATASET
+        # =====================================================
+
+        dataset_downloader = (
+            FAODatasetsDownloader()
+        )
+
+        filename = (
+            dataset_url
+            .rstrip("/")
+            .split("/")
+            [-1]
+        )
+
+        downloaded = (
+            dataset_downloader.download(
+                url=dataset_url,
+                filename=filename
+            )
+        )
+
+        if not downloaded:
+
+            return {
+
+                "status":
+                    "error",
+
+                "step":
+                    "dataset_download",
+
+                "message":
+                    "Dataset impossible à télécharger."
+
+            }
+
+
+        # =====================================================
+        # 5. LIRE LE CONTENU DU DATASET
+        # =====================================================
+
+        xml_content = None
+
+
+        # -----------------------------------------------------
+        # CAS 1 : LE DOWNLOADER RETOURNE UN DICTIONNAIRE
+        # -----------------------------------------------------
+
+        if isinstance(
+            downloaded,
+            dict
+        ):
+
+            xml_content = (
+                downloaded.get(
+                    "content"
+                )
+            )
+
+
+        # -----------------------------------------------------
+        # CAS 2 : LE DOWNLOADER RETOURNE UN FICHIER PATH
+        # -----------------------------------------------------
+
+        elif isinstance(
+            downloaded,
+            (
+                str,
+                Path
+            )
+        ):
+
+            dataset_path = Path(
+                downloaded
+            )
+
+            print(
+                "[PIPELINE TEST] "
+                "Dataset local :",
+                dataset_path
+            )
+
+            if not dataset_path.exists():
+
+                return {
+
+                    "status":
+                        "error",
+
+                    "step":
+                        "dataset_file",
+
+                    "message":
+                        (
+                            "Le fichier dataset "
+                            "n'existe pas."
+                        ),
+
+                    "path":
+                        str(
+                            dataset_path
+                        )
+
+                }
+
+            xml_content = (
+                dataset_path.read_bytes()
+            )
+
+
+        # -----------------------------------------------------
+        # CAS 3 : FORMAT INCONNU
+        # -----------------------------------------------------
+
+        else:
+
+            return {
+
+                "status":
+                    "error",
+
+                "step":
+                    "dataset_content",
+
+                "message":
+                    (
+                        "Format retourné par "
+                        "FAODatasetsDownloader "
+                        "non supporté."
+                    ),
+
+                "returned_type":
+                    type(
+                        downloaded
+                    ).__name__
+
+            }
+
+
+        # =====================================================
+        # 6. VÉRIFIER LE CONTENU XML
+        # =====================================================
+
+        if not xml_content:
+
+            return {
+
+                "status":
+                    "error",
+
+                "step":
+                    "dataset_content",
+
+                "message":
+                    (
+                        "Le dataset téléchargé "
+                        "ne contient aucun contenu XML."
+                    )
+
+            }
+
+        print(
+            "[PIPELINE TEST] "
+            f"XML chargé en mémoire : "
+            f"{len(xml_content)} octets"
+        )
+
+
+        # =====================================================
+        # 7. PARSER LE DATASET XML
+        # =====================================================
+
+        dataset_parser = (
+            FAODatasetParser()
+        )
+
+        documents = (
+            dataset_parser.parse(
+                xml_content=xml_content,
+                filename=filename,
+                source_url=dataset_url
+            )
+        )
+
+
+        # =====================================================
+        # 8. RÉSULTAT
+        # =====================================================
+
+        return {
+
+            "status":
+                "success",
+
+            "dataset_url":
+                dataset_url,
+
+            "dataset_filename":
+                filename,
+
+            "xml_size":
+                len(
+                    xml_content
+                ),
+
+            "documents_parsed":
+                len(
+                    documents
+                ),
+
+            "documents_preview":
+                [
+
+                    {
+
+                        "title":
+                            document.title,
+
+                        "url":
+                            document.url,
+
+                        "description":
+                            getattr(
+                                document,
+                                "description",
+                                None
+                            )
+
+                    }
+
+                    for document
+                    in documents[:3]
+
+                ]
+
+        }
+
+
+    except Exception as e:
+
+        print(
+            "[PIPELINE TEST] "
+            f"Erreur : {e}"
+        )
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(
+                    e
+                )
+
+        }
 @app.get(
     "/knowledge/fao-dataset-pipeline-test"
 )
