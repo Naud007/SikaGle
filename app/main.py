@@ -223,6 +223,39 @@ def send_whatsapp_message(
 # =========================================================
 
 @app.get(
+    "/knowledge/fao-dataset-debug"
+)
+def fao_dataset_debug():
+
+    from pathlib import Path
+
+    from app.knowledge_engine.parsers.fao_dataset_parser import (
+        debug_fao_dataset
+    )
+
+    dataset_dir = Path(
+        "/app/knowledge/raw/fao/datasets"
+    )
+
+    dataset_files = sorted(
+        dataset_dir.glob(
+            "*.xml"
+        )
+    )
+
+    if not dataset_files:
+
+        return {
+            "status": "error",
+            "message": (
+                "Aucun fichier XML trouvé."
+            )
+        }
+
+    return debug_fao_dataset(
+        dataset_files[0]
+    )
+@app.get(
     "/knowledge/fao-xml-debug"
 )
 @app.get("/knowledge/files-debug")
