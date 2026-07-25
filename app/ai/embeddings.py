@@ -1,134 +1,150 @@
 import os
 
 from google import genai
+from google.genai import types
 
 
-# =========================================================
-# GEMINI EMBEDDING SERVICE
-# =========================================================
+class GeminiEmbeddingService:
 
-class GeminiEmbedding:
+    def __init__(
+        self,
+        model="gemini-embedding-001",
+        output_dimensionality=1536
+    ):
 
-    def __init__(self):
-
-        self.api_key = os.getenv(
-            "GEMINI_API_KEY",
-            ""
+        api_key = os.getenv(
+            "GEMINI_API_KEY"
         )
 
-        if not self.api_key:
+        if not api_key:
 
             raise ValueError(
-                "GEMINI_API_KEY est manquante."
+                "GEMINI_API_KEY n'est pas configurée."
             )
 
         self.client = genai.Client(
-            api_key=self.api_key
+            api_key=api_key
         )
 
-        # Modèle d'embedding Gemini
-        self.model = "gemini-embedding-001"
+        self.model = model
 
-        # Dimension compatible avec pgvector
-        # et l'index IVFFlat de Supabase
-        self.dimension = 1536
+        self.output_dimensionality = (
+            output_dimensionality
+        )
 
 
     # =========================================================
-    # GÉNÉRATION EMBEDDING
+    # EMBEDDING DOCUMENT
     # =========================================================
 
-    def generate_embedding(
+    def generate_document_embedding(
         self,
         text: str
-    ) -> list[float]:
+    ):
 
-        if not text or not text.strip():
+        if (
+            not text
+            or not text.strip()
+        ):
 
             raise ValueError(
                 "Le texte à encoder est vide."
             )
 
+        result = (
+            self.client.models.embed_content(
 
-        try:
+                model=self.model,
 
-            result = (
+                contents=text,
 
-                self.client
-                .models
-                .embed_content(
+                config=(
+                    types.EmbedContentConfig(
 
-                    model=self.model,
+                        task_type=
+                            "RETRIEVAL_DOCUMENT",
 
-                    contents=text,
+                        output_dimensionality=(
+                            self.output_dimensionality
+                        )
 
-                    config={
-
-                        "output_dimensionality":
-                            self.dimension
-
-                    }
-
+                    )
                 )
 
             )
+        )
 
-
-        except Exception as e:
-
-            raise RuntimeError(
-
-                f"Erreur lors de la génération "
-                f"de l'embedding Gemini : {e}"
-
-            )
-
-
-        if not result.embeddings:
+        if (
+            not result.embeddings
+            or not result.embeddings[0].values
+        ):
 
             raise ValueError(
-
-                "Aucun embedding généré "
-                "par Gemini."
-
+                "Aucun embedding document généré."
             )
 
-
-        vector = (
-
+        return (
             result
             .embeddings[0]
             .values
-
         )
 
 
-        if not vector:
+    # =========================================================
+    # EMBEDDING REQUÊTE
+    # =========================================================
+
+    def generate_query_embedding(
+        self,
+        text: str
+    ):
+
+        if (
+            not text
+            or not text.strip()
+        ):
 
             raise ValueError(
-
-                "L'embedding généré est vide."
-
+                "La requête à encoder est vide."
             )
 
+        result = (
+            self.client.models.embed_content(
 
-        # Vérification importante :
-        # le vecteur doit correspondre
-        # à vector(1536) dans Supabase
+                model=self.model,
 
-        if len(vector) != self.dimension:
+                contents=text,
+
+                config=(
+                    types.EmbedContentConfig(
+
+                        task_type=
+                            "RETRIEVAL_QUERY",
+
+                        output_dimensionality=(
+                            self.output_dimensionality
+                        )
+
+                    )
+                )
+
+            )
+        )
+
+        if (
+            not result.embeddings
+            or not result.embeddings[0].values
+        ):
 
             raise ValueError(
-
-                f"Dimension inattendue : "
-                f"{len(vector)}. "
-                f"Dimension attendue : "
-                f"{self.dimension}."
-
+                "Aucun embedding de requête généré."
             )
 
-
-        return vector
+        return (
+            result
+            .embeddings[0]
+            .values
+        )
 
 
 # =========================================================
@@ -140,27 +156,18 @@ def test_embedding():
     try:
 
         embedding_service = (
-            GeminiEmbedding()
+            GeminiEmbeddingService()
         )
-
-
-        test_text = (
-
-            "Comment cultiver "
-            "le maïs au Bénin ?"
-
-        )
-
 
         vector = (
-
             embedding_service
-            .generate_embedding(
-                test_text
+            .generate_document_embedding(
+
+                "Comment cultiver "
+                "le maïs au Bénin ?"
+
             )
-
         )
-
 
         return {
 
@@ -174,7 +181,8 @@ def test_embedding():
                 len(vector),
 
             "expected_dimension":
-                embedding_service.dimension,
+                embedding_service
+                .output_dimensionality,
 
             "preview":
                 vector[:5]
