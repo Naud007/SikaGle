@@ -1,23 +1,16 @@
 import requests
-from pathlib import Path
-
-from app.knowledge_engine.config import config
 
 
 class FAODatasetsDownloader:
 
     def __init__(self):
 
-        self.storage_dir = (
-            config.raw_dir
-            / "fao"
-            / "datasets"
-        )
+        pass
 
-        self.storage_dir.mkdir(
-            parents=True,
-            exist_ok=True
-        )
+
+    # =========================================================
+    # TÉLÉCHARGER UN DATASET FAO EN MÉMOIRE
+    # =========================================================
 
     def download(
         self,
@@ -37,18 +30,17 @@ class FAODatasetsDownloader:
 
         response.raise_for_status()
 
-        file_path = (
-            self.storage_dir
-            / filename
-        )
-
-        file_path.write_bytes(
-            response.content
-        )
+        content = response.content
 
         print(
             f"[FAO DATASET] "
-            f"Enregistré : {file_path}"
+            f"Dataset téléchargé en mémoire : "
+            f"{filename} "
+            f"({len(content)} octets)"
         )
 
-        return file_path
+        return {
+            "filename": filename,
+            "url": url,
+            "content": content
+        }
