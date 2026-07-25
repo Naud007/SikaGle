@@ -1,6 +1,8 @@
 from pathlib import Path
 
+from app.knowledge_engine.config import config
 from app.knowledge_engine.connectors.registry import registry
+
 
 # =========================================================
 # CHARGEMENT DES CONNECTEURS
@@ -13,9 +15,10 @@ import app.knowledge_engine.connectors.fao
 # CHEMINS
 # =========================================================
 
-BASE_DIR = Path("/app/knowledge")
-
-FAO_RAW_DIR = BASE_DIR / "raw" / "fao"
+FAO_RAW_DIR = (
+    config.raw_dir
+    / "fao"
+)
 
 FAO_ODS_DIR = (
     FAO_RAW_DIR
@@ -403,13 +406,23 @@ def download_fao_datasets(
             documents[:limit]
         )
 
+        # -------------------------------------------------
+        # 4. UTILISER LE DOWNLOADER CENTRALISÉ
+        # -------------------------------------------------
+
+        from app.knowledge_engine.connectors.fao_datasets import (
+            FAODatasetsDownloader
+        )
+
+        dataset_downloader = (
+            FAODatasetsDownloader()
+        )
+
         downloaded_files = []
 
         # -------------------------------------------------
-        # 4. TÉLÉCHARGER LES DATASETS
+        # 5. TÉLÉCHARGER LES DATASETS
         # -------------------------------------------------
-
-        import requests
 
         for document in documents_to_download:
 
@@ -418,12 +431,24 @@ def download_fao_datasets(
                 # Conversion Pydantic URL -> str
                 url = str(
                     document.url
-                )
+                ).strip()
+
+                # Vérification URL
+                if not url:
+
+                    print(
+                        "⚠️ Dataset sans URL : "
+                        f"{document.title}"
+                    )
+
+                    continue
 
                 # Récupérer le nom du fichier
-                filename = url.split(
-                    "/"
-                )[-1]
+                filename = (
+                    url.rstrip("/")
+                    .split("/")
+                    [-1]
+                )
 
                 if not filename:
 
@@ -431,72 +456,27 @@ def download_fao_datasets(
                         "dataset.xml"
                     )
 
+                # -------------------------------------------------
+                # TÉLÉCHARGEMENT VIA LE DOWNLOADER
+                # -------------------------------------------------
+
                 output_path = (
-                    FAO_DATASETS_DIR
-                    / filename
-                )
-
-                print(
-                    f"[FAO DATASET] "
-                    f"Téléchargement : "
-                    f"{filename}"
-                )
-
-                print(
-                    f"[FAO DATASET] URL : "
-                    f"{url}"
-                )
-
-                # -------------------------------------------------
-                # ÉVITER LES DOUBLONS
-                # -------------------------------------------------
-
-                if output_path.exists():
-
-                    print(
-                        f"⚠️ Déjà présent : "
-                        f"{output_path}"
+                    dataset_downloader.download(
+                        url=url,
+                        filename=filename
                     )
+                )
+
+                if output_path:
 
                     downloaded_files.append(
                         output_path
                     )
 
-                    continue
-
-                # -------------------------------------------------
-                # REQUÊTE HTTP
-                # -------------------------------------------------
-
-                response = requests.get(
-                    url,
-                    timeout=120
-                )
-
-                response.raise_for_status()
-
-                # -------------------------------------------------
-                # SAUVEGARDE
-                # -------------------------------------------------
-
-                output_path.write_bytes(
-                    response.content
-                )
-
-                print(
-                    f"[FAO DATASET] "
-                    f"Enregistré : "
-                    f"{output_path}"
-                )
-
-                print(
-                    f"✅ Dataset téléchargé : "
-                    f"{output_path}"
-                )
-
-                downloaded_files.append(
-                    output_path
-                )
+                    print(
+                        f"✅ Dataset téléchargé : "
+                        f"{output_path}"
+                    )
 
             except Exception as e:
 
@@ -568,10 +548,15 @@ def test_fao_dataset_parser(
         # 1. CHERCHER LES DATASETS LOCAUX
         # -------------------------------------------------
 
-        dataset_files = list(
+        dataset_files = sorted(
             FAO_DATASETS_DIR.glob(
                 "*.xml"
             )
+        )
+
+        print(
+            f"[FAO DATASET PARSER] "
+            f"{len(dataset_files)} fichier(s) XML trouvé(s)."
         )
 
         # -------------------------------------------------
@@ -603,14 +588,31 @@ def test_fao_dataset_parser(
 
                 return result
 
-            dataset_files = list(
+            dataset_files = sorted(
                 FAO_DATASETS_DIR.glob(
                     "*.xml"
                 )
             )
 
         # -------------------------------------------------
-        # 3. IMPORT DU PARSER
+        # 3. VÉRIFIER UNE DEUXIÈME FOIS
+        # -------------------------------------------------
+
+        if not dataset_files:
+
+            return {
+
+                "status":
+                    "error",
+
+                "message":
+                    "Aucun dataset XML disponible "
+                    "après téléchargement."
+
+            }
+
+        # -------------------------------------------------
+        # 4. IMPORT DU PARSER
         # -------------------------------------------------
 
         from app.knowledge_engine.parsers.fao_dataset_parser import (
@@ -618,7 +620,7 @@ def test_fao_dataset_parser(
         )
 
         # -------------------------------------------------
-        # 4. INITIALISER LE PARSER
+        # 5. INITIALISER LE PARSER
         # -------------------------------------------------
 
         parser = FAODatasetParser()
@@ -628,7 +630,7 @@ def test_fao_dataset_parser(
         all_documents = []
 
         # -------------------------------------------------
-        # 5. PARSER LES DATASETS
+        # 6. PARSER LES DATASETS
         # -------------------------------------------------
 
         for dataset_file in dataset_files[:limit]:
@@ -697,7 +699,7 @@ def test_fao_dataset_parser(
                 )
 
         # =================================================
-        # 6. SAUVEGARDE DANS DOCUMENT STORE
+        # 7. SAUVEGARDE DANS DOCUMENT STORE
         # =================================================
 
         print("=" * 50)
@@ -738,7 +740,7 @@ def test_fao_dataset_parser(
         )
 
         # =================================================
-        # 7. RÉSULTAT FINAL
+        # 8. RÉSULTAT FINAL
         # =================================================
 
         print("=" * 50)
@@ -765,20 +767,33 @@ def test_fao_dataset_parser(
         print("=" * 50)
 
         return {
-            "status": "success",
-            "datasets": len(
-                dataset_files[:limit]
-            ),
-            "documents_parsed": parsed_count,
-            "documents_added": (
-                store_result["added"]
-            ),
-            "documents_total": (
-                store_result["total"]
-            ),
-            "storage_file": (
-                store_result["file"]
-            )
+
+            "status":
+                "success",
+
+            "datasets":
+                len(
+                    dataset_files[:limit]
+                ),
+
+            "documents_parsed":
+                parsed_count,
+
+            "documents_added":
+                store_result[
+                    "added"
+                ],
+
+            "documents_total":
+                store_result[
+                    "total"
+                ],
+
+            "storage_file":
+                store_result[
+                    "file"
+                ]
+
         }
 
     except Exception as e:
@@ -789,8 +804,13 @@ def test_fao_dataset_parser(
         )
 
         return {
-            "status": "error",
-            "message": str(e)
+
+            "status":
+                "error",
+
+            "message":
+                str(e)
+
         }
 
 
