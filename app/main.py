@@ -647,11 +647,68 @@ def fao_parser_test():
 )
 def fao_datasets_test():
 
-    return test_fao_dataset_parser(
-        limit=10
+    from pathlib import Path
+    import os
+
+    dataset_dir = Path(
+        "/app/knowledge/raw/fao/datasets"
     )
 
+    xml_files = []
 
+    for root in [
+        Path("/app"),
+        Path("/tmp"),
+    ]:
+
+        if not root.exists():
+            continue
+
+        try:
+
+            for path in root.rglob(
+                "*.xml"
+            ):
+
+                xml_files.append(
+                    str(path)
+                )
+
+        except Exception as e:
+
+            print(
+                "[DEBUG] Erreur recherche XML :",
+                e
+            )
+
+    return {
+
+        "status":
+            "debug",
+
+        "cwd":
+            os.getcwd(),
+
+        "dataset_dir":
+            str(
+                dataset_dir
+            ),
+
+        "dataset_dir_exists":
+            dataset_dir.exists(),
+
+        "dataset_dir_is_dir":
+            dataset_dir.is_dir(),
+
+        "xml_files":
+            xml_files[:100],
+
+        "xml_count":
+            len(
+                xml_files
+            )
+
+    }
 # =========================================================
 # TEST PARSER DES DATASETS FAO
 # =========================================================
