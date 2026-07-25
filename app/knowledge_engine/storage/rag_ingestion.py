@@ -7,7 +7,7 @@ from app.knowledge_engine.storage.document_store import (
     DocumentStore
 )
 
-from app.ai.embedding_service import (
+from app.ai.embeddings import (
     GeminiEmbeddingService
 )
 
