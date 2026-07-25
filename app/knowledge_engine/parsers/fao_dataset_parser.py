@@ -1,4 +1,3 @@
-```python
 import re
 import xml.etree.ElementTree as ET
 
@@ -1936,4 +1935,3 @@ class FAODatasetParser:
 
 
         return unique_documents
-```
