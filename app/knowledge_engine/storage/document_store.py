@@ -161,15 +161,34 @@ class DocumentStore:
             )
         }
 
-    def get_all(self):
+   def get_all(self):
 
-        return self._load()
-
-    def count(self):
-
-        return len(
-            self._load()
+        print(
+            f"[DOCUMENT STORE] "
+            f"Recherche du fichier : {self.storage_path}"
         )
+
+        print(
+            f"[DOCUMENT STORE] "
+            f"Fichier existe : {self.storage_path.exists()}"
+        )
+
+        if self.storage_path.exists():
+
+            print(
+                f"[DOCUMENT STORE] "
+                f"Taille du fichier : "
+                f"{self.storage_path.stat().st_size} octets"
+            )
+
+        documents = self._load()
+
+        print(
+            f"[DOCUMENT STORE] "
+            f"Documents chargés : {len(documents)}"
+        )
+
+        return documents
 
     def clear(self):
 
