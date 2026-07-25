@@ -628,7 +628,7 @@ def fao_parser_test():
 )
 def fao_datasets_test():
 
-    return download_fao_datasets(
+    return test_fao_dataset_parser(
         limit=10
     )
 
