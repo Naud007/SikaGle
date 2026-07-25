@@ -10,9 +10,15 @@ class FAODatasetParser:
         """
         Parser des datasets XML AGRIS de la FAO.
 
-        Le parser fonctionne directement avec le contenu XML
-        en mémoire. Aucun fichier local n'est nécessaire.
+        Les datasets AGRIS contiennent des notices
+        de type dctypes:BibliographicResource.
+
+        Le parser accepte :
+        - bytes
+        - str XML
+        - flux fichier avec .read()
         """
+
         pass
 
 
@@ -37,9 +43,9 @@ class FAODatasetParser:
 
         try:
 
-            # -------------------------------------------------
+            # =================================================
             # 1. CHARGER LE XML
-            # -------------------------------------------------
+            # =================================================
 
             if isinstance(
                 xml_content,
@@ -59,7 +65,6 @@ class FAODatasetParser:
                 str
             ):
 
-                # Le contenu est un XML texte
                 root = ET.fromstring(
                     xml_content
                 )
@@ -88,20 +93,20 @@ class FAODatasetParser:
             root = tree.getroot()
 
 
-            # -------------------------------------------------
-            # 2. NAMESPACES
-            # -------------------------------------------------
+            # =================================================
+            # 2. NAMESPACES AGRIS
+            # =================================================
 
             namespaces = {
-
-                "rdf":
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
 
                 "dc":
                     "http://purl.org/dc/elements/1.1/",
 
                 "dct":
                     "http://purl.org/dc/terms/",
+
+                "dctypes":
+                    "http://purl.org/dc/dcmitype/",
 
                 "dcat":
                     "http://www.w3.org/ns/dcat#",
@@ -112,34 +117,66 @@ class FAODatasetParser:
             }
 
 
-            # -------------------------------------------------
-            # 3. RECHERCHE DES NOTICES
-            # -------------------------------------------------
+            # =================================================
+            # 3. RECHERCHER LES NOTICES AGRIS
+            # =================================================
 
-            records = []
-
-
-            # RDF Description
-            records.extend(
-                root.findall(
-                    ".//rdf:Description",
-                    namespaces
-                )
+            records = root.findall(
+                ".//dctypes:BibliographicResource",
+                namespaces
             )
 
 
-            # DCAT Dataset
-            records.extend(
-                root.findall(
-                    ".//dcat:Dataset",
-                    namespaces
-                )
+            print(
+                "[FAO DATASET PARSER] "
+                f"{len(records)} notice(s) "
+                "BibliographicResource trouvée(s)."
             )
 
 
-            # -------------------------------------------------
-            # ÉVITER LES DOUBLONS
-            # -------------------------------------------------
+            # =================================================
+            # 4. FALLBACK GÉNÉRIQUE
+            # =================================================
+
+            if not records:
+
+                print(
+                    "[FAO DATASET PARSER] "
+                    "Aucune notice BibliographicResource. "
+                    "Recherche générique..."
+                )
+
+                for element in root.iter():
+
+                    if not isinstance(
+                        element.tag,
+                        str
+                    ):
+
+                        continue
+
+
+                    local_name = (
+                        element.tag
+                        .split("}")[-1]
+                        .lower()
+                    )
+
+
+                    if local_name in (
+                        "bibliographicresource",
+                        "description",
+                        "record"
+                    ):
+
+                        records.append(
+                            element
+                        )
+
+
+            # =================================================
+            # 5. ÉVITER LES DOUBLONS
+            # =================================================
 
             unique_records = []
 
@@ -166,48 +203,27 @@ class FAODatasetParser:
             records = unique_records
 
 
-            # -------------------------------------------------
-            # FALLBACK
-            # -------------------------------------------------
-
-            if not records:
-
-                for element in root.iter():
-
-                    title = self._get_text(
-                        element,
-                        [
-                            "dc:title",
-                            "dct:title",
-                            "title",
-                        ],
-                        namespaces
-                    )
-
-                    if title:
-
-                        records.append(
-                            element
-                        )
-
-
             print(
                 "[FAO DATASET PARSER] "
-                f"{len(records)} notice(s) trouvée(s)."
+                f"{len(records)} notice(s) "
+                "à analyser."
             )
 
 
-            # -------------------------------------------------
-            # 4. PARCOURIR LES NOTICES
-            # -------------------------------------------------
+            # =================================================
+            # 6. PARCOURIR LES NOTICES
+            # =================================================
 
-            for record in records:
+            for index, record in enumerate(
+                records,
+                start=1
+            ):
 
                 try:
 
-                    # -----------------------------------------
+                    # =========================================
                     # TITRE
-                    # -----------------------------------------
+                    # =========================================
 
                     title = self._get_text(
                         record,
@@ -227,9 +243,9 @@ class FAODatasetParser:
                         )
 
 
-                    # -----------------------------------------
+                    # =========================================
                     # DESCRIPTION
-                    # -----------------------------------------
+                    # =========================================
 
                     description = self._get_text(
                         record,
@@ -238,33 +254,16 @@ class FAODatasetParser:
                             "dct:description",
                             "description",
                             "abstract",
-                            "agr:abstract",
                         ],
                         namespaces
                     )
 
 
-                    # -----------------------------------------
-                    # RÉSUMÉ / ABSTRACT
-                    # -----------------------------------------
-
-                    abstract = self._get_text(
-                        record,
-                        [
-                            "agr:abstract",
-                            "dc:abstract",
-                            "dct:abstract",
-                            "abstract",
-                        ],
-                        namespaces
-                    )
-
-
-                    # -----------------------------------------
+                    # =========================================
                     # AUTEUR
-                    # -----------------------------------------
+                    # =========================================
 
-                    author = self._get_text(
+                    authors = self._get_all_text(
                         record,
                         [
                             "dc:creator",
@@ -276,9 +275,18 @@ class FAODatasetParser:
                     )
 
 
-                    # -----------------------------------------
+                    author = None
+
+                    if authors:
+
+                        author = ", ".join(
+                            authors
+                        )
+
+
+                    # =========================================
                     # ÉDITEUR
-                    # -----------------------------------------
+                    # =========================================
 
                     publisher = self._get_text(
                         record,
@@ -291,9 +299,9 @@ class FAODatasetParser:
                     )
 
 
-                    # -----------------------------------------
+                    # =========================================
                     # LANGUE
-                    # -----------------------------------------
+                    # =========================================
 
                     language = self._get_text(
                         record,
@@ -306,9 +314,9 @@ class FAODatasetParser:
                     )
 
 
-                    # -----------------------------------------
+                    # =========================================
                     # DATE / ANNÉE
-                    # -----------------------------------------
+                    # =========================================
 
                     year = self._get_text(
                         record,
@@ -322,9 +330,9 @@ class FAODatasetParser:
                     )
 
 
-                    # -----------------------------------------
+                    # =========================================
                     # MOTS-CLÉS
-                    # -----------------------------------------
+                    # =========================================
 
                     keywords = self._get_all_text(
                         record,
@@ -339,9 +347,9 @@ class FAODatasetParser:
                     )
 
 
-                    # -----------------------------------------
+                    # =========================================
                     # SOURCE
-                    # -----------------------------------------
+                    # =========================================
 
                     source = self._get_text(
                         record,
@@ -361,71 +369,86 @@ class FAODatasetParser:
                         )
 
 
-                    # -----------------------------------------
-                    # IDENTIFIANT
-                    # -----------------------------------------
+                    # =========================================
+                    # IDENTIFIANT AGRIS
+                    # =========================================
 
-                    identifier = self._get_text(
-                        record,
-                        [
-                            "dc:identifier",
-                            "dct:identifier",
-                            "identifier",
-                        ],
-                        namespaces
+                    agris_identifier = (
+                        self._get_identifier_by_type(
+                            record,
+                            "AGRIS",
+                            namespaces
+                        )
                     )
 
 
-                    # -----------------------------------------
+                    # =========================================
+                    # IDENTIFIANT URL
+                    # =========================================
+
+                    url_identifier = (
+                        self._get_identifier_by_type(
+                            record,
+                            "url",
+                            namespaces
+                        )
+                    )
+
+
+                    # =========================================
                     # URL
-                    # -----------------------------------------
+                    # =========================================
 
-                    url = self._get_url(
-                        record,
-                        namespaces
+                    url = (
+                        url_identifier
                     )
 
 
-                    # -----------------------------------------
-                    # URL DE SECOURS
-                    # -----------------------------------------
+                    # =========================================
+                    # FALLBACK URL AVEC IDENTIFIANT AGRIS
+                    # =========================================
 
                     if not url:
 
-                        if identifier:
-
-                            if identifier.startswith(
-                                (
-                                    "http://",
-                                    "https://"
-                                )
-                            ):
-
-                                url = identifier
-
-                            else:
-
-                                url = (
-                                    "https://agris.fao.org/"
-                                    "search/en/providers/"
-                                    "122436/records/"
-                                    f"{identifier}"
-                                )
-
-                        elif source_url:
-
-                            url = source_url
-
-                        else:
+                        if agris_identifier:
 
                             url = (
                                 "https://agris.fao.org/"
+                                "search/en/providers/"
+                                "122436/records/"
+                                f"{agris_identifier}"
                             )
 
 
-                    # -----------------------------------------
+                    # =========================================
+                    # FALLBACK URL SOURCE DATASET
+                    # =========================================
+
+                    if not url:
+
+                        if source_url:
+
+                            url = (
+                                str(
+                                    source_url
+                                ).strip()
+                            )
+
+
+                    # =========================================
+                    # DERNIER FALLBACK
+                    # =========================================
+
+                    if not url:
+
+                        url = (
+                            "https://agris.fao.org/"
+                        )
+
+
+                    # =========================================
                     # CONSTRUIRE LE CONTENU RAG
-                    # -----------------------------------------
+                    # =========================================
 
                     content_parts = []
 
@@ -438,23 +461,15 @@ class FAODatasetParser:
                     if description:
 
                         content_parts.append(
-                            f"Description : "
+                            "Description : "
                             f"{description}"
-                        )
-
-
-                    if abstract:
-
-                        content_parts.append(
-                            f"Résumé : "
-                            f"{abstract}"
                         )
 
 
                     if author:
 
                         content_parts.append(
-                            f"Auteur : "
+                            "Auteur : "
                             f"{author}"
                         )
 
@@ -462,7 +477,7 @@ class FAODatasetParser:
                     if publisher:
 
                         content_parts.append(
-                            f"Éditeur : "
+                            "Éditeur : "
                             f"{publisher}"
                         )
 
@@ -470,7 +485,7 @@ class FAODatasetParser:
                     if language:
 
                         content_parts.append(
-                            f"Langue : "
+                            "Langue : "
                             f"{language}"
                         )
 
@@ -478,7 +493,7 @@ class FAODatasetParser:
                     if year:
 
                         content_parts.append(
-                            f"Année : "
+                            "Année : "
                             f"{year}"
                         )
 
@@ -496,15 +511,23 @@ class FAODatasetParser:
                     if source:
 
                         content_parts.append(
-                            f"Source : "
+                            "Source : "
                             f"{source}"
+                        )
+
+
+                    if agris_identifier:
+
+                        content_parts.append(
+                            "Identifiant AGRIS : "
+                            f"{agris_identifier}"
                         )
 
 
                     if url:
 
                         content_parts.append(
-                            f"URL : "
+                            "URL : "
                             f"{url}"
                         )
 
@@ -512,19 +535,21 @@ class FAODatasetParser:
                     if filename:
 
                         content_parts.append(
-                            f"Dataset FAO : "
+                            "Dataset FAO : "
                             f"{filename}"
                         )
 
 
-                    content = "\n\n".join(
-                        content_parts
+                    content = (
+                        "\n\n".join(
+                            content_parts
+                        )
                     )
 
 
-                    # -----------------------------------------
-                    # DOCUMENT
-                    # -----------------------------------------
+                    # =========================================
+                    # DONNÉES DU DOCUMENT
+                    # =========================================
 
                     document_data = {
 
@@ -564,8 +589,10 @@ class FAODatasetParser:
                     }
 
 
-                    # Ajouter uniquement les champs
-                    # acceptés par DocumentMetadata
+                    # =========================================
+                    # FILTRER LES CHAMPS ACCEPTÉS
+                    # PAR DocumentMetadata
+                    # =========================================
 
                     document_fields = (
                         DocumentMetadata
@@ -586,6 +613,10 @@ class FAODatasetParser:
                     }
 
 
+                    # =========================================
+                    # CRÉER LE DOCUMENT
+                    # =========================================
+
                     document = (
                         DocumentMetadata(
                             **filtered_data
@@ -598,23 +629,45 @@ class FAODatasetParser:
                     )
 
 
+                    # =========================================
+                    # LOG
+                    # =========================================
+
+                    if index <= 3:
+
+                        print(
+                            f"[FAO DATASET PARSER] "
+                            f"Document {index} : "
+                            f"{title[:100]}"
+                        )
+
+
                 except Exception as e:
 
                     print(
                         "[FAO DATASET PARSER] "
-                        f"Notice ignorée : {e}"
+                        f"Notice {index} ignorée : "
+                        f"{e}"
                     )
 
+
+            # =================================================
+            # 7. RÉSULTAT
+            # =================================================
 
             print(
                 "[FAO DATASET PARSER] "
                 f"{len(documents)} document(s) "
-                "analysé(s)."
+                "analysé(s) avec succès."
             )
 
 
             return documents
 
+
+        # =====================================================
+        # ERREUR XML
+        # =====================================================
 
         except ET.ParseError as e:
 
@@ -625,6 +678,10 @@ class FAODatasetParser:
 
             return []
 
+
+        # =====================================================
+        # ERREUR GÉNÉRALE
+        # =====================================================
 
         except Exception as e:
 
@@ -681,6 +738,13 @@ class FAODatasetParser:
             # RECHERCHE GÉNÉRIQUE
             # -------------------------------------------------
 
+            expected_name = (
+                path
+                .split(":")[-1]
+                .lower()
+            )
+
+
             for child in element.iter():
 
                 if not isinstance(
@@ -694,13 +758,6 @@ class FAODatasetParser:
                 local_name = (
                     child.tag
                     .split("}")[-1]
-                    .lower()
-                )
-
-
-                expected_name = (
-                    path
-                    .split(":")[-1]
                     .lower()
                 )
 
@@ -791,6 +848,73 @@ class FAODatasetParser:
 
 
     # =========================================================
+    # EXTRAIRE UN IDENTIFIANT PAR TYPE
+    # =========================================================
+
+    def _get_identifier_by_type(
+        self,
+        element,
+        identifier_type,
+        namespaces
+    ):
+
+        for child in element.iter():
+
+            if not isinstance(
+                child.tag,
+                str
+            ):
+
+                continue
+
+
+            local_name = (
+                child.tag
+                .split("}")[-1]
+                .lower()
+            )
+
+
+            if local_name != "identifier":
+
+                continue
+
+
+            child_type = (
+                child.attrib
+                .get(
+                    "type"
+                )
+            )
+
+
+            if not child_type:
+
+                continue
+
+
+            if (
+                child_type.lower()
+                != identifier_type.lower()
+            ):
+
+                continue
+
+
+            if (
+                child.text
+                and child.text.strip()
+            ):
+
+                return (
+                    child.text.strip()
+                )
+
+
+        return None
+
+
+    # =========================================================
     # EXTRAIRE URL
     # =========================================================
 
@@ -801,30 +925,28 @@ class FAODatasetParser:
     ):
 
         # -----------------------------------------------------
-        # 1. IDENTIFIER
+        # 1. IDENTIFIER TYPE URL
         # -----------------------------------------------------
 
-        identifier = self._get_text(
-            element,
-            [
-                "dc:identifier",
-                "dct:identifier",
-                "identifier",
-            ],
-            namespaces
+        url = (
+            self._get_identifier_by_type(
+                element,
+                "url",
+                namespaces
+            )
         )
 
 
-        if identifier:
+        if url:
 
-            if identifier.startswith(
+            if url.startswith(
                 (
                     "http://",
                     "https://"
                 )
             ):
 
-                return identifier
+                return url
 
 
         # -----------------------------------------------------
@@ -844,19 +966,19 @@ class FAODatasetParser:
             and landing_page.text
         ):
 
-            url = (
+            value = (
                 landing_page.text.strip()
             )
 
 
-            if url.startswith(
+            if value.startswith(
                 (
                     "http://",
                     "https://"
                 )
             ):
 
-                return url
+                return value
 
 
         # -----------------------------------------------------
@@ -876,19 +998,19 @@ class FAODatasetParser:
             and access_url.text
         ):
 
-            url = (
+            value = (
                 access_url.text.strip()
             )
 
 
-            if url.startswith(
+            if value.startswith(
                 (
                     "http://",
                     "https://"
                 )
             ):
 
-                return url
+                return value
 
 
         # -----------------------------------------------------
