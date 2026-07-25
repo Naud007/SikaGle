@@ -1,4 +1,3 @@
-```python
 from fastapi import FastAPI, Request, Response
 from supabase import create_client, Client
 from datetime import date, datetime
@@ -1345,4 +1344,3 @@ async def receive_webhook(
             "success"
 
     }
-```
