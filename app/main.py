@@ -19,7 +19,16 @@ from app.knowledge_engine.manager import (
     test_fao_dataset_parser,
 )
 
+from app.knowledge_engine.storage.rag_ingestion import (
+    test_rag_ingestion
+)
 
+
+@app.get("/knowledge/rag-ingestion-test")
+def rag_ingestion_test():
+
+    return test_rag_ingestion()
+    
 app = FastAPI(
     title="SikaGlé API",
     version="1.0.0"
