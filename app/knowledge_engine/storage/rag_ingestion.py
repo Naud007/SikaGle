@@ -16,6 +16,10 @@ class RAGIngestion:
 
     def __init__(self):
 
+        # =====================================================
+        # CONFIGURATION SUPABASE
+        # =====================================================
+
         supabase_url = os.getenv(
             "SUPABASE_URL"
         )
@@ -25,23 +29,35 @@ class RAGIngestion:
         )
 
         if not supabase_url:
+
             raise ValueError(
                 "SUPABASE_URL manquante."
             )
 
         if not supabase_key:
+
             raise ValueError(
                 "SUPABASE_KEY manquante."
             )
 
-        self.supabase: Client = create_client(
-            supabase_url,
-            supabase_key
+        self.supabase: Client = (
+            create_client(
+                supabase_url,
+                supabase_key
+            )
         )
+
+        # =====================================================
+        # DOCUMENT STORE
+        # =====================================================
 
         self.document_store = (
             DocumentStore()
         )
+
+        # =====================================================
+        # SERVICE EMBEDDING
+        # =====================================================
 
         self.embedding_service = (
             GeminiEmbeddingService(
@@ -52,92 +68,274 @@ class RAGIngestion:
 
 
     # =========================================================
-    # INGESTION
+    # RÉCUPÉRER LES URL DÉJÀ INGÉRÉES
+    # =========================================================
+
+    def get_existing_sources(self):
+
+        try:
+
+            response = (
+
+                self.supabase
+
+                .table(
+                    "documents_rag"
+                )
+
+                .select(
+                    "source_path"
+                )
+
+                .execute()
+
+            )
+
+            existing_sources = {
+
+                row.get(
+                    "source_path"
+                )
+
+                for row in (
+                    response.data
+                    or []
+                )
+
+                if row.get(
+                    "source_path"
+                )
+
+            }
+
+            print(
+
+                f"[RAG INGESTION] "
+
+                f"{len(existing_sources)} "
+                f"document(s) déjà présents "
+                f"dans documents_rag."
+
+            )
+
+            return existing_sources
+
+        except Exception as e:
+
+            print(
+
+                "[RAG INGESTION] "
+                "Erreur récupération documents existants :",
+
+                e
+
+            )
+
+            return set()
+
+
+    # =========================================================
+    # INGESTION PAR LOT
     # =========================================================
 
     def ingest(
         self,
-        limit=100
+        limit=100,
+        offset=0
     ):
 
-        documents = (
+        # =====================================================
+        # CHARGER DOCUMENTS
+        # =====================================================
+
+        all_documents = (
             self.document_store
             .get_all()
         )
 
-        print(
-            f"[RAG INGESTION] "
-            f"{len(documents)} documents trouvés."
+        total_documents = (
+            len(
+                all_documents
+            )
         )
 
-        documents = documents[:limit]
+        print(
+
+            f"[RAG INGESTION] "
+
+            f"{total_documents} "
+            f"documents disponibles."
+
+        )
+
+        # =====================================================
+        # RÉCUPÉRER LES DOCUMENTS DÉJÀ INGÉRÉS
+        # =====================================================
+
+        existing_sources = (
+            self.get_existing_sources()
+        )
+
+        # =====================================================
+        # SÉLECTION DU BATCH
+        # =====================================================
+
+        batch = (
+
+            all_documents[
+                offset:
+                offset + limit
+            ]
+
+        )
+
+        print(
+
+            f"[RAG INGESTION] "
+
+            f"Batch : "
+            f"{offset} → "
+            f"{offset + len(batch)}"
+
+        )
 
         inserted = 0
+
         skipped = 0
+
         errors = 0
 
+        # =====================================================
+        # TRAITEMENT
+        # =====================================================
+
         for index, document in enumerate(
-            documents,
-            start=1
+
+            batch,
+
+            start=offset + 1
+
         ):
 
             try:
 
+                # -------------------------------------------------
+                # MÉTADONNÉES
+                # -------------------------------------------------
+
                 title = (
+
                     document.get(
                         "title"
                     )
-                    or "Document sans titre"
+
+                    or
+
+                    "Document sans titre"
+
                 )
 
                 description = (
+
                     document.get(
                         "description"
                     )
-                    or ""
+
+                    or
+
+                    ""
+
                 )
 
                 url = (
+
                     document.get(
                         "url"
                     )
+
                 )
 
                 source = (
+
                     document.get(
                         "source"
                     )
-                    or "FAO AGRIS"
+
+                    or
+
+                    "FAO AGRIS"
+
                 )
 
                 # -------------------------------------------------
-                # TEXTE POUR EMBEDDING
+                # VÉRIFICATION DOUBLON
+                # -------------------------------------------------
+
+                if (
+
+                    url
+
+                    and
+
+                    str(url)
+                    in existing_sources
+
+                ):
+
+                    print(
+
+                        f"⏭️ [{index}] "
+                        f"Déjà présent : "
+                        f"{title[:80]}"
+
+                    )
+
+                    skipped += 1
+
+                    continue
+
+                # -------------------------------------------------
+                # TEXTE RAG
                 # -------------------------------------------------
 
                 text = (
+
                     f"Titre : {title}\n\n"
-                    f"Description : {description}\n\n"
-                    f"Source : {source}"
+
+                    f"Description : "
+                    f"{description}\n\n"
+
+                    f"Source : "
+                    f"{source}"
+
                 )
 
                 print(
-                    f"[{index}/{len(documents)}] "
-                    f"Embedding : {title[:80]}"
+
+                    f"🤖 [{index}] "
+                    f"Embedding : "
+                    f"{title[:80]}"
+
                 )
 
                 # -------------------------------------------------
-                # EMBEDDING
+                # GÉNÉRATION EMBEDDING
                 # -------------------------------------------------
 
                 embedding = (
+
                     self.embedding_service
+
                     .generate_document_embedding(
+
                         text
+
                     )
+
                 )
 
                 # -------------------------------------------------
-                # DONNÉES SUPABASE
+                # CONSTRUCTION LIGNE SUPABASE
                 # -------------------------------------------------
 
                 row = {
@@ -172,8 +370,11 @@ class RAGIngestion:
                         ),
 
                     "source_path":
+
                         str(url)
+
                         if url
+
                         else None,
 
                     "content":
@@ -185,22 +386,38 @@ class RAGIngestion:
                 }
 
                 # -------------------------------------------------
-                # INSERTION
+                # INSERTION SUPABASE
                 # -------------------------------------------------
 
-                self.supabase \
+                (
+
+                    self.supabase
+
                     .table(
                         "documents_rag"
-                    ) \
+                    )
+
                     .insert(
                         row
-                    ) \
+                    )
+
                     .execute()
+
+                )
 
                 inserted += 1
 
+                if url:
+
+                    existing_sources.add(
+                        str(url)
+                    )
+
                 print(
-                    "✅ Document inséré."
+
+                    f"✅ [{index}] "
+                    f"Document inséré."
+
                 )
 
                 # -------------------------------------------------
@@ -216,17 +433,33 @@ class RAGIngestion:
                 errors += 1
 
                 print(
-                    f"❌ Erreur document "
-                    f"{index} : {e}"
+
+                    f"❌ [{index}] "
+                    f"Erreur : "
+                    f"{e}"
+
                 )
+
+        # =====================================================
+        # RÉSULTAT
+        # =====================================================
 
         return {
 
             "status":
                 "success",
 
-            "documents_source":
-                len(documents),
+            "total_documents":
+                total_documents,
+
+            "batch_offset":
+                offset,
+
+            "batch_limit":
+                limit,
+
+            "batch_processed":
+                len(batch),
 
             "inserted":
                 inserted,
@@ -235,14 +468,17 @@ class RAGIngestion:
                 skipped,
 
             "errors":
-                errors
+                errors,
+
+            "next_offset":
+                offset + len(batch)
 
         }
 
 
-# =========================================================
-# TEST
-# =========================================================
+# =============================================================
+# TEST RAG INGESTION
+# =============================================================
 
 def test_rag_ingestion():
 
@@ -252,8 +488,16 @@ def test_rag_ingestion():
             RAGIngestion()
         )
 
-        return ingestion.ingest(
-            limit=10
+        return (
+
+            ingestion.ingest(
+
+                limit=10,
+
+                offset=0
+
+            )
+
         )
 
     except Exception as e:
