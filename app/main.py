@@ -225,6 +225,37 @@ def send_whatsapp_message(
 @app.get(
     "/knowledge/fao-xml-debug"
 )
+@app.get("/knowledge/files-debug")
+def files_debug():
+
+    root_path = Path("/app")
+
+    files = []
+
+    try:
+
+        for path in root_path.rglob("*"):
+
+            if path.is_file():
+
+                files.append(str(path))
+
+                if len(files) >= 500:
+
+                    break
+
+        return {
+            "status": "success",
+            "files_count": len(files),
+            "files": files
+        }
+
+    except Exception as e:
+
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 def fao_xml_debug():
 
     """
