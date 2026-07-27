@@ -31,6 +31,9 @@ from app.knowledge_engine.storage.rag_ingestion import (
     RAGIngestion,
     test_rag_ingestion,
 )
+from app.knowledge_engine.ingestion.fao_ingestion_worker import (
+    FAOIngestionWorker,
+)
 
 
 # =========================================================
