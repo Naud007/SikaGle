@@ -6,9 +6,13 @@ from app.ai.embeddings import (
     GeminiEmbeddingService
 )
 
+from app.ai.gemini_client import (
+    GeminiClient
+)
+
 
 # =========================================================
-# SERVICE RAG
+# SERVICE RAG SIKAGLÉ
 # =========================================================
 
 class RAGService:
@@ -65,6 +69,14 @@ class RAGService:
             )
         )
 
+        # =====================================================
+        # CLIENT GEMINI
+        # =====================================================
+
+        self.gemini = (
+            GeminiClient()
+        )
+
 
     # =========================================================
     # RECHERCHE VECTORIELLE
@@ -78,7 +90,7 @@ class RAGService:
     ):
 
         # =====================================================
-        # 1. VALIDATION
+        # VALIDATION
         # =====================================================
 
         if not query or not query.strip():
@@ -98,9 +110,8 @@ class RAGService:
 
         print("=" * 60)
 
-
         # =====================================================
-        # 2. EMBEDDING DE LA QUESTION
+        # 1. EMBEDDING DE LA QUESTION
         # =====================================================
 
         print(
@@ -115,7 +126,6 @@ class RAGService:
             )
         )
 
-
         if not query_embedding:
 
             raise RuntimeError(
@@ -123,23 +133,20 @@ class RAGService:
                 "l'embedding de la question."
             )
 
-
         print(
             "[RAG] Embedding généré :",
             len(query_embedding),
             "dimensions"
         )
 
-
         # =====================================================
-        # 3. RECHERCHE VECTORIELLE SUPABASE
+        # 2. RECHERCHE VECTORIELLE SUPABASE
         # =====================================================
 
         print(
             "[RAG] Recherche vectorielle "
             "dans Supabase..."
         )
-
 
         response = (
 
@@ -168,22 +175,15 @@ class RAGService:
 
         )
 
-
-        # =====================================================
-        # 4. RÉSULTATS
-        # =====================================================
-
         documents = (
             response.data
             or []
         )
 
-
         print(
             "[RAG] Documents trouvés :",
             len(documents)
         )
-
 
         for index, document in enumerate(
             documents,
@@ -204,68 +204,48 @@ class RAGService:
                 )
             )
 
-
         return documents
 
 
-# =========================================================
-# TEST RAG
-# =========================================================
+    # =========================================================
+    # CONSTRUIRE LE CONTEXTE POUR GEMINI
+    # =========================================================
 
-def test_rag():
+    def build_context(
+        self,
+        documents
+    ):
 
-    try:
+        context_parts = []
 
-        # =====================================================
-        # 1. INITIALISER LE SERVICE
-        # =====================================================
+        for index, document in enumerate(
+            documents,
+            start=1
+        ):
 
-        rag = (
-            RAGService()
-        )
-
-
-        # =====================================================
-        # 2. QUESTION DE TEST
-        #
-        # Cette question correspond volontairement
-        # aux documents FAO que nous venons d'ingérer.
-        # =====================================================
-
-        question = (
-            "Quel est l'effet de la matière organique "
-            "et de la fertilisation sur la fertilité "
-            "des sols ?"
-        )
-
-
-        # =====================================================
-        # 3. RECHERCHE
-        # =====================================================
-
-        documents = (
-            rag.search_documents(
-
-                query=question,
-
-                # Seuil volontairement assez bas
-                # pour notre premier test.
-                match_threshold=0.20,
-
-                match_count=5
-
+            title = (
+                document.get(
+                    "titre"
+                )
+                or
+                "Document sans titre"
             )
-        )
 
+            source = (
+                document.get(
+                    "organisme"
+                )
+                or
+                "Source inconnue"
+            )
 
-        # =====================================================
-        # 4. FORMATER LES RÉSULTATS
-        # =====================================================
-
-        results = []
-
-
-        for document in documents:
+            source_path = (
+                document.get(
+                    "source_path"
+                )
+                or
+                ""
+            )
 
             content = (
                 document.get(
@@ -275,52 +255,224 @@ def test_rag():
                 ""
             )
 
+            # Limiter la taille d'un document
+            # envoyé à Gemini
+            content = content[:6000]
 
-            results.append({
+            part = (
+                f"DOCUMENT {index}\n"
+                f"Titre : {title}\n"
+                f"Source : {source}\n"
+                f"URL : {source_path}\n\n"
+                f"{content}"
+            )
 
-                "id":
-                    document.get(
-                        "id"
-                    ),
+            context_parts.append(
+                part
+            )
 
-                "titre":
-                    document.get(
-                        "titre"
-                    ),
+        return (
+            "\n\n"
+            "========================================\n\n"
+            .join(
+                context_parts
+            )
+        )
 
-                "organisme":
-                    document.get(
-                        "organisme"
-                    ),
 
-                "culture":
-                    document.get(
-                        "culture"
-                    ),
+    # =========================================================
+    # GÉNÉRER UNE RÉPONSE À PARTIR DES SOURCES
+    # =========================================================
 
-                "zone_geographique":
-                    document.get(
-                        "zone_geographique"
-                    ),
+    def generate_answer(
+        self,
+        query: str,
+        documents
+    ):
 
-                "similarity":
-                    document.get(
-                        "similarity"
-                    ),
+        if not documents:
 
-                "source_path":
-                    document.get(
-                        "source_path"
-                    ),
+            return (
+                "Je n'ai pas trouvé suffisamment "
+                "d'informations fiables dans ma base "
+                "documentaire pour répondre précisément "
+                "à cette question."
+            )
 
-                "content_preview":
-                    content[:1000]
+        context = (
+            self.build_context(
+                documents
+            )
+        )
 
-            })
+        prompt = f"""
+Tu es SikaGlé, un assistant agricole intelligent.
 
+Ta mission est d'aider les agriculteurs, producteurs,
+éleveurs et acteurs du monde rural avec des réponses
+simples, pratiques, compréhensibles et fiables.
+
+QUESTION DE L'UTILISATEUR :
+
+{query}
+
+
+INFORMATIONS DOCUMENTAIRES DISPONIBLES :
+
+{context}
+
+
+INSTRUCTIONS IMPORTANTES :
+
+1. Réponds principalement à partir des informations
+   présentes dans les documents fournis.
+
+2. Ne prétends jamais qu'une information provient
+   des documents si elle n'y apparaît pas.
+
+3. Si les documents ne permettent pas de répondre
+   complètement, dis-le clairement.
+
+4. Ne transforme pas automatiquement une étude réalisée
+   dans un autre pays en recommandation spécifique
+   pour le Bénin.
+
+5. Si une étude concerne une région ou un pays précis,
+   indique-le lorsque cette précision est importante.
+
+6. Utilise un français simple et naturel.
+
+7. Évite le jargon scientifique inutile.
+   Si un terme technique est nécessaire, explique-le.
+
+8. Donne d'abord une réponse directement utile,
+   puis les explications importantes.
+
+9. N'invente jamais de dosage d'engrais,
+   de pesticide, de médicament vétérinaire
+   ou de produit phytosanitaire.
+
+10. Si une recommandation dépend du type de sol,
+    de la culture, de la région ou d'autres informations
+    manquantes, précise-le.
+
+11. La réponse doit rester suffisamment courte
+    pour être facilement lue sur WhatsApp.
+
+12. Ne recopie pas les documents mot pour mot.
+    Synthétise leur contenu.
+
+13. Ne mets pas une longue bibliographie dans
+    le corps de la réponse.
+
+Réponds maintenant à la question.
+"""
+
+        print(
+            "[RAG] Génération de la réponse "
+            "avec Gemini..."
+        )
+
+        answer = (
+            self.gemini.generate_text(
+                prompt
+            )
+        )
+
+        return answer
+
+
+    # =========================================================
+    # QUESTION COMPLÈTE :
+    # RECHERCHE + GÉNÉRATION
+    # =========================================================
+
+    def answer(
+        self,
+        query: str,
+        match_threshold: float = 0.20,
+        match_count: int = 5
+    ):
 
         # =====================================================
-        # 5. RÉSULTAT FINAL
+        # 1. RECHERCHE DOCUMENTAIRE
+        # =====================================================
+
+        documents = (
+            self.search_documents(
+
+                query=query,
+
+                match_threshold=
+                    match_threshold,
+
+                match_count=
+                    match_count
+
+            )
+        )
+
+        # =====================================================
+        # 2. GÉNÉRATION DE LA RÉPONSE
+        # =====================================================
+
+        answer = (
+            self.generate_answer(
+                query=query,
+                documents=documents
+            )
+        )
+
+        # =====================================================
+        # 3. SOURCES UTILISÉES
+        # =====================================================
+
+        sources = []
+
+        seen_sources = set()
+
+        for document in documents:
+
+            source_path = (
+                document.get(
+                    "source_path"
+                )
+            )
+
+            if (
+                source_path
+                and
+                source_path not in seen_sources
+            ):
+
+                seen_sources.add(
+                    source_path
+                )
+
+                sources.append({
+
+                    "title":
+                        document.get(
+                            "titre"
+                        ),
+
+                    "organization":
+                        document.get(
+                            "organisme"
+                        ),
+
+                    "url":
+                        source_path,
+
+                    "similarity":
+                        document.get(
+                            "similarity"
+                        )
+
+                })
+
+        # =====================================================
+        # 4. RÉSULTAT
         # =====================================================
 
         return {
@@ -329,18 +481,61 @@ def test_rag():
                 "success",
 
             "query":
-                question,
+                query,
 
-            "results_count":
+            "answer":
+                answer,
+
+            "documents_found":
                 len(
-                    results
+                    documents
                 ),
 
-            "results":
-                results
+            "sources":
+                sources
 
         }
 
+
+# =========================================================
+# TEST RAG COMPLET
+# =========================================================
+
+def test_rag():
+
+    try:
+
+        rag = (
+            RAGService()
+        )
+
+        # =====================================================
+        # QUESTION DE TEST
+        # =====================================================
+
+        question = (
+            "Quel est l'effet de la matière organique "
+            "et de la fertilisation sur la fertilité "
+            "des sols ?"
+        )
+
+        # =====================================================
+        # RAG COMPLET
+        # =====================================================
+
+        result = (
+            rag.answer(
+
+                query=question,
+
+                match_threshold=0.20,
+
+                match_count=5
+
+            )
+        )
+
+        return result
 
     except Exception as e:
 
@@ -348,7 +543,6 @@ def test_rag():
             "[RAG] Erreur :",
             e
         )
-
 
         return {
 
