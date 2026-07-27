@@ -8,22 +8,12 @@ class FAODatasetParser:
 
     def __init__(self):
         """
-        Parser des datasets XML AGRIS de la FAO.
+        Parser des datasets XML AGRIS.
 
-        Le parser accepte :
-        - bytes
-        - str contenant du XML
-        - flux fichier
-        - fichier local Path / str
-
-        Le XML AGRIS réel utilise notamment :
-        <dctypes:Dataset>
-            <dctypes:BibliographicResource>
-                <dc:title>...</dc:title>
-                <dc:description>...</dc:description>
-                ...
-            </dctypes:BibliographicResource>
-        </dctypes:Dataset>
+        Architecture actuelle :
+        - le dataset est téléchargé en mémoire ;
+        - le parser reçoit directement les bytes XML ;
+        - aucun stockage local n'est nécessaire.
         """
 
         pass
@@ -40,42 +30,100 @@ class FAODatasetParser:
         source_url=None
     ):
 
+        print("=" * 60)
+
         print(
             "[FAO DATASET PARSER] "
-            f"Analyse du dataset : "
-            f"{filename or 'dataset XML'}"
+            f"Analyse : {filename or 'dataset XML'}"
         )
+
+        print("=" * 60)
 
         documents = []
 
         try:
 
-            # -------------------------------------------------
-            # 1. CHARGER LE XML
-            # -------------------------------------------------
+            # =================================================
+            # 1. VÉRIFIER LE CONTENU
+            # =================================================
 
-            root = self._load_xml(
-                xml_content
-            )
-
-            if root is None:
+            if not xml_content:
 
                 print(
                     "[FAO DATASET PARSER] "
-                    "Impossible de charger le XML."
+                    "Contenu XML vide."
                 )
 
                 return []
 
 
-            # -------------------------------------------------
-            # 2. NAMESPACES
-            # -------------------------------------------------
+            # =================================================
+            # 2. CHARGER LE XML
+            # =================================================
+
+            if isinstance(
+                xml_content,
+                bytes
+            ):
+
+                print(
+                    "[FAO DATASET PARSER] "
+                    f"XML bytes : "
+                    f"{len(xml_content)} octets"
+                )
+
+                root = ET.fromstring(
+                    xml_content
+                )
+
+
+            elif isinstance(
+                xml_content,
+                str
+            ):
+
+                print(
+                    "[FAO DATASET PARSER] "
+                    f"XML texte : "
+                    f"{len(xml_content)} caractères"
+                )
+
+                root = ET.fromstring(
+                    xml_content
+                )
+
+
+            elif hasattr(
+                xml_content,
+                "read"
+            ):
+
+                tree = ET.parse(
+                    xml_content
+                )
+
+                root = tree.getroot()
+
+
+            else:
+
+                raise ValueError(
+                    "Format XML non supporté : "
+                    f"{type(xml_content).__name__}"
+                )
+
+
+            print(
+                "[FAO DATASET PARSER] "
+                f"Root : {root.tag}"
+            )
+
+
+            # =================================================
+            # 3. NAMESPACES AGRIS
+            # =================================================
 
             namespaces = {
-
-                "rdf":
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
 
                 "dc":
                     "http://purl.org/dc/elements/1.1/",
@@ -89,130 +137,61 @@ class FAODatasetParser:
                 "dcat":
                     "http://www.w3.org/ns/dcat#",
 
-                "agr":
-                    "http://purl.org/agris/",
+                "xsi":
+                    "http://www.w3.org/2001/XMLSchema-instance",
+
             }
 
 
-            # -------------------------------------------------
-            # 3. RECHERCHE DES VRAIES NOTICES AGRIS
-            # -------------------------------------------------
+            # =================================================
+            # 4. RECHERCHER LES BIBLIOGRAPHICRESOURCE
+            # =================================================
 
-            records = []
-
-
-            # -------------------------------------------------
-            # CAS PRINCIPAL AGRIS :
-            #
-            # <dctypes:BibliographicResource>
-            # -------------------------------------------------
-
-            records.extend(
-
-                root.findall(
-
-                    ".//dctypes:BibliographicResource",
-
-                    namespaces
-
-                )
-
+            records = root.findall(
+                ".//dctypes:BibliographicResource",
+                namespaces
             )
 
 
-            # -------------------------------------------------
-            # CAS RDF
-            # -------------------------------------------------
+            # Le root peut lui-même être une notice.
+            if (
+                self._local_name(
+                    root.tag
+                )
+                == "BibliographicResource"
+            ):
 
-            records.extend(
-
-                root.findall(
-
-                    ".//rdf:Description",
-
-                    namespaces
-
+                records.insert(
+                    0,
+                    root
                 )
 
+
+            print(
+                "[FAO DATASET PARSER] "
+                f"{len(records)} "
+                "BibliographicResource trouvé(s)."
             )
 
 
-            # -------------------------------------------------
-            # CAS DCAT DATASET
-            # -------------------------------------------------
-
-            records.extend(
-
-                root.findall(
-
-                    ".//dcat:Dataset",
-
-                    namespaces
-
-                )
-
-            )
-
-
-            # -------------------------------------------------
-            # ÉVITER LES DOUBLONS
-            # -------------------------------------------------
-
-            unique_records = []
-
-            seen_ids = set()
-
-
-            for record in records:
-
-                record_id = id(
-                    record
-                )
-
-                if record_id not in seen_ids:
-
-                    seen_ids.add(
-                        record_id
-                    )
-
-                    unique_records.append(
-                        record
-                    )
-
-
-            records = unique_records
-
-
-            # -------------------------------------------------
-            # FALLBACK :
-            # RECHERCHER LES ÉLÉMENTS
-            # BibliographicResource PAR NOM LOCAL
-            # -------------------------------------------------
+            # =================================================
+            # 5. FALLBACK GÉNÉRIQUE
+            # =================================================
 
             if not records:
 
+                print(
+                    "[FAO DATASET PARSER] "
+                    "Recherche générique..."
+                )
+
                 for element in root.iter():
 
-                    if not isinstance(
-                        element.tag,
-                        str
-                    ):
-
-                        continue
-
-
-                    local_name = (
-
-                        element.tag
-                        .split("}")[-1]
-                        .lower()
-
-                    )
-
-
                     if (
-                        local_name
-                        == "bibliographicresource"
+                        self._local_name(
+                            element.tag
+                        )
+                        == "BibliographicResource"
                     ):
 
                         records.append(
@@ -220,596 +199,77 @@ class FAODatasetParser:
                         )
 
 
-            # -------------------------------------------------
-            # FALLBACK FINAL :
-            # SI LE DOCUMENT XML EST LUI-MÊME UNE NOTICE
-            # -------------------------------------------------
+                print(
+                    "[FAO DATASET PARSER] "
+                    f"{len(records)} notice(s) "
+                    "trouvée(s) avec fallback."
+                )
+
+
+            # =================================================
+            # 6. SI TOUJOURS AUCUNE NOTICE
+            # =================================================
 
             if not records:
 
-                title = self._get_text(
-
-                    root,
-
-                    [
-                        "dc:title",
-                        "dct:title",
-                        "title",
-                    ],
-
-                    namespaces
-
+                print(
+                    "[FAO DATASET PARSER] "
+                    "Aucune notice bibliographique trouvée."
                 )
 
-                if title:
-
-                    records.append(
-                        root
-                    )
+                return []
 
 
-            print(
-
-                "[FAO DATASET PARSER] "
-
-                f"{len(records)} "
-                "notice(s) trouvée(s)."
-
-            )
-
-
-            # -------------------------------------------------
-            # 4. PARCOURIR LES NOTICES
-            # -------------------------------------------------
+            # =================================================
+            # 7. PARCOURIR LES NOTICES
+            # =================================================
 
             for index, record in enumerate(
-
                 records,
-
                 start=1
-
             ):
 
                 try:
 
-                    # -----------------------------------------
-                    # TITRE
-                    # -----------------------------------------
-
-                    title = self._get_text(
-
-                        record,
-
-                        [
-                            "dc:title",
-                            "dct:title",
-                            "title",
-                        ],
-
-                        namespaces
-
-                    )
-
-
-                    if not title:
-
-                        title = (
-                            "Document AGRIS"
-                        )
-
-
-                    # -----------------------------------------
-                    # DESCRIPTION
-                    # -----------------------------------------
-
-                    description = self._get_text(
-
-                        record,
-
-                        [
-                            "dc:description",
-                            "dct:description",
-                            "description",
-                            "abstract",
-                            "agr:abstract",
-                        ],
-
-                        namespaces
-
-                    )
-
-
-                    # -----------------------------------------
-                    # ABSTRACT
-                    # -----------------------------------------
-
-                    abstract = self._get_text(
-
-                        record,
-
-                        [
-                            "agr:abstract",
-                            "dc:abstract",
-                            "dct:abstract",
-                            "abstract",
-                        ],
-
-                        namespaces
-
-                    )
-
-
-                    # -----------------------------------------
-                    # AUTEUR
-                    # -----------------------------------------
-
-                    authors = self._get_all_text(
-
-                        record,
-
-                        [
-                            "dc:creator",
-                            "dct:creator",
-                            "creator",
-                            "author",
-                        ],
-
-                        namespaces
-
-                    )
-
-
-                    author = None
-
-                    if authors:
-
-                        author = ", ".join(
-                            authors
-                        )
-
-
-                    # -----------------------------------------
-                    # ÉDITEUR
-                    # -----------------------------------------
-
-                    publisher = self._get_text(
-
-                        record,
-
-                        [
-                            "dc:publisher",
-                            "dct:publisher",
-                            "publisher",
-                        ],
-
-                        namespaces
-
-                    )
-
-
-                    # -----------------------------------------
-                    # LANGUE
-                    # -----------------------------------------
-
-                    language = self._get_text(
-
-                        record,
-
-                        [
-                            "dc:language",
-                            "dct:language",
-                            "language",
-                        ],
-
-                        namespaces
-
-                    )
-
-
-                    # -----------------------------------------
-                    # DATE / ANNÉE
-                    # -----------------------------------------
-
-                    year = self._get_text(
-
-                        record,
-
-                        [
-                            "dc:date",
-                            "dct:date",
-                            "date",
-                            "year",
-                        ],
-
-                        namespaces
-
-                    )
-
-
-                    # -----------------------------------------
-                    # MOTS-CLÉS
-                    # -----------------------------------------
-
-                    keywords = self._get_all_text(
-
-                        record,
-
-                        [
-                            "dc:subject",
-                            "dct:subject",
-                            "subject",
-                            "keyword",
-                            "keywords",
-                        ],
-
-                        namespaces
-
-                    )
-
-
-                    # -----------------------------------------
-                    # SOURCE
-                    # -----------------------------------------
-
-                    source = self._get_text(
-
-                        record,
-
-                        [
-                            "dc:source",
-                            "dct:source",
-                            "source",
-                        ],
-
-                        namespaces
-
-                    )
-
-
-                    if not source:
-
-                        source = (
-                            "FAO AGRIS"
-                        )
-
-
-                    # -----------------------------------------
-                    # IDENTIFIANT AGRIS
-                    # -----------------------------------------
-
-                    identifier = (
-
-                        self._get_identifier(
-
-                            record,
-
-                            namespaces
-
-                        )
-
-                    )
-
-
-                    # -----------------------------------------
-                    # URL
-                    # -----------------------------------------
-
-                    url = self._get_url(
-
-                        record,
-
-                        namespaces
-
-                    )
-
-
-                    # -----------------------------------------
-                    # URL DE SECOURS
-                    # -----------------------------------------
-
-                    if not url:
-
-                        if identifier:
-
-                            if identifier.startswith(
-
-                                (
-                                    "http://",
-                                    "https://"
-                                )
-
-                            ):
-
-                                url = identifier
-
-                            else:
-
-                                url = (
-
-                                    "https://agris.fao.org/"
-                                    "search/en/providers/"
-                                    "122436/records/"
-                                    f"{identifier}"
-
-                                )
-
-                        elif source_url:
-
-                            url = source_url
-
-                        else:
-
-                            url = (
-
-                                "https://agris.fao.org/"
-
-                            )
-
-
-                    # -----------------------------------------
-                    # CONSTRUIRE LE CONTENU RAG
-                    # -----------------------------------------
-
-                    content_parts = []
-
-
-                    content_parts.append(
-
-                        f"Titre : {title}"
-
-                    )
-
-
-                    if description:
-
-                        content_parts.append(
-
-                            "Description : "
-                            f"{description}"
-
-                        )
-
-
-                    if abstract:
-
-                        content_parts.append(
-
-                            "Résumé : "
-                            f"{abstract}"
-
-                        )
-
-
-                    if author:
-
-                        content_parts.append(
-
-                            "Auteur : "
-                            f"{author}"
-
-                        )
-
-
-                    if publisher:
-
-                        content_parts.append(
-
-                            "Éditeur : "
-                            f"{publisher}"
-
-                        )
-
-
-                    if language:
-
-                        content_parts.append(
-
-                            "Langue : "
-                            f"{language}"
-
-                        )
-
-
-                    if year:
-
-                        content_parts.append(
-
-                            "Année : "
-                            f"{year}"
-
-                        )
-
-
-                    if keywords:
-
-                        content_parts.append(
-
-                            "Mots-clés : "
-                            + ", ".join(
-                                keywords
-                            )
-
-                        )
-
-
-                    if source:
-
-                        content_parts.append(
-
-                            "Source : "
-                            f"{source}"
-
-                        )
-
-
-                    if identifier:
-
-                        content_parts.append(
-
-                            "Identifiant AGRIS : "
-                            f"{identifier}"
-
-                        )
-
-
-                    if url:
-
-                        content_parts.append(
-
-                            "URL : "
-                            f"{url}"
-
-                        )
-
-
-                    if filename:
-
-                        content_parts.append(
-
-                            "Dataset FAO : "
-                            f"{filename}"
-
-                        )
-
-
-                    content = "\n\n".join(
-
-                        content_parts
-
-                    )
-
-
-                    # -----------------------------------------
-                    # DONNÉES DOCUMENT
-                    # -----------------------------------------
-
-                    document_data = {
-
-                        "title":
-                            title,
-
-                        "url":
-                            url,
-
-                        "description":
-                            description,
-
-                        "source":
-                            source,
-
-                        "content":
-                            content,
-
-                        "language":
-                            language,
-
-                        "year":
-                            year,
-
-                        "keywords":
-                            keywords,
-
-                        "author":
-                            author,
-
-                        "publisher":
-                            publisher,
-
-                        "dataset_filename":
-                            filename,
-
-                    }
-
-
-                    # -----------------------------------------
-                    # FILTRER LES CHAMPS PYDANTIC
-                    # -----------------------------------------
-
-                    document_fields = (
-
-                        DocumentMetadata
-                        .model_fields
-
-                    )
-
-
-                    filtered_data = {
-
-                        key: value
-
-                        for key, value
-                        in document_data.items()
-
-                        if key
-                        in document_fields
-
-                    }
-
-
-                    # -----------------------------------------
-                    # CRÉER DOCUMENT
-                    # -----------------------------------------
-
                     document = (
-
-                        DocumentMetadata(
-
-                            **filtered_data
-
+                        self._parse_record(
+                            record=record,
+                            namespaces=namespaces,
+                            filename=filename,
+                            source_url=source_url,
+                            index=index
                         )
-
                     )
 
 
-                    documents.append(
+                    if document:
 
-                        document
-
-                    )
-
-
-                    # -----------------------------------------
-                    # LOG
-                    # -----------------------------------------
-
-                    if index <= 3:
-
-                        print(
-
-                            "[FAO DATASET PARSER] "
-
-                            f"Document {index} : "
-
-                            f"{title[:100]}"
-
+                        documents.append(
+                            document
                         )
 
 
                 except Exception as e:
 
                     print(
-
                         "[FAO DATASET PARSER] "
-
                         f"Notice {index} ignorée : "
-
                         f"{e}"
-
                     )
 
 
-            # -------------------------------------------------
-            # RÉSULTAT
-            # -------------------------------------------------
+            # =================================================
+            # 8. RÉSULTAT
+            # =================================================
+
+            print("=" * 60)
 
             print(
-
                 "[FAO DATASET PARSER] "
-
-                f"{len(documents)} document(s) "
-                "analysé(s)."
-
+                f"{len(documents)} document(s) analysé(s)."
             )
+
+            print("=" * 60)
 
 
             return documents
@@ -818,11 +278,8 @@ class FAODatasetParser:
         except ET.ParseError as e:
 
             print(
-
                 "[FAO DATASET PARSER] "
-
                 f"Erreur XML : {e}"
-
             )
 
             return []
@@ -831,168 +288,414 @@ class FAODatasetParser:
         except Exception as e:
 
             print(
-
                 "[FAO DATASET PARSER] "
-
                 f"Erreur parsing : {e}"
-
             )
 
             return []
 
 
     # =========================================================
-    # CHARGER LE XML
+    # PARSER UNE NOTICE AGRIS
     # =========================================================
 
-    def _load_xml(
+    def _parse_record(
         self,
-        xml_content
+        record,
+        namespaces,
+        filename,
+        source_url,
+        index
     ):
 
-        # -----------------------------------------------------
-        # BYTES
-        # -----------------------------------------------------
-
-        if isinstance(
-
-            xml_content,
-
-            bytes
-
-        ):
-
-            return ET.fromstring(
-
-                xml_content
-
-            )
-
-
-        # -----------------------------------------------------
-        # STRING
-        # -----------------------------------------------------
-
-        if isinstance(
-
-            xml_content,
-
-            str
-
-        ):
-
-            stripped = (
-
-                xml_content.strip()
-
-            )
-
-
-            # XML directement
-            if stripped.startswith(
-
-                "<"
-
-            ):
-
-                return ET.fromstring(
-
-                    xml_content
-
-                )
-
-
-            # Sinon considérer comme chemin fichier
-            return ET.parse(
-
-                xml_content
-
-            ).getroot()
-
-
-        # -----------------------------------------------------
-        # PATHLIB
-        # -----------------------------------------------------
-
-        if hasattr(
-
-            xml_content,
-
-            "__fspath__"
-
-        ):
-
-            return ET.parse(
-
-                xml_content
-
-            ).getroot()
-
-
-        # -----------------------------------------------------
-        # FLUX
-        # -----------------------------------------------------
-
-        if hasattr(
-
-            xml_content,
-
-            "read"
-
-        ):
-
-            return ET.parse(
-
-                xml_content
-
-            ).getroot()
-
-
-        # -----------------------------------------------------
-        # OBJET RESPONSE / DICT
-        # -----------------------------------------------------
-
-        if isinstance(
-
-            xml_content,
-
-            dict
-
-        ):
-
-            content = (
-
-                xml_content.get(
-
-                    "content"
-
-                )
-
-            )
-
-
-            if content:
-
-                return self._load_xml(
-
-                    content
-
-                )
-
-
-        # -----------------------------------------------------
-        # FORMAT INCONNU
-        # -----------------------------------------------------
-
-        raise ValueError(
-
-            "Format XML non supporté. "
-
-            "Utilisez bytes, str, Path, "
-            "flux ou dictionnaire contenant "
-            "la clé 'content'."
-
+        # =====================================================
+        # TITRE
+        # =====================================================
+
+        title = self._get_text(
+            record,
+            [
+                "dc:title",
+                "dct:title",
+            ],
+            namespaces
         )
+
+
+        if not title:
+
+            title = (
+                f"Document AGRIS {index}"
+            )
+
+
+        # =====================================================
+        # DESCRIPTION
+        # =====================================================
+
+        description = self._get_text(
+            record,
+            [
+                "dc:description",
+                "dct:description",
+            ],
+            namespaces
+        )
+
+
+        # =====================================================
+        # AUTEURS
+        # =====================================================
+
+        authors = self._get_all_text(
+            record,
+            [
+                "dc:creator",
+                "dct:creator",
+            ],
+            namespaces
+        )
+
+
+        # =====================================================
+        # DATE
+        # =====================================================
+
+        year = self._get_text(
+            record,
+            [
+                "dc:date",
+                "dct:date",
+                "dct:issued",
+            ],
+            namespaces
+        )
+
+
+        # =====================================================
+        # TYPE
+        # =====================================================
+
+        publication_type = self._get_text(
+            record,
+            [
+                "dc:type",
+                "dct:type",
+            ],
+            namespaces
+        )
+
+
+        # =====================================================
+        # SUJETS / MOTS-CLÉS
+        # =====================================================
+
+        keywords = self._get_all_text(
+            record,
+            [
+                "dc:subject",
+                "dct:subject",
+            ],
+            namespaces
+        )
+
+
+        # =====================================================
+        # SOURCE
+        # =====================================================
+
+        publication_source = self._get_text(
+            record,
+            [
+                "dc:source",
+                "dct:source",
+            ],
+            namespaces
+        )
+
+
+        # =====================================================
+        # ÉDITEUR
+        # =====================================================
+
+        publisher = self._get_text(
+            record,
+            [
+                "dc:publisher",
+                "dct:publisher",
+            ],
+            namespaces
+        )
+
+
+        # =====================================================
+        # LANGUE
+        # =====================================================
+
+        language = self._get_text(
+            record,
+            [
+                "dc:language",
+                "dct:language",
+            ],
+            namespaces
+        )
+
+
+        # =====================================================
+        # IDENTIFIANTS
+        # =====================================================
+
+        identifiers = self._get_all_text(
+            record,
+            [
+                "dc:identifier",
+                "dct:identifier",
+            ],
+            namespaces
+        )
+
+
+        # =====================================================
+        # AGRIS ID
+        # =====================================================
+
+        agris_id = self._get_agris_id(
+            record,
+            namespaces
+        )
+
+
+        # =====================================================
+        # URL DU DOCUMENT
+        # =====================================================
+
+        url = self._get_document_url(
+            record,
+            namespaces
+        )
+
+
+        # =====================================================
+        # FALLBACK URL AGRIS
+        # =====================================================
+
+        if not url:
+
+            if agris_id:
+
+                url = (
+                    "https://agris.fao.org/"
+                    "search/en/providers/"
+                    "122436/records/"
+                    f"{agris_id}"
+                )
+
+            elif source_url:
+
+                url = source_url
+
+            else:
+
+                url = (
+                    "https://agris.fao.org/"
+                )
+
+
+        # =====================================================
+        # CONSTRUIRE LE CONTENU RAG
+        # =====================================================
+
+        content_parts = []
+
+
+        content_parts.append(
+            f"Titre : {title}"
+        )
+
+
+        if description:
+
+            content_parts.append(
+                "Description : "
+                f"{description}"
+            )
+
+
+        if authors:
+
+            content_parts.append(
+                "Auteur(s) : "
+                + ", ".join(
+                    authors
+                )
+            )
+
+
+        if year:
+
+            content_parts.append(
+                f"Date : {year}"
+            )
+
+
+        if publication_type:
+
+            content_parts.append(
+                "Type : "
+                f"{publication_type}"
+            )
+
+
+        if keywords:
+
+            content_parts.append(
+                "Mots-clés : "
+                + ", ".join(
+                    keywords
+                )
+            )
+
+
+        if publication_source:
+
+            content_parts.append(
+                "Publication : "
+                f"{publication_source}"
+            )
+
+
+        if publisher:
+
+            content_parts.append(
+                "Éditeur : "
+                f"{publisher}"
+            )
+
+
+        if language:
+
+            content_parts.append(
+                "Langue : "
+                f"{language}"
+            )
+
+
+        if agris_id:
+
+            content_parts.append(
+                "Identifiant AGRIS : "
+                f"{agris_id}"
+            )
+
+
+        if url:
+
+            content_parts.append(
+                f"URL : {url}"
+            )
+
+
+        if filename:
+
+            content_parts.append(
+                "Dataset AGRIS : "
+                f"{filename}"
+            )
+
+
+        content = "\n\n".join(
+            content_parts
+        )
+
+
+        # =====================================================
+        # DONNÉES DOCUMENT
+        # =====================================================
+
+        document_data = {
+
+            "title":
+                title,
+
+            "url":
+                url,
+
+            "description":
+                description,
+
+            "source":
+                "FAO AGRIS",
+
+            "content":
+                content,
+
+            "language":
+                language or "en",
+
+            "document_type":
+                publication_type
+                or "agricultural_publication",
+
+            "year":
+                year,
+
+            "keywords":
+                keywords,
+
+            "author":
+                (
+                    ", ".join(authors)
+                    if authors
+                    else None
+                ),
+
+            "publisher":
+                publisher,
+
+            "identifier":
+                agris_id,
+
+            "dataset_filename":
+                filename,
+
+        }
+
+
+        # =====================================================
+        # NE GARDER QUE LES CHAMPS ACCEPTÉS
+        # =====================================================
+
+        document_fields = (
+            DocumentMetadata.model_fields
+        )
+
+
+        filtered_data = {
+
+            key: value
+
+            for key, value
+            in document_data.items()
+
+            if (
+                key in document_fields
+                and value is not None
+            )
+
+        }
+
+
+        # =====================================================
+        # CRÉER DOCUMENT
+        # =====================================================
+
+        document = DocumentMetadata(
+            **filtered_data
+        )
+
+
+        return document
 
 
     # =========================================================
@@ -1000,48 +703,30 @@ class FAODatasetParser:
     # =========================================================
 
     def _get_text(
-
         self,
-
         element,
-
         paths,
-
         namespaces
-
     ):
 
         for path in paths:
 
-            # -------------------------------------------------
-            # RECHERCHE AVEC NAMESPACE
-            # -------------------------------------------------
-
             try:
 
                 child = element.find(
-
                     path,
-
                     namespaces
-
                 )
 
 
                 if (
-
                     child is not None
-
                     and child.text
-
                     and child.text.strip()
-
                 ):
 
                     return (
-
                         child.text.strip()
-
                     )
 
 
@@ -1050,96 +735,14 @@ class FAODatasetParser:
                 pass
 
 
-            # -------------------------------------------------
-            # RECHERCHE GÉNÉRIQUE
-            # -------------------------------------------------
-
-            expected_name = (
-
-                path
-
-                .split(":")[-1]
-
-                .lower()
-
-            )
-
-
-            for child in element.iter():
-
-                if not isinstance(
-
-                    child.tag,
-
-                    str
-
-                ):
-
-                    continue
-
-
-                local_name = (
-
-                    child.tag
-
-                    .split("}")[-1]
-
-                    .lower()
-
-                )
-
-
-                if (
-
-                    local_name
-
-                    == expected_name
-
-                ):
-
-                    if (
-
-                        child.text
-
-                        and child.text.strip()
-
-                    ):
-
-                        return (
-
-                            child.text.strip()
-
-                        )
-
-
-        return None
-
-
-    # =========================================================
-    # EXTRAIRE PLUSIEURS TEXTES
-    # =========================================================
-
-    def _get_all_text(
-
-        self,
-
-        element,
-
-        paths,
-
-        namespaces
-
-    ):
-
-        values = []
-
+        # =====================================================
+        # FALLBACK PAR NOM LOCAL
+        # =====================================================
 
         expected_names = {
 
             path
-
             .split(":")[-1]
-
             .lower()
 
             for path in paths
@@ -1149,451 +752,382 @@ class FAODatasetParser:
 
         for child in element.iter():
 
-            if not isinstance(
+            local_name = (
+                self._local_name(
+                    child.tag
+                )
+                .lower()
+            )
 
-                child.tag,
 
-                str
+            if (
+                local_name
+                in expected_names
+            ):
 
+                if (
+                    child.text
+                    and child.text.strip()
+                ):
+
+                    return (
+                        child.text.strip()
+                    )
+
+
+        return None
+
+
+    # =========================================================
+    # EXTRAIRE PLUSIEURS VALEURS
+    # =========================================================
+
+    def _get_all_text(
+        self,
+        element,
+        paths,
+        namespaces
+    ):
+
+        values = []
+
+
+        expected_names = {
+
+            path
+            .split(":")[-1]
+            .lower()
+
+            for path in paths
+
+        }
+
+
+        for child in element.iter():
+
+            local_name = (
+                self._local_name(
+                    child.tag
+                )
+                .lower()
+            )
+
+
+            if (
+                local_name
+                not in expected_names
             ):
 
                 continue
 
 
-            local_name = (
-
-                child.tag
-
-                .split("}")[-1]
-
-                .lower()
-
-            )
-
-
             if (
-
-                local_name
-
-                in expected_names
-
+                child.text
+                and child.text.strip()
             ):
 
-                if (
+                value = (
+                    child.text.strip()
+                )
 
-                    child.text
 
-                    and child.text.strip()
+                if value not in values:
 
-                ):
-
-                    value = (
-
-                        child.text.strip()
-
+                    values.append(
+                        value
                     )
-
-
-                    if value not in values:
-
-                        values.append(
-
-                            value
-
-                        )
 
 
         return values
 
 
     # =========================================================
-    # EXTRAIRE IDENTIFIANT
+    # EXTRAIRE L'IDENTIFIANT AGRIS
     # =========================================================
 
-    def _get_identifier(
-
+    def _get_agris_id(
         self,
-
         element,
-
         namespaces
-
     ):
 
-        # -----------------------------------------------------
-        # RECHERCHE DE TOUS LES IDENTIFIANTS
-        # -----------------------------------------------------
+        # =====================================================
+        # 1. xml:id SUR BibliographicResource
+        # =====================================================
 
-        for child in element.iter():
-
-            if not isinstance(
-
-                child.tag,
-
-                str
-
-            ):
-
-                continue
+        xml_id = element.attrib.get(
+            "{http://www.w3.org/XML/1998/namespace}id"
+        )
 
 
-            local_name = (
+        if xml_id:
 
-                child.tag
+            return xml_id.strip()
 
-                .split("}")[-1]
 
-                .lower()
+        # =====================================================
+        # 2. dc:identifier type="AGRIS"
+        # =====================================================
 
+        try:
+
+            identifiers = element.findall(
+                "dc:identifier",
+                namespaces
             )
 
 
-            if local_name != "identifier":
+            for identifier in identifiers:
 
-                continue
-
-
-            if not child.text:
-
-                continue
-
-
-            value = (
-
-                child.text.strip()
-
-            )
-
-
-            if not value:
-
-                continue
-
-
-            # Si URL, on la laisse à _get_url
-            if value.startswith(
-
-                (
-                    "http://",
-                    "https://"
+                identifier_type = (
+                    identifier.attrib.get(
+                        "type",
+                        ""
+                    )
+                    .strip()
+                    .lower()
                 )
 
-            ):
 
-                continue
+                if (
+                    identifier_type == "agris"
+                    and identifier.text
+                    and identifier.text.strip()
+                ):
 
-
-            # Priorité à l'identifiant AGRIS
-            identifier_type = (
-
-                child.attrib.get(
-
-                    "type",
-
-                    ""
-
-                )
-
-                .lower()
-
-            )
-
-
-            if identifier_type == "agris":
-
-                return value
-
-
-        # -----------------------------------------------------
-        # FALLBACK IDENTIFIANT
-        # -----------------------------------------------------
-
-        for child in element.iter():
-
-            if not isinstance(
-
-                child.tag,
-
-                str
-
-            ):
-
-                continue
-
-
-            local_name = (
-
-                child.tag
-
-                .split("}")[-1]
-
-                .lower()
-
-            )
-
-
-            if local_name != "identifier":
-
-                continue
-
-
-            if not child.text:
-
-                continue
-
-
-            value = (
-
-                child.text.strip()
-
-            )
-
-
-            if (
-
-                value
-
-                and not value.startswith(
-
-                    (
-                        "http://",
-                        "https://"
+                    return (
+                        identifier.text.strip()
                     )
 
-                )
 
-            ):
+        except Exception:
 
-                return value
+            pass
 
 
         return None
 
 
     # =========================================================
-    # EXTRAIRE URL
+    # EXTRAIRE URL DU DOCUMENT
     # =========================================================
 
-    def _get_url(
-
+    def _get_document_url(
         self,
-
         element,
-
         namespaces
-
     ):
 
-        # -----------------------------------------------------
-        # 1. IDENTIFIER URL
-        # -----------------------------------------------------
+        # =====================================================
+        # 1. dc:identifier type="url"
+        # =====================================================
 
-        for child in element.iter():
+        try:
 
-            if not isinstance(
-
-                child.tag,
-
-                str
-
-            ):
-
-                continue
-
-
-            local_name = (
-
-                child.tag
-
-                .split("}")[-1]
-
-                .lower()
-
-            )
-
-
-            if local_name != "identifier":
-
-                continue
-
-
-            if not child.text:
-
-                continue
-
-
-            value = (
-
-                child.text.strip()
-
-            )
-
-
-            if value.startswith(
-
-                (
-                    "http://",
-                    "https://"
-                )
-
-            ):
-
-                return value
-
-
-        # -----------------------------------------------------
-        # 2. LANDING PAGE
-        # -----------------------------------------------------
-
-        landing_page = (
-
-            element.find(
-
-                "dcat:landingPage",
-
+            identifiers = element.findall(
+                "dc:identifier",
                 namespaces
-
-            )
-
-        )
-
-
-        if (
-
-            landing_page is not None
-
-            and landing_page.text
-
-        ):
-
-            url = (
-
-                landing_page.text.strip()
-
             )
 
 
-            if url.startswith(
+            for identifier in identifiers:
 
-                (
-                    "http://",
-                    "https://"
+                value = (
+                    identifier.text.strip()
+                    if (
+                        identifier.text
+                        and identifier.text.strip()
+                    )
+                    else None
                 )
 
-            ):
 
-                return url
+                if not value:
 
-
-        # -----------------------------------------------------
-        # 3. ACCESS URL
-        # -----------------------------------------------------
-
-        access_url = (
-
-            element.find(
-
-                "dcat:accessURL",
-
-                namespaces
-
-            )
-
-        )
+                    continue
 
 
-        if (
-
-            access_url is not None
-
-            and access_url.text
-
-        ):
-
-            url = (
-
-                access_url.text.strip()
-
-            )
-
-
-            if url.startswith(
-
-                (
-                    "http://",
-                    "https://"
+                identifier_type = (
+                    identifier.attrib.get(
+                        "type",
+                        ""
+                    )
+                    .strip()
+                    .lower()
                 )
 
-            ):
-
-                return url
-
-
-        # -----------------------------------------------------
-        # 4. RECHERCHE GÉNÉRIQUE
-        # -----------------------------------------------------
-
-        for child in element.iter():
-
-            if not isinstance(
-
-                child.tag,
-
-                str
-
-            ):
-
-                continue
-
-
-            local_name = (
-
-                child.tag
-
-                .split("}")[-1]
-
-                .lower()
-
-            )
-
-
-            if local_name in [
-
-                "identifier",
-
-                "url",
-
-                "landingpage",
-
-                "accessurl",
-
-            ]:
 
                 if (
-
-                    child.text
-
-                    and child.text.strip()
-
-                ):
-
-                    value = (
-
-                        child.text.strip()
-
-                    )
-
-
-                    if value.startswith(
-
+                    identifier_type == "url"
+                    and value.startswith(
                         (
                             "http://",
                             "https://"
                         )
+                    )
+                ):
 
+                    return value
+
+
+        except Exception:
+
+            pass
+
+
+        # =====================================================
+        # 2. N'IMPORTE QUEL IDENTIFIER HTTP
+        # =====================================================
+
+        try:
+
+            identifiers = element.findall(
+                "dc:identifier",
+                namespaces
+            )
+
+
+            for identifier in identifiers:
+
+                if (
+                    identifier.text
+                    and identifier.text.strip()
+                ):
+
+                    value = (
+                        identifier.text.strip()
+                    )
+
+
+                    if value.startswith(
+                        (
+                            "http://",
+                            "https://"
+                        )
                     ):
 
                         return value
 
 
+        except Exception:
+
+            pass
+
+
+        # =====================================================
+        # 3. DCT IDENTIFIER
+        # =====================================================
+
+        try:
+
+            identifiers = element.findall(
+                "dct:identifier",
+                namespaces
+            )
+
+
+            for identifier in identifiers:
+
+                if (
+                    identifier.text
+                    and identifier.text.strip()
+                ):
+
+                    value = (
+                        identifier.text.strip()
+                    )
+
+
+                    if value.startswith(
+                        (
+                            "http://",
+                            "https://"
+                        )
+                    ):
+
+                        return value
+
+
+        except Exception:
+
+            pass
+
+
+        # =====================================================
+        # 4. FALLBACK GÉNÉRIQUE
+        # =====================================================
+
+        for child in element.iter():
+
+            if (
+                child.text
+                and child.text.strip()
+            ):
+
+                value = (
+                    child.text.strip()
+                )
+
+
+                if value.startswith(
+                    (
+                        "http://",
+                        "https://"
+                    )
+                ):
+
+                    local_name = (
+                        self._local_name(
+                            child.tag
+                        )
+                        .lower()
+                    )
+
+
+                    if local_name in [
+                        "identifier",
+                        "url",
+                        "landingpage",
+                        "accessurl",
+                    ]:
+
+                        return value
+
+
         return None
+
+
+    # =========================================================
+    # NOM LOCAL D'UN TAG XML
+    # =========================================================
+
+    def _local_name(
+        self,
+        tag
+    ):
+
+        if not isinstance(
+            tag,
+            str
+        ):
+
+            return ""
+
+
+        if "}" in tag:
+
+            return tag.split(
+                "}",
+                1
+            )[1]
+
+
+        if ":" in tag:
+
+            return tag.split(
+                ":",
+                1
+            )[1]
+
+
+        return tag
