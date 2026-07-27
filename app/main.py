@@ -920,31 +920,23 @@ def fao_rag_pipeline_test(
 
 
 # =========================================================
-# PIPELINE MULTI-DATASETS FAO AGRIS
-#
-# CATALOGUE
-#     ->
-# DATASETS
-#     ->
-# PARSER
-#     ->
-# DOCUMENTS EN MÉMOIRE
-#     ->
-# RAG
-#     ->
-# SUPABASE
-#
-# AUCUN documents.json
+# PIPELINE FAO AGRIS
+# CATALOGUE -> DATASET -> PARSING -> RAG -> SUPABASE
 # =========================================================
 
 @app.get(
     "/knowledge/fao-dataset-pipeline-test"
 )
 def fao_dataset_pipeline_test(
-    dataset_limit: int = 2,
+
     dataset_offset: int = 0,
-    rag_limit: int = 3,
-    document_offset: int = 0
+
+    dataset_limit: int = 1,
+
+    document_offset: int = 0,
+
+    rag_limit: int = 10
+
 ):
 
     from app.knowledge_engine.connectors.fao_ods import (
@@ -963,42 +955,16 @@ def fao_dataset_pipeline_test(
         FAODatasetParser
     )
 
+    from app.knowledge_engine.storage.rag_ingestion import (
+        RAGIngestion
+    )
+
 
     try:
 
         # =====================================================
-        # 1. VALIDATION
+        # 0. VALIDATION
         # =====================================================
-
-        if dataset_limit <= 0:
-
-            return {
-
-                "status":
-                    "error",
-
-                "message":
-                    "dataset_limit doit être supérieur à 0."
-
-            }
-
-
-        # Protection Render / Gemini
-        if dataset_limit > 5:
-
-            return {
-
-                "status":
-                    "error",
-
-                "message":
-                    (
-                        "dataset_limit ne peut pas "
-                        "dépasser 5 pour le moment."
-                    )
-
-            }
-
 
         if dataset_offset < 0:
 
@@ -1013,7 +979,7 @@ def fao_dataset_pipeline_test(
             }
 
 
-        if rag_limit <= 0:
+        if dataset_limit <= 0:
 
             return {
 
@@ -1021,7 +987,7 @@ def fao_dataset_pipeline_test(
                     "error",
 
                 "message":
-                    "rag_limit doit être supérieur à 0."
+                    "dataset_limit doit être supérieur à 0."
 
             }
 
@@ -1039,8 +1005,21 @@ def fao_dataset_pipeline_test(
             }
 
 
+        if rag_limit <= 0:
+
+            return {
+
+                "status":
+                    "error",
+
+                "message":
+                    "rag_limit doit être supérieur à 0."
+
+            }
+
+
         # =====================================================
-        # 2. TÉLÉCHARGER CATALOGUE AGRIS
+        # 1. TÉLÉCHARGER LE CATALOGUE AGRIS
         # =====================================================
 
         print("=" * 60)
@@ -1063,14 +1042,7 @@ def fao_dataset_pipeline_test(
         )
 
 
-        # =====================================================
-        # 3. VALIDATION CATALOGUE
-        # =====================================================
-
-        if not isinstance(
-            ods_result,
-            dict
-        ):
+        if not ods_result:
 
             return {
 
@@ -1078,12 +1050,52 @@ def fao_dataset_pipeline_test(
                     "error",
 
                 "step":
-                    "catalog_download",
+                    "ods_download",
+
+                "message":
+                    "Téléchargement AGRIS impossible."
+
+            }
+
+
+        # =====================================================
+        # 2. EXTRAIRE LE CONTENU DU CATALOGUE
+        # =====================================================
+
+        if isinstance(
+            ods_result,
+            dict
+        ):
+
+            catalog_content = (
+                ods_result.get(
+                    "content"
+                )
+            )
+
+            catalog_filename = (
+                ods_result.get(
+                    "filename"
+                )
+                or
+                "AGRIS.ODS.xml"
+            )
+
+
+        else:
+
+            return {
+
+                "status":
+                    "error",
+
+                "step":
+                    "ods_download",
 
                 "message":
                     (
-                        "Format retourné par "
-                        "FAOODSDownloader invalide."
+                        "Le downloader AGRIS doit "
+                        "retourner un dictionnaire."
                     ),
 
                 "returned_type":
@@ -1094,23 +1106,7 @@ def fao_dataset_pipeline_test(
             }
 
 
-        ods_content = (
-            ods_result.get(
-                "content"
-            )
-        )
-
-
-        catalog_filename = (
-            ods_result.get(
-                "filename"
-            )
-            or
-            "AGRIS.ODS.xml"
-        )
-
-
-        if not ods_content:
+        if not catalog_content:
 
             return {
 
@@ -1118,7 +1114,7 @@ def fao_dataset_pipeline_test(
                     "error",
 
                 "step":
-                    "catalog_download",
+                    "ods_content",
 
                 "message":
                     "Catalogue AGRIS vide."
@@ -1127,7 +1123,7 @@ def fao_dataset_pipeline_test(
 
 
         # =====================================================
-        # 4. PARSER CATALOGUE
+        # 3. PARSER LE CATALOGUE
         # =====================================================
 
         print(
@@ -1148,20 +1144,7 @@ def fao_dataset_pipeline_test(
         )
 
 
-        total_datasets = (
-            len(
-                datasets
-            )
-        )
-
-
-        print(
-            "[FAO PIPELINE] "
-            f"{total_datasets} dataset(s) trouvé(s)."
-        )
-
-
-        if total_datasets == 0:
+        if not datasets:
 
             return {
 
@@ -1169,16 +1152,30 @@ def fao_dataset_pipeline_test(
                     "error",
 
                 "step":
-                    "catalog_parse",
+                    "ods_parse",
 
                 "message":
-                    "Aucun dataset AGRIS trouvé."
+                    (
+                        "Aucun dataset trouvé "
+                        "dans le catalogue AGRIS."
+                    )
 
             }
 
 
+        total_datasets = len(
+            datasets
+        )
+
+
+        print(
+            "[FAO PIPELINE] "
+            f"{total_datasets} dataset(s) disponible(s)."
+        )
+
+
         # =====================================================
-        # 5. OFFSET DATASETS
+        # 4. VÉRIFIER OFFSET DATASET
         # =====================================================
 
         if dataset_offset >= total_datasets:
@@ -1186,27 +1183,18 @@ def fao_dataset_pipeline_test(
             return {
 
                 "status":
-                    "success",
+                    "completed",
 
                 "message":
-                    "Tous les datasets AGRIS ont été parcourus.",
-
-                "catalog_filename":
-                    catalog_filename,
+                    (
+                        "Tous les datasets AGRIS "
+                        "ont été parcourus."
+                    ),
 
                 "datasets_found":
                     total_datasets,
 
                 "dataset_offset":
-                    dataset_offset,
-
-                "dataset_limit":
-                    dataset_limit,
-
-                "datasets_processed":
-                    0,
-
-                "next_dataset_offset":
                     dataset_offset,
 
                 "has_more_datasets":
@@ -1216,32 +1204,20 @@ def fao_dataset_pipeline_test(
 
 
         # =====================================================
-        # 6. SÉLECTION DU BATCH DATASETS
+        # 5. SÉLECTIONNER LES DATASETS
         # =====================================================
 
-        selected_datasets = (
+        selected_datasets = datasets[
 
-            datasets[
+            dataset_offset:
 
-                dataset_offset:
+            dataset_offset + dataset_limit
 
-                dataset_offset
-                + dataset_limit
-
-            ]
-
-        )
-
-
-        print(
-            "[FAO PIPELINE] "
-            f"Traitement de "
-            f"{len(selected_datasets)} dataset(s)."
-        )
+        ]
 
 
         # =====================================================
-        # 7. SERVICES
+        # 6. INITIALISER SERVICES
         # =====================================================
 
         dataset_downloader = (
@@ -1254,104 +1230,189 @@ def fao_dataset_pipeline_test(
         )
 
 
+        rag_ingestion = (
+            RAGIngestion()
+        )
+
+
         # =====================================================
-        # 8. COMPTEURS
+        # STATISTIQUES
         # =====================================================
 
-        datasets_processed = 0
+        datasets_results = []
+
         datasets_success = 0
+
         datasets_errors = 0
 
         total_documents_parsed = 0
 
-        dataset_results = []
+        total_inserted = 0
 
-        all_documents = []
+        total_updated = 0
+
+        total_skipped = 0
+
+        total_errors = 0
+
+
+        next_document_offset = (
+            document_offset
+        )
+
+        has_more_documents = False
 
 
         # =====================================================
-        # 9. PARCOURIR LES DATASETS
+        # 7. TRAITER LES DATASETS
         # =====================================================
 
         for local_index, dataset in enumerate(
             selected_datasets
         ):
 
-            absolute_index = (
+            dataset_index = (
                 dataset_offset
                 + local_index
             )
 
 
-            datasets_processed += 1
-
-
-            dataset_url = str(
-                dataset.url
-            ).strip()
-
-
-            filename = (
-                dataset_url
-                .rstrip("/")
-                .split("/")
-                [-1]
-            )
-
-
-            if not filename:
-
-                filename = (
-                    f"dataset_{absolute_index}.xml"
-                )
-
-
-            print("=" * 60)
-
-            print(
-                "[FAO PIPELINE] "
-                f"Dataset #{absolute_index}"
-            )
-
-            print(
-                "[FAO PIPELINE] "
-                f"URL : {dataset_url}"
-            )
-
-            print("=" * 60)
-
-
             try:
 
-                # =============================================
-                # TÉLÉCHARGEMENT
-                # =============================================
+                # -------------------------------------------------
+                # URL
+                # -------------------------------------------------
 
-                downloaded = (
-                    dataset_downloader.download(
-                        url=dataset_url,
-                        filename=filename
+                dataset_url = str(
+                    dataset.url
+                ).strip()
+
+
+                if not dataset_url:
+
+                    raise ValueError(
+                        "Dataset sans URL."
                     )
+
+
+                # -------------------------------------------------
+                # NOM FICHIER
+                # -------------------------------------------------
+
+                filename = (
+
+                    dataset_url
+
+                    .rstrip("/")
+
+                    .split("/")[-1]
+
                 )
 
 
-                if not isinstance(
+                if not filename:
+
+                    filename = (
+                        f"dataset_{dataset_index}.xml"
+                    )
+
+
+                print("=" * 60)
+
+                print(
+                    "[FAO PIPELINE] "
+                    f"Dataset {dataset_index}"
+                )
+
+                print(
+                    "[FAO PIPELINE] "
+                    f"URL : {dataset_url}"
+                )
+
+                print("=" * 60)
+
+
+                # -------------------------------------------------
+                # TÉLÉCHARGEMENT
+                # -------------------------------------------------
+
+                downloaded = (
+
+                    dataset_downloader.download(
+
+                        url=dataset_url,
+
+                        filename=filename
+
+                    )
+
+                )
+
+
+                if not downloaded:
+
+                    raise ValueError(
+                        "Dataset impossible à télécharger."
+                    )
+
+
+                # -------------------------------------------------
+                # NORMALISER LE RETOUR DOWNLOADER
+                # -------------------------------------------------
+
+                if isinstance(
                     downloaded,
                     dict
                 ):
 
+                    xml_content = (
+                        downloaded.get(
+                            "content"
+                        )
+                    )
+
+                    actual_filename = (
+                        downloaded.get(
+                            "filename"
+                        )
+                        or
+                        filename
+                    )
+
+
+                elif isinstance(
+                    downloaded,
+                    (str, Path)
+                ):
+
+                    dataset_path = Path(
+                        downloaded
+                    )
+
+
+                    if not dataset_path.exists():
+
+                        raise ValueError(
+                            "Le fichier dataset "
+                            "n'existe pas."
+                        )
+
+
+                    xml_content = (
+                        dataset_path.read_bytes()
+                    )
+
+                    actual_filename = (
+                        dataset_path.name
+                    )
+
+
+                else:
+
                     raise ValueError(
-                        "Format retourné par "
-                        "FAODatasetsDownloader invalide : "
-                        f"{type(downloaded).__name__}"
+                        "Format du dataset "
+                        "téléchargé invalide."
                     )
-
-
-                xml_content = (
-                    downloaded.get(
-                        "content"
-                    )
-                )
 
 
                 if not xml_content:
@@ -1361,51 +1422,180 @@ def fao_dataset_pipeline_test(
                     )
 
 
-                # =============================================
+                # -------------------------------------------------
                 # PARSING
-                # =============================================
+                # -------------------------------------------------
 
                 documents = (
+
                     dataset_parser.parse(
+
                         xml_content=xml_content,
-                        filename=filename,
+
+                        filename=actual_filename,
+
                         source_url=dataset_url
+
                     )
+
                 )
 
 
-                parsed_count = (
-                    len(
-                        documents
-                    )
+                documents_count = len(
+                    documents
                 )
 
 
                 total_documents_parsed += (
-                    parsed_count
+                    documents_count
                 )
 
 
-                # =============================================
-                # AJOUT EN MÉMOIRE
-                # =============================================
+                print(
+                    "[FAO PIPELINE] "
+                    f"{documents_count} document(s) parsé(s)."
+                )
 
-                all_documents.extend(
-                    documents
+
+                # -------------------------------------------------
+                # AUCUN DOCUMENT
+                # -------------------------------------------------
+
+                if not documents:
+
+                    datasets_results.append({
+
+                        "dataset_index":
+                            dataset_index,
+
+                        "status":
+                            "warning",
+
+                        "dataset_url":
+                            dataset_url,
+
+                        "dataset_filename":
+                            actual_filename,
+
+                        "documents_parsed":
+                            0,
+
+                        "message":
+                            "Aucun document trouvé."
+
+                    })
+
+
+                    continue
+
+
+                # -------------------------------------------------
+                # IMPORTANT
+                #
+                # Si plusieurs datasets sont demandés,
+                # document_offset ne s'applique qu'au premier.
+                # Les suivants commencent à zéro.
+                # -------------------------------------------------
+
+                current_document_offset = (
+
+                    document_offset
+
+                    if local_index == 0
+
+                    else 0
+
+                )
+
+
+                # -------------------------------------------------
+                # INGESTION RAG
+                # -------------------------------------------------
+
+                rag_result = (
+
+                    rag_ingestion
+
+                    .ingest_documents(
+
+                        documents=documents,
+
+                        limit=rag_limit,
+
+                        offset=current_document_offset
+
+                    )
+
+                )
+
+
+                # -------------------------------------------------
+                # STATISTIQUES
+                # -------------------------------------------------
+
+                total_inserted += (
+                    rag_result.get(
+                        "inserted",
+                        0
+                    )
+                )
+
+
+                total_updated += (
+                    rag_result.get(
+                        "updated",
+                        0
+                    )
+                )
+
+
+                total_skipped += (
+                    rag_result.get(
+                        "skipped",
+                        0
+                    )
+                )
+
+
+                total_errors += (
+                    rag_result.get(
+                        "errors",
+                        0
+                    )
                 )
 
 
                 datasets_success += 1
 
 
-                # =============================================
-                # RÉSULTAT DATASET
-                # =============================================
+                # -------------------------------------------------
+                # PAGINATION DOCUMENT
+                # -------------------------------------------------
 
-                dataset_results.append({
+                next_document_offset = (
+                    rag_result.get(
+                        "next_offset",
+                        current_document_offset
+                    )
+                )
+
+
+                has_more_documents = (
+                    rag_result.get(
+                        "has_more",
+                        False
+                    )
+                )
+
+
+                # -------------------------------------------------
+                # RÉSULTAT DATASET
+                # -------------------------------------------------
+
+                datasets_results.append({
 
                     "dataset_index":
-                        absolute_index,
+                        dataset_index,
 
                     "status":
                         "success",
@@ -1414,7 +1604,7 @@ def fao_dataset_pipeline_test(
                         dataset_url,
 
                     "dataset_filename":
-                        filename,
+                        actual_filename,
 
                     "xml_size":
                         len(
@@ -1422,171 +1612,81 @@ def fao_dataset_pipeline_test(
                         ),
 
                     "documents_parsed":
-                        parsed_count
+                        documents_count,
+
+                    "document_offset":
+                        current_document_offset,
+
+                    "rag":
+                        rag_result
 
                 })
 
 
-                print(
-                    "[FAO PIPELINE] "
-                    f"✅ {parsed_count} document(s) extrait(s)."
-                )
+                # -------------------------------------------------
+                # IMPORTANT :
+                # ON ARRÊTE SI LE DATASET COURANT
+                # A ENCORE DES DOCUMENTS À INGÉRER
+                # -------------------------------------------------
+
+                if has_more_documents:
+
+                    print(
+                        "[FAO PIPELINE] "
+                        "Le dataset courant possède "
+                        "encore des documents."
+                    )
+
+                    break
 
 
-            except Exception as dataset_error:
+            except Exception as e:
 
                 datasets_errors += 1
 
+                total_errors += 1
+
 
                 print(
                     "[FAO PIPELINE] "
-                    f"❌ Dataset #{absolute_index} : "
-                    f"{dataset_error}"
+                    f"Erreur dataset {dataset_index} : "
+                    f"{e}"
                 )
 
 
-                dataset_results.append({
+                datasets_results.append({
 
                     "dataset_index":
-                        absolute_index,
+                        dataset_index,
 
                     "status":
                         "error",
 
-                    "dataset_url":
-                        dataset_url,
-
-                    "dataset_filename":
-                        filename,
-
                     "message":
-                        str(
-                            dataset_error
-                        )
+                        str(e)
 
                 })
 
 
         # =====================================================
-        # 10. VÉRIFIER LES DOCUMENTS
+        # 8. CALCULER LE PROCHAIN DATASET
         # =====================================================
 
-        if not all_documents:
+        if has_more_documents:
 
-            return {
-
-                "status":
-                    "warning",
-
-                "catalog_filename":
-                    catalog_filename,
-
-                "datasets_found":
-                    total_datasets,
-
-                "dataset_offset":
-                    dataset_offset,
-
-                "dataset_limit":
-                    dataset_limit,
-
-                "datasets_processed":
-                    datasets_processed,
-
-                "datasets_success":
-                    datasets_success,
-
-                "datasets_errors":
-                    datasets_errors,
-
-                "documents_parsed":
-                    0,
-
-                "message":
-                    "Aucun document extrait des datasets.",
-
-                "datasets":
-                    dataset_results
-
-            }
-
-
-        # =====================================================
-        # 11. INGESTION DIRECTE RAG
-        # =====================================================
-
-        print("=" * 60)
-
-        print(
-            "[FAO PIPELINE] "
-            "Ingestion directe RAG -> Supabase..."
-        )
-
-        print(
-            "[FAO PIPELINE] "
-            f"Documents disponibles : "
-            f"{len(all_documents)}"
-        )
-
-        print(
-            "[FAO PIPELINE] "
-            f"document_offset : "
-            f"{document_offset}"
-        )
-
-        print(
-            "[FAO PIPELINE] "
-            f"rag_limit : "
-            f"{rag_limit}"
-        )
-
-        print("=" * 60)
-
-
-        rag = (
-            RAGIngestion()
-        )
-
-
-        rag_result = (
-            rag.ingest_documents(
-                documents=all_documents,
-                limit=rag_limit,
-                offset=document_offset
+            next_dataset_offset = (
+                dataset_offset
             )
-        )
 
 
-        # =====================================================
-        # 12. PROCHAIN OFFSET DOCUMENT
-        # =====================================================
+        else:
 
-        next_document_offset = (
-            rag_result.get(
-                "next_offset",
-                document_offset
+            next_dataset_offset = (
+                dataset_offset
+                + len(
+                    datasets_results
+                )
             )
-        )
-
-
-        has_more_documents = (
-            rag_result.get(
-                "has_more",
-                False
-            )
-        )
-
-
-        # =====================================================
-        # 13. PROCHAIN OFFSET DATASET
-        # =====================================================
-
-        next_dataset_offset = (
-            dataset_offset
-            + len(
-                selected_datasets
-            )
-        )
 
 
         has_more_datasets = (
@@ -1596,7 +1696,7 @@ def fao_dataset_pipeline_test(
 
 
         # =====================================================
-        # 14. RÉSULTAT
+        # 9. RÉSULTAT FINAL
         # =====================================================
 
         return {
@@ -1617,7 +1717,9 @@ def fao_dataset_pipeline_test(
                 dataset_limit,
 
             "datasets_processed":
-                datasets_processed,
+                len(
+                    datasets_results
+                ),
 
             "datasets_success":
                 datasets_success,
@@ -1628,19 +1730,23 @@ def fao_dataset_pipeline_test(
             "documents_parsed":
                 total_documents_parsed,
 
-            "documents_available_for_rag":
-                len(
-                    all_documents
-                ),
+            "rag_limit":
+                rag_limit,
 
             "document_offset":
                 document_offset,
 
-            "rag_limit":
-                rag_limit,
+            "inserted":
+                total_inserted,
 
-            "rag":
-                rag_result,
+            "updated":
+                total_updated,
+
+            "skipped":
+                total_skipped,
+
+            "errors":
+                total_errors,
 
             "next_document_offset":
                 next_document_offset,
@@ -1655,7 +1761,7 @@ def fao_dataset_pipeline_test(
                 has_more_datasets,
 
             "datasets":
-                dataset_results
+                datasets_results
 
         }
 
@@ -1674,13 +1780,9 @@ def fao_dataset_pipeline_test(
                 "error",
 
             "message":
-                str(
-                    e
-                )
+                str(e)
 
         }
-
-
 # =========================================================
 # TEST PARSER DATASETS FAO
 # =========================================================
