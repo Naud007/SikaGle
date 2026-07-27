@@ -202,7 +202,112 @@ def send_whatsapp_message(
 
         return False
 
+# =========================================================
+# DEBUG STRUCTURE XML AGRIS ODS
+# =========================================================
 
+@app.get(
+    "/knowledge/fao-ods-structure"
+)
+def fao_ods_structure():
+
+    import xml.etree.ElementTree as ET
+
+    from app.knowledge_engine.connectors.fao_ods import (
+        FAOODSDownloader
+    )
+
+    try:
+
+        # -------------------------------------------------
+        # 1. TÉLÉCHARGER AGRIS ODS
+        # -------------------------------------------------
+
+        downloader = FAOODSDownloader()
+
+        xml_path = downloader.download()
+
+        # -------------------------------------------------
+        # 2. PARSER LE XML BRUT
+        # -------------------------------------------------
+
+        tree = ET.parse(
+            xml_path
+        )
+
+        root = tree.getroot()
+
+        # -------------------------------------------------
+        # 3. RÉCUPÉRER LES PREMIERS ÉLÉMENTS
+        # -------------------------------------------------
+
+        elements = []
+
+        for index, element in enumerate(
+            root.iter()
+        ):
+
+            elements.append({
+
+                "index":
+                    index,
+
+                "tag":
+                    element.tag,
+
+                "text":
+                    (
+                        element.text.strip()[:300]
+                        if element.text
+                        and element.text.strip()
+                        else None
+                    ),
+
+                "attributes":
+                    element.attrib
+
+            })
+
+            if index >= 40:
+                break
+
+        # -------------------------------------------------
+        # 4. RÉSULTAT
+        # -------------------------------------------------
+
+        return {
+
+            "status":
+                "success",
+
+            "xml_path":
+                str(xml_path),
+
+            "root_tag":
+                root.tag,
+
+            "root_attributes":
+                root.attrib,
+
+            "children_count":
+                len(list(root)),
+
+            "elements":
+                elements
+
+        }
+
+    except Exception as e:
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(e)
+
+        }
 # =========================================================
 # ROUTE RACINE
 # =========================================================
