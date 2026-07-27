@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Request, Response
-from supabase import create_client, Client
 from datetime import date, datetime
 import os
 import requests
-from pathlib import Path
+
+from fastapi import FastAPI, Request, Response
+from supabase import create_client, Client
 
 from app.ai.gemini_client import (
     test_gemini,
@@ -47,9 +47,7 @@ app = FastAPI(
 # =========================================================
 
 TRIAL_PERIOD_DAYS = 31
-
 TRIAL_DAILY_LIMIT = 15
-
 REGULAR_DAILY_LIMIT = 5
 
 
@@ -87,8 +85,7 @@ SUPABASE_KEY = os.getenv(
 # INITIALISATION SUPABASE
 # =========================================================
 
-supabase: Client = None
-
+supabase: Client | None = None
 
 if SUPABASE_URL and SUPABASE_KEY:
 
@@ -137,26 +134,20 @@ def send_whatsapp_message(
 
         return False
 
-
     url = (
         f"https://graph.facebook.com/v18.0/"
         f"{WHATSAPP_PHONE_ID}/messages"
     )
 
-
     headers = {
-
         "Authorization":
             f"Bearer {WHATSAPP_TOKEN}",
 
         "Content-Type":
             "application/json"
-
     }
 
-
     payload = {
-
         "messaging_product":
             "whatsapp",
 
@@ -170,23 +161,19 @@ def send_whatsapp_message(
             "text",
 
         "text": {
-
             "body":
                 text_body
-
         }
-
     }
-
 
     try:
 
         response = requests.post(
             url,
             json=payload,
-            headers=headers
+            headers=headers,
+            timeout=30
         )
-
 
         if response.status_code == 200:
 
@@ -197,7 +184,6 @@ def send_whatsapp_message(
 
             return True
 
-
         print(
             f"❌ Échec d'envoi WhatsApp "
             f"({response.status_code}):",
@@ -205,7 +191,6 @@ def send_whatsapp_message(
         )
 
         return False
-
 
     except Exception as e:
 
@@ -217,393 +202,215 @@ def send_whatsapp_message(
 
         return False
 
+
+# =========================================================
+# ROUTE RACINE
+# =========================================================
+
+@app.get("/")
+def root():
+
+    return {
+        "status": "online",
+        "message": "API SikaGlé fonctionnelle"
+    }
+
+
+# =========================================================
+# STATUT BASE DE DONNÉES
+# =========================================================
+
 @app.get(
-    "/knowledge/fao-dataset-pipeline-test"
+    "/db-status"
 )
-def fao_dataset_pipeline_test():
+def db_status():
 
-    from pathlib import Path
+    if not supabase:
 
-    from app.knowledge_engine.connectors.fao_ods import (
-        FAOODSDownloader
-    )
-
-    from app.knowledge_engine.parsers.fao_ods_parser import (
-        FAOODSParser
-    )
-
-    from app.knowledge_engine.connectors.fao_datasets import (
-        FAODatasetsDownloader
-    )
-
-    from app.knowledge_engine.parsers.fao_dataset_parser import (
-        FAODatasetParser
-    )
+        return {
+            "database": "disconnected",
+            "reason": "Variables Supabase manquantes"
+        }
 
     try:
 
-        # =====================================================
-        # 1. TÉLÉCHARGER LE CATALOGUE AGRIS
-        # =====================================================
-
-        print(
-            "[PIPELINE TEST] "
-            "Téléchargement catalogue AGRIS..."
-        )
-
-        ods_downloader = (
-            FAOODSDownloader()
-        )
-
-        ods_path = (
-            ods_downloader.download()
-        )
-
-        if not ods_path:
-
-            return {
-
-                "status":
-                    "error",
-
-                "step":
-                    "ods_download",
-
-                "message":
-                    "Téléchargement AGRIS impossible."
-
-            }
-
-        print(
-            "[PIPELINE TEST] "
-            "Catalogue AGRIS :",
-            ods_path
-        )
-
-
-        # =====================================================
-        # 2. PARSER LE CATALOGUE AGRIS
-        # =====================================================
-
-        print(
-            "[PIPELINE TEST] "
-            "Parsing catalogue AGRIS..."
-        )
-
-        ods_parser = (
-            FAOODSParser(
-                ods_path
+        response = (
+            supabase
+            .table("users")
+            .select(
+                "id",
+                count="exact"
             )
+            .limit(1)
+            .execute()
         )
-
-        datasets = (
-            ods_parser.parse()
-        )
-
-        if not datasets:
-
-            return {
-
-                "status":
-                    "error",
-
-                "step":
-                    "ods_parse",
-
-                "message":
-                    (
-                        "Aucun dataset trouvé "
-                        "dans le catalogue AGRIS."
-                    )
-
-            }
-
-        print(
-            "[PIPELINE TEST] "
-            f"{len(datasets)} dataset(s) trouvé(s)."
-        )
-
-
-        # =====================================================
-        # 3. PRENDRE LE PREMIER DATASET
-        # =====================================================
-
-        dataset = (
-            datasets[0]
-        )
-
-        dataset_url = str(
-            dataset.url
-        ).strip()
-
-        print(
-            "[PIPELINE TEST] "
-            "Dataset sélectionné :",
-            dataset_url
-        )
-
-
-        # =====================================================
-        # 4. TÉLÉCHARGER LE DATASET
-        # =====================================================
-
-        dataset_downloader = (
-            FAODatasetsDownloader()
-        )
-
-        filename = (
-            dataset_url
-            .rstrip("/")
-            .split("/")
-            [-1]
-        )
-
-        downloaded = (
-            dataset_downloader.download(
-                url=dataset_url,
-                filename=filename
-            )
-        )
-
-        if not downloaded:
-
-            return {
-
-                "status":
-                    "error",
-
-                "step":
-                    "dataset_download",
-
-                "message":
-                    "Dataset impossible à télécharger."
-
-            }
-
-
-        # =====================================================
-        # 5. LIRE LE CONTENU DU DATASET
-        # =====================================================
-
-        xml_content = None
-
-
-        # -----------------------------------------------------
-        # CAS 1 : LE DOWNLOADER RETOURNE UN DICTIONNAIRE
-        # -----------------------------------------------------
-
-        if isinstance(
-            downloaded,
-            dict
-        ):
-
-            xml_content = (
-                downloaded.get(
-                    "content"
-                )
-            )
-
-
-        # -----------------------------------------------------
-        # CAS 2 : LE DOWNLOADER RETOURNE UN FICHIER PATH
-        # -----------------------------------------------------
-
-        elif isinstance(
-            downloaded,
-            (
-                str,
-                Path
-            )
-        ):
-
-            dataset_path = Path(
-                downloaded
-            )
-
-            print(
-                "[PIPELINE TEST] "
-                "Dataset local :",
-                dataset_path
-            )
-
-            if not dataset_path.exists():
-
-                return {
-
-                    "status":
-                        "error",
-
-                    "step":
-                        "dataset_file",
-
-                    "message":
-                        (
-                            "Le fichier dataset "
-                            "n'existe pas."
-                        ),
-
-                    "path":
-                        str(
-                            dataset_path
-                        )
-
-                }
-
-            xml_content = (
-                dataset_path.read_bytes()
-            )
-
-
-        # -----------------------------------------------------
-        # CAS 3 : FORMAT INCONNU
-        # -----------------------------------------------------
-
-        else:
-
-            return {
-
-                "status":
-                    "error",
-
-                "step":
-                    "dataset_content",
-
-                "message":
-                    (
-                        "Format retourné par "
-                        "FAODatasetsDownloader "
-                        "non supporté."
-                    ),
-
-                "returned_type":
-                    type(
-                        downloaded
-                    ).__name__
-
-            }
-
-
-        # =====================================================
-        # 6. VÉRIFIER LE CONTENU XML
-        # =====================================================
-
-        if not xml_content:
-
-            return {
-
-                "status":
-                    "error",
-
-                "step":
-                    "dataset_content",
-
-                "message":
-                    (
-                        "Le dataset téléchargé "
-                        "ne contient aucun contenu XML."
-                    )
-
-            }
-
-        print(
-            "[PIPELINE TEST] "
-            f"XML chargé en mémoire : "
-            f"{len(xml_content)} octets"
-        )
-
-
-        # =====================================================
-        # 7. PARSER LE DATASET XML
-        # =====================================================
-
-        dataset_parser = (
-            FAODatasetParser()
-        )
-
-        documents = (
-            dataset_parser.parse(
-                xml_content=xml_content,
-                filename=filename,
-                source_url=dataset_url
-            )
-        )
-
-
-        # =====================================================
-        # 8. RÉSULTAT
-        # =====================================================
 
         return {
-
-            "status":
-                "success",
-
-            "dataset_url":
-                dataset_url,
-
-            "dataset_filename":
-                filename,
-
-            "xml_size":
-                len(
-                    xml_content
-                ),
-
-            "documents_parsed":
-                len(
-                    documents
-                ),
-
-            "documents_preview":
-                [
-
-                    {
-
-                        "title":
-                            document.title,
-
-                        "url":
-                            document.url,
-
-                        "description":
-                            getattr(
-                                document,
-                                "description",
-                                None
-                            )
-
-                    }
-
-                    for document
-                    in documents[:3]
-
-                ]
-
+            "database": "connected",
+            "status": "ok",
+            "users_count": response.count or 0
         }
-
 
     except Exception as e:
 
-        print(
-            "[PIPELINE TEST] "
-            f"Erreur : {e}"
-        )
+        return {
+            "database": "error",
+            "details": str(e)
+        }
+
+
+# =========================================================
+# TEST GEMINI
+# =========================================================
+
+@app.get(
+    "/ai/gemini-test"
+)
+def gemini_test():
+
+    return test_gemini()
+
+
+# =========================================================
+# LISTE DES MODÈLES GEMINI
+# =========================================================
+
+@app.get(
+    "/ai/models"
+)
+def gemini_models():
+
+    return list_gemini_models()
+
+
+# =========================================================
+# TEST EMBEDDING GEMINI
+# =========================================================
+
+@app.get(
+    "/ai/embedding-test"
+)
+def embedding_test():
+
+    return test_embedding()
+
+
+# =========================================================
+# TEST RAG
+# =========================================================
+
+@app.get(
+    "/ai/rag-test"
+)
+def rag_test():
+
+    return test_rag()
+
+
+# =========================================================
+# KNOWLEDGE ENGINE
+# =========================================================
+
+@app.get(
+    "/knowledge/test"
+)
+def test_knowledge_engine():
+
+    try:
+
+        run()
 
         return {
-
-            "status":
-                "error",
-
-            "message":
-                str(
-                    e
-                )
-
+            "status": "success",
+            "message": "Knowledge Engine exécuté"
         }
+
+    except Exception as e:
+
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+# =========================================================
+# TEST FAO ODS
+# =========================================================
+
+@app.get(
+    "/knowledge/fao-ods-test"
+)
+def fao_ods_test():
+
+    return test_fao_ods()
+
+
+# =========================================================
+# TEST PARSER CATALOGUE FAO AGRIS
+# =========================================================
+
+@app.get(
+    "/knowledge/fao-parser-test"
+)
+def fao_parser_test():
+
+    return test_fao_parser()
+
+
+# =========================================================
+# TÉLÉCHARGEMENT DES DATASETS FAO
+# =========================================================
+
+@app.get(
+    "/knowledge/fao-datasets-test"
+)
+def fao_datasets_test(
+    limit: int = 10
+):
+
+    """
+    Télécharge les datasets FAO découverts
+    dans le catalogue AGRIS.
+
+    Cette route n'est plus une route de debug.
+    """
+
+    try:
+
+        return download_fao_datasets(
+            limit=limit
+        )
+
+    except Exception as e:
+
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+
+# =========================================================
+# PIPELINE FAO COMPLET EN MÉMOIRE
+# =========================================================
+
 @app.get(
     "/knowledge/fao-dataset-pipeline-test"
 )
 def fao_dataset_pipeline_test():
+
+    """
+    Teste le pipeline :
+
+    catalogue AGRIS
+        -> découverte dataset
+        -> téléchargement
+        -> contenu XML
+        -> parsing des notices.
+
+    Le dataset peut être traité directement en mémoire.
+    """
+
+    from pathlib import Path
 
     from app.knowledge_engine.connectors.fao_ods import (
         FAOODSDownloader
@@ -645,11 +452,9 @@ def fao_dataset_pipeline_test():
             return {
                 "status": "error",
                 "step": "ods_download",
-                "message": (
+                "message":
                     "Téléchargement AGRIS impossible."
-                )
             }
-
 
         # =====================================================
         # 2. PARSER LE CATALOGUE
@@ -670,18 +475,20 @@ def fao_dataset_pipeline_test():
             ods_parser.parse()
         )
 
-
         if not datasets:
 
             return {
                 "status": "error",
                 "step": "ods_parse",
-                "message": (
+                "message":
                     "Aucun dataset trouvé "
                     "dans le catalogue AGRIS."
-                )
             }
 
+        print(
+            "[PIPELINE TEST] "
+            f"{len(datasets)} dataset(s) trouvé(s)."
+        )
 
         # =====================================================
         # 3. PRENDRE LE PREMIER DATASET
@@ -695,6 +502,25 @@ def fao_dataset_pipeline_test():
             dataset.url
         ).strip()
 
+        if not dataset_url:
+
+            return {
+                "status": "error",
+                "step": "dataset_url",
+                "message":
+                    "Le premier dataset ne possède "
+                    "pas d'URL."
+            }
+
+        filename = (
+            dataset_url
+            .rstrip("/")
+            .split("/")[-1]
+        )
+
+        if not filename:
+
+            filename = "dataset.xml"
 
         print(
             "[PIPELINE TEST] "
@@ -702,22 +528,13 @@ def fao_dataset_pipeline_test():
             dataset_url
         )
 
-
         # =====================================================
-        # 4. TÉLÉCHARGER LE DATASET EN MÉMOIRE
+        # 4. TÉLÉCHARGER LE DATASET
         # =====================================================
 
         dataset_downloader = (
             FAODatasetsDownloader()
         )
-
-        filename = (
-            dataset_url
-            .rstrip("/")
-            .split("/")
-            [-1]
-        )
-
 
         downloaded = (
             dataset_downloader.download(
@@ -726,49 +543,111 @@ def fao_dataset_pipeline_test():
             )
         )
 
-
         if not downloaded:
 
             return {
                 "status": "error",
                 "step": "dataset_download",
-                "message": (
+                "message":
                     "Dataset impossible à télécharger."
-                )
             }
 
-
         # =====================================================
-        # 5. EXTRAIRE LE CONTENU XML
+        # 5. EXTRAIRE LE XML
         # =====================================================
 
-        xml_content = (
-            downloaded.get(
-                "content"
+        xml_content = None
+
+        # -----------------------------------------------------
+        # DOWNLOADER RETOURNANT UN DICTIONNAIRE
+        # -----------------------------------------------------
+
+        if isinstance(
+            downloaded,
+            dict
+        ):
+
+            xml_content = (
+                downloaded.get(
+                    "content"
+                )
             )
-        )
 
+        # -----------------------------------------------------
+        # DOWNLOADER RETOURNANT UN CHEMIN
+        # -----------------------------------------------------
+
+        elif isinstance(
+            downloaded,
+            (
+                str,
+                Path
+            )
+        ):
+
+            dataset_path = Path(
+                downloaded
+            )
+
+            if not dataset_path.exists():
+
+                return {
+                    "status": "error",
+                    "step": "dataset_file",
+                    "message":
+                        "Le fichier dataset "
+                        "n'existe pas.",
+                    "path":
+                        str(dataset_path)
+                }
+
+            xml_content = (
+                dataset_path.read_bytes()
+            )
+
+        # -----------------------------------------------------
+        # FORMAT INCONNU
+        # -----------------------------------------------------
+
+        else:
+
+            return {
+                "status": "error",
+                "step": "dataset_content",
+                "message":
+                    "Format retourné par "
+                    "FAODatasetsDownloader non supporté.",
+                "returned_type":
+                    type(downloaded).__name__
+            }
+
+        # =====================================================
+        # 6. VÉRIFIER LE CONTENU
+        # =====================================================
 
         if not xml_content:
 
             return {
                 "status": "error",
                 "step": "dataset_content",
-                "message": (
+                "message":
                     "Le dataset téléchargé "
-                    "ne contient aucun contenu."
-                )
+                    "ne contient aucun XML."
             }
 
+        print(
+            "[PIPELINE TEST] "
+            f"XML chargé : "
+            f"{len(xml_content)} octets"
+        )
 
         # =====================================================
-        # 6. PARSER LE DATASET EN MÉMOIRE
+        # 7. PARSER LE DATASET
         # =====================================================
 
         dataset_parser = (
             FAODatasetParser()
         )
-
 
         documents = (
             dataset_parser.parse(
@@ -778,13 +657,11 @@ def fao_dataset_pipeline_test():
             )
         )
 
-
         # =====================================================
-        # 7. RÉSULTAT
+        # 8. RÉSULTAT
         # =====================================================
 
         return {
-
             "status":
                 "success",
 
@@ -795,42 +672,40 @@ def fao_dataset_pipeline_test():
                 filename,
 
             "xml_size":
-                len(
-                    xml_content
-                ),
+                len(xml_content),
 
             "documents_parsed":
-                len(
-                    documents
-                ),
+                len(documents),
 
-            "documents_preview":
-                [
+            "documents_preview": [
+                {
+                    "title":
+                        getattr(
+                            document,
+                            "title",
+                            None
+                        ),
 
-                    {
-
-                        "title":
-                            document.title,
-
-                        "url":
-                            document.url,
-
-                        "description":
+                    "url":
+                        str(
                             getattr(
                                 document,
-                                "description",
-                                None
+                                "url",
+                                ""
                             )
+                        ),
 
-                    }
+                    "description":
+                        getattr(
+                            document,
+                            "description",
+                            None
+                        )
+                }
 
-                    for document
-                    in documents[:3]
-
-                ]
-
+                for document in documents[:3]
+            ]
         }
-
 
     except Exception as e:
 
@@ -840,290 +715,39 @@ def fao_dataset_pipeline_test():
         )
 
         return {
-
-            "status":
-                "error",
-
-            "message":
-                str(
-                    e
-                )
-
+            "status": "error",
+            "message": str(e)
         }
+
+
 # =========================================================
-# DEBUG FICHIERS XML FAO
+# TEST PARSER DES DATASETS FAO
 # =========================================================
 
 @app.get(
-    "/knowledge/fao-dataset-debug"
+    "/knowledge/fao-dataset-parser-test"
 )
-def fao_dataset_debug():
-
-    from pathlib import Path
-
-    dataset_dir = Path(
-        "/app/knowledge/raw/fao/datasets"
-    )
-
-    print(
-        "[DEBUG] Dossier recherché :",
-        dataset_dir
-    )
-
-    print(
-        "[DEBUG] Dossier existe :",
-        dataset_dir.exists()
-    )
-
-    print(
-        "[DEBUG] Est un dossier :",
-        dataset_dir.is_dir()
-    )
-
-    if dataset_dir.exists():
-
-        print(
-            "[DEBUG] Contenu du dossier :"
-        )
-
-        for item in dataset_dir.iterdir():
-
-            print(
-                "[DEBUG]",
-                item
-            )
-
-    else:
-
-        print(
-            "[DEBUG] "
-            "Le dossier n'existe pas."
-        )
-
-    return {
-
-        "status":
-            "success",
-
-        "dataset_dir":
-            str(
-                dataset_dir
-            ),
-
-        "exists":
-            dataset_dir.exists(),
-
-        "is_dir":
-            dataset_dir.is_dir(),
-
-        "files":
-            [
-                str(path)
-                for path
-                in dataset_dir.glob(
-                    "*"
-                )
-            ]
-
-    }
-
-    # ---------------------------------------------------------
-    # VÉRIFIER SI LE DOSSIER EXISTE
-    # ---------------------------------------------------------
-
-    if not datasets_path.exists():
-
-        return {
-
-            "status":
-                "error",
-
-            "message":
-                "Le dossier des datasets FAO "
-                "n'existe pas.",
-
-            "path":
-                str(
-                    datasets_path
-                )
-
-        }
-
-
-    # ---------------------------------------------------------
-    # RECHERCHER LES FICHIERS XML
-    # ---------------------------------------------------------
-
-    xml_files = sorted(
-
-        datasets_path.rglob(
-            "*.xml"
-        )
-
-    )
-
-
-    print(
-
-        "[FAO XML DEBUG] "
-
-        f"{len(xml_files)} fichier(s) XML trouvé(s)."
-
-    )
-
-
-    # ---------------------------------------------------------
-    # AUCUN FICHIER
-    # ---------------------------------------------------------
-
-    if not xml_files:
-
-        return {
-
-            "status":
-                "success",
-
-            "message":
-                "Aucun fichier XML trouvé.",
-
-            "path":
-                str(
-                    datasets_path
-                ),
-
-            "files_count":
-                0,
-
-            "files":
-                []
-
-        }
-
-
-    # ---------------------------------------------------------
-    # INFORMATIONS SUR LES FICHIERS
-    # ---------------------------------------------------------
-
-    files = []
-
-
-    for xml_file in xml_files[:20]:
-
-        try:
-
-            stat = (
-                xml_file.stat()
-            )
-
-            files.append({
-
-                "name":
-                    xml_file.name,
-
-                "path":
-                    str(
-                        xml_file
-                    ),
-
-                "size_bytes":
-                    stat.st_size
-
-            })
-
-        except Exception as e:
-
-            files.append({
-
-                "name":
-                    xml_file.name,
-
-                "path":
-                    str(
-                        xml_file
-                    ),
-
-                "error":
-                    str(
-                        e
-                    )
-
-            })
-
-
-    # ---------------------------------------------------------
-    # LIRE LE PREMIER FICHIER XML
-    # ---------------------------------------------------------
-
-    first_file = (
-        xml_files[0]
-    )
-
-    preview = ""
-
+def fao_dataset_parser_test(
+    limit: int = 10
+):
+
+    """
+    Teste le parser de plusieurs datasets FAO
+    et leur sauvegarde dans DocumentStore.
+    """
 
     try:
 
-        with open(
-
-            first_file,
-
-            "r",
-
-            encoding="utf-8",
-
-            errors="replace"
-
-        ) as file:
-
-            preview = file.read(
-                20000
-            )
-
+        return test_fao_dataset_parser(
+            limit=limit
+        )
 
     except Exception as e:
 
-        preview = (
-
-            "Erreur lecture fichier XML : "
-
-            + str(
-                e
-            )
-
-        )
-
-
-    # ---------------------------------------------------------
-    # RÉSULTAT
-    # ---------------------------------------------------------
-
-    return {
-
-        "status":
-            "success",
-
-        "path":
-            str(
-                datasets_path
-            ),
-
-        "files_count":
-            len(
-                xml_files
-            ),
-
-        "files":
-            files,
-
-        "first_file":
-            str(
-                first_file
-            ),
-
-        "first_file_preview":
-            preview
-
-    }
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 
 # =========================================================
@@ -1152,416 +776,20 @@ def rag_ingest(
 
     try:
 
-        ingestion = RAGIngestion()
+        ingestion = (
+            RAGIngestion()
+        )
 
         return ingestion.ingest(
-
             limit=limit,
-
             offset=offset
-
         )
 
     except Exception as e:
 
         return {
-
-            "status":
-                "error",
-
-            "message":
-                str(e)
-
-        }
-
-
-# =========================================================
-# TEST RAG
-# =========================================================
-
-@app.get(
-    "/ai/rag-test"
-)
-def rag_test():
-
-    return test_rag()
-
-
-# =========================================================
-# LISTE DES MODÈLES GEMINI
-# =========================================================
-
-@app.get(
-    "/ai/models"
-)
-def gemini_models():
-
-    return list_gemini_models()
-
-
-# =========================================================
-# TEST GEMINI
-# =========================================================
-
-@app.get(
-    "/ai/gemini-test"
-)
-def gemini_test():
-
-    return test_gemini()
-
-
-# =========================================================
-# TEST EMBEDDING GEMINI
-# =========================================================
-
-@app.get(
-    "/ai/embedding-test"
-)
-def embedding_test():
-
-    return test_embedding()
-
-
-# =========================================================
-# ROUTES KNOWLEDGE ENGINE
-# =========================================================
-
-@app.get(
-    "/knowledge/test"
-)
-def test_knowledge_engine():
-
-    """
-    Lance tous les connecteurs enregistrés.
-    """
-
-    run()
-
-    return {
-
-        "status":
-            "Knowledge Engine exécuté"
-
-    }
-
-
-# =========================================================
-# TEST FAO ODS
-# =========================================================
-
-@app.get(
-    "/knowledge/fao-ods-test"
-)
-def fao_ods_test():
-
-    return test_fao_ods()
-
-
-# =========================================================
-# TEST PARSER FAO AGRIS
-# =========================================================
-
-@app.get(
-    "/knowledge/fao-parser-test"
-)
-def fao_parser_test():
-
-    return test_fao_parser()
-
-
-# =========================================================
-# TÉLÉCHARGEMENT DATASETS FAO
-# =========================================================
-
-@app.get(
-    "/knowledge/fao-datasets-test"
-)
-def fao_datasets_test():
-
-    from pathlib import Path
-    import os
-
-    dataset_dir = Path(
-        "/app/knowledge/raw/fao/datasets"
-    )
-
-    xml_files = []
-
-    for root in [
-        Path("/app"),
-        Path("/tmp"),
-    ]:
-
-        if not root.exists():
-            continue
-
-        try:
-
-            for path in root.rglob(
-                "*.xml"
-            ):
-
-                xml_files.append(
-                    str(path)
-                )
-
-        except Exception as e:
-
-            print(
-                "[DEBUG] Erreur recherche XML :",
-                e
-            )
-
-    return {
-
-        "status":
-            "debug",
-
-        "cwd":
-            os.getcwd(),
-
-        "dataset_dir":
-            str(
-                dataset_dir
-            ),
-
-        "dataset_dir_exists":
-            dataset_dir.exists(),
-
-        "dataset_dir_is_dir":
-            dataset_dir.is_dir(),
-
-        "xml_files":
-            xml_files[:100],
-
-        "xml_count":
-            len(
-                xml_files
-            )
-
-    }
-# =========================================================
-# TEST PARSER DES DATASETS FAO
-# =========================================================
-
-@app.get(
-    "/knowledge/fao-datasets-test"
-)
-def fao_datasets_test():
-
-    from pathlib import Path
-
-    import os
-
-    print("=" * 60)
-    print("[DEBUG] ENVIRONNEMENT API")
-    print("=" * 60)
-
-    print(
-        "[DEBUG] Current working directory :",
-        os.getcwd()
-    )
-
-    print(
-        "[DEBUG] /app existe :",
-        Path("/app").exists()
-    )
-
-    print(
-        "[DEBUG] /app/knowledge existe :",
-        Path("/app/knowledge").exists()
-    )
-
-    print(
-        "[DEBUG] /app/knowledge/raw existe :",
-        Path("/app/knowledge/raw").exists()
-    )
-
-    print(
-        "[DEBUG] /app/knowledge/raw/fao existe :",
-        Path("/app/knowledge/raw/fao").exists()
-    )
-
-    print(
-        "[DEBUG] /app/knowledge/raw/fao/datasets existe :",
-        Path(
-            "/app/knowledge/raw/fao/datasets"
-        ).exists()
-    )
-
-    print("=" * 60)
-    print("[DEBUG] RECHERCHE DES FICHIERS XML")
-    print("=" * 60)
-
-    xml_files = []
-
-    search_roots = [
-
-        Path("/app"),
-
-        Path("/tmp"),
-
-    ]
-
-    for root in search_roots:
-
-        if not root.exists():
-
-            continue
-
-        try:
-
-            for path in root.rglob(
-                "*.xml"
-            ):
-
-                print(
-                    "[DEBUG] XML trouvé :",
-                    path
-                )
-
-                xml_files.append(
-                    str(path)
-                )
-
-        except Exception as e:
-
-            print(
-                "[DEBUG] Erreur recherche dans",
-                root,
-                ":",
-                e
-            )
-
-    return {
-
-        "status":
-            "success",
-
-        "cwd":
-            os.getcwd(),
-
-        "app_exists":
-            Path(
-                "/app"
-            ).exists(),
-
-        "knowledge_exists":
-            Path(
-                "/app/knowledge"
-            ).exists(),
-
-        "raw_exists":
-            Path(
-                "/app/knowledge/raw"
-            ).exists(),
-
-        "fao_exists":
-            Path(
-                "/app/knowledge/raw/fao"
-            ).exists(),
-
-        "datasets_exists":
-            Path(
-                "/app/knowledge/raw/fao/datasets"
-            ).exists(),
-
-        "xml_files":
-            xml_files[:100],
-
-        "xml_count":
-            len(
-                xml_files
-            )
-
-    }
-
-
-# =========================================================
-# ROUTE RACINE
-# =========================================================
-
-@app.get("/")
-def root():
-
-    return {
-
-        "status":
-            "online",
-
-        "message":
-            "API SikaGlé fonctionnelle"
-
-    }
-
-
-# =========================================================
-# STATUT BASE DE DONNÉES
-# =========================================================
-
-@app.get(
-    "/db-status"
-)
-def db_status():
-
-    if not supabase:
-
-        return {
-
-            "database":
-                "disconnected",
-
-            "reason":
-                "Variables Supabase manquantes"
-
-        }
-
-
-    try:
-
-        response = (
-
-            supabase
-
-            .table(
-                "users"
-            )
-
-            .select(
-                "count",
-                count="exact"
-            )
-
-            .execute()
-
-        )
-
-
-        return {
-
-            "database":
-                "connected",
-
-            "status":
-                "ok",
-
-            "users_count":
-                response.count
-
-        }
-
-
-    except Exception as e:
-
-        return {
-
-            "database":
-                "error",
-
-            "details":
-                str(e)
-
+            "status": "error",
+            "message": str(e)
         }
 
 
@@ -1589,7 +817,6 @@ def verify_webhook(
         "hub.challenge"
     )
 
-
     if (
         mode == "subscribe"
         and token == VERIFY_TOKEN
@@ -1599,29 +826,15 @@ def verify_webhook(
             "WEBHOOK_VERIFIED"
         )
 
-
         return Response(
-
-            content=
-                str(challenge),
-
-            media_type=
-                "text/plain",
-
-            status_code=
-                200
-
+            content=str(challenge),
+            media_type="text/plain",
+            status_code=200
         )
 
-
     return Response(
-
-        content=
-            "Verification failed",
-
-        status_code=
-            403
-
+        content="Verification failed",
+        status_code=403
     )
 
 
@@ -1639,12 +852,10 @@ async def receive_webhook(
 
     data = await request.json()
 
-
     print(
         "Notification WhatsApp reçue :",
         data
     )
-
 
     try:
 
@@ -1653,14 +864,12 @@ async def receive_webhook(
             []
         )
 
-
         for entry in entries:
 
             changes = entry.get(
                 "changes",
                 []
             )
-
 
             for change in changes:
 
@@ -1669,18 +878,15 @@ async def receive_webhook(
                     {}
                 )
 
-
                 messages = value.get(
                     "messages",
                     []
                 )
 
-
                 contacts = value.get(
                     "contacts",
                     []
                 )
-
 
                 # =================================================
                 # VÉRIFIER MESSAGE ET SUPABASE
@@ -1693,47 +899,33 @@ async def receive_webhook(
 
                     continue
 
-
                 msg = messages[0]
-
 
                 sender_phone = msg.get(
                     "from"
                 )
 
-
                 msg_id = msg.get(
                     "id"
                 )
-
 
                 msg_type = msg.get(
                     "type",
                     "text"
                 )
 
-
                 sender_name = (
-
                     contacts[0]
-
                     .get(
                         "profile",
                         {}
                     )
-
                     .get(
                         "name"
                     )
-
                     if contacts
-
-                    else
-
-                    "Inconnu"
-
+                    else "Inconnu"
                 )
-
 
                 # =================================================
                 # EXTRACTION DU CONTENU
@@ -1741,61 +933,42 @@ async def receive_webhook(
 
                 content = ""
 
-
                 if msg_type == "text":
 
                     content = (
-
                         msg
-
                         .get(
                             "text",
                             {}
                         )
-
                         .get(
                             "body",
                             ""
                         )
-
                     )
 
-
                 elif msg_type in [
-
                     "image",
-
                     "audio",
-
                     "voice",
-
                     "document"
-
                 ]:
 
                     content = (
-
                         f"[{msg_type.upper()}] "
-                        f"ID: "
-
+                        "ID: "
                         + str(
-
                             msg
-
                             .get(
                                 msg_type,
                                 {}
                             )
-
                             .get(
                                 "id",
                                 ""
                             )
-
                         )
-
                     )
-
 
                 # =================================================
                 # DATE DU JOUR
@@ -1803,49 +976,29 @@ async def receive_webhook(
 
                 today_date = date.today()
 
-
                 today_str = (
-
-                    today_date
-
-                    .isoformat()
-
+                    today_date.isoformat()
                 )
-
 
                 # =================================================
                 # RECHERCHE UTILISATEUR
                 # =================================================
 
                 user_res = (
-
                     supabase
-
-                    .table(
-                        "users"
-                    )
-
+                    .table("users")
                     .select(
-
                         "id, "
                         "credits, "
                         "last_active_date, "
                         "created_at"
-
                     )
-
                     .eq(
-
                         "phone_number",
-
                         sender_phone
-
                     )
-
                     .execute()
-
                 )
-
 
                 # =================================================
                 # UTILISATEUR EXISTANT
@@ -1854,124 +1007,72 @@ async def receive_webhook(
                 if user_res.data:
 
                     user = (
-
                         user_res.data[0]
-
                     )
-
 
                     user_id = (
-
                         user["id"]
-
                     )
 
-
                     user_credits = (
-
                         user.get(
                             "credits"
                         )
-
                     )
 
-
                     last_active = (
-
                         user.get(
                             "last_active_date"
                         )
-
                     )
 
-
-                    # ---------------------------------------------
-                    # CALCUL ANCIENNETÉ
-                    # ---------------------------------------------
-
                     created_at_str = (
-
                         user.get(
                             "created_at"
                         )
-
                     )
-
 
                     if created_at_str:
 
                         created_at_dt = (
-
                             datetime
-
                             .fromisoformat(
-
                                 created_at_str
-
                                 .replace(
                                     "Z",
                                     "+00:00"
                                 )
-
                             )
-
                             .date()
-
                         )
 
-
                         days_old = (
-
                             today_date
-
                             - created_at_dt
-
                         ).days
-
 
                     else:
 
                         days_old = 0
 
-
-                    # ---------------------------------------------
-                    # LIMITE QUOTIDIENNE
-                    # ---------------------------------------------
-
                     daily_limit = (
-
                         TRIAL_DAILY_LIMIT
-
-                        if days_old
-                        <= TRIAL_PERIOD_DAYS
-
-                        else
-
-                        REGULAR_DAILY_LIMIT
-
+                        if days_old <= TRIAL_PERIOD_DAYS
+                        else REGULAR_DAILY_LIMIT
                     )
-
 
                     # ---------------------------------------------
                     # RESET QUOTIDIEN
                     # ---------------------------------------------
 
                     if (
-
-                        last_active
-                        != today_str
-
-                        or user_credits
-                        is None
-
+                        last_active != today_str
+                        or user_credits is None
                     ):
 
                         user_credits = (
-
                             daily_limit
-
                         )
-
 
                 # =================================================
                 # NOUVEL UTILISATEUR
@@ -1981,24 +1082,14 @@ async def receive_webhook(
 
                     days_old = 0
 
-
                     daily_limit = (
-
                         TRIAL_DAILY_LIMIT
-
                     )
 
-
                     new_user = (
-
                         supabase
-
-                        .table(
-                            "users"
-                        )
-
+                        .table("users")
                         .insert({
-
                             "phone_number":
                                 sender_phone,
 
@@ -2010,29 +1101,17 @@ async def receive_webhook(
 
                             "last_active_date":
                                 today_str
-
                         })
-
                         .execute()
-
                     )
-
 
                     user_id = (
-
-                        new_user
-
-                        .data[0]["id"]
-
+                        new_user.data[0]["id"]
                     )
-
 
                     user_credits = (
-
                         daily_limit
-
                     )
-
 
                 # =================================================
                 # VÉRIFICATION DU QUOTA
@@ -2041,24 +1120,18 @@ async def receive_webhook(
                 if user_credits <= 0:
 
                     print(
-
                         f"⚠️ Utilisateur "
                         f"{user_id} "
-                        f"a épuisé ses crédits "
-                        f"du jour."
-
+                        "a épuisé ses crédits "
+                        "du jour."
                     )
 
-
                     if (
-
                         days_old
                         <= TRIAL_PERIOD_DAYS
-
                     ):
 
                         alert_msg = (
-
                             "⚠️ *Quota quotidien atteint*\n\n"
 
                             f"Vous avez utilisé vos "
@@ -2069,14 +1142,11 @@ async def receive_webhook(
                             "👉 Vos crédits seront "
                             "réinitialisés demain matin. "
                             "À demain sur SikaGlé !"
-
                         )
-
 
                     else:
 
                         alert_msg = (
-
                             "⚠️ *Limite quotidienne atteinte*\n\n"
 
                             f"Vous avez atteint votre "
@@ -2087,75 +1157,48 @@ async def receive_webhook(
                             "👉 Pour un accès illimité "
                             "et continuer sans interruption, "
                             "abonnez-vous à SikaGlé !"
-
                         )
 
-
                     send_whatsapp_message(
-
                         sender_phone,
-
                         alert_msg
-
                     )
 
-
                     continue
-
 
                 # =================================================
                 # DÉCRÉMENTER LES CRÉDITS
                 # =================================================
 
                 remaining_credits = (
-
                     user_credits - 1
-
                 )
 
-
                 (
-
                     supabase
-
-                    .table(
-                        "users"
-                    )
-
+                    .table("users")
                     .update({
-
                         "credits":
                             remaining_credits,
 
                         "last_active_date":
                             today_str
-
                     })
-
                     .eq(
                         "id",
                         user_id
                     )
-
                     .execute()
-
                 )
-
 
                 # =================================================
                 # ENREGISTRER LE MESSAGE
                 # =================================================
 
                 (
-
                     supabase
-
-                    .table(
-                        "messages"
-                    )
-
+                    .table("messages")
                     .insert({
-
                         "user_id":
                             user_id,
 
@@ -2167,42 +1210,26 @@ async def receive_webhook(
 
                         "content":
                             content
-
                     })
-
                     .execute()
-
                 )
-
 
                 print(
-
-                    f"✅ Message enregistré. "
-
+                    "✅ Message enregistré. "
                     f"Crédits restants pour "
                     f"l'utilisateur {user_id} : "
-
                     f"{remaining_credits}/"
                     f"{daily_limit}"
-
                 )
-
 
     except Exception as e:
 
         print(
-
             "❌ Erreur lors du traitement "
             "du message :",
-
             str(e)
-
         )
 
-
     return {
-
-        "status":
-            "success"
-
+        "status": "success"
     }
