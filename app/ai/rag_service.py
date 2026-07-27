@@ -51,7 +51,7 @@ class RAGService:
         )
 
         print(
-            "✅ Connexion Supabase initialisée."
+            "[RAG] Connexion Supabase initialisée."
         )
 
         # =====================================================
@@ -71,19 +71,14 @@ class RAGService:
     # =========================================================
 
     def search_documents(
-
         self,
-
         query: str,
-
-        match_threshold: float = 0.3,
-
+        match_threshold: float = 0.20,
         match_count: int = 5
-
     ):
 
         # =====================================================
-        # VALIDATION
+        # 1. VALIDATION
         # =====================================================
 
         if not query or not query.strip():
@@ -92,43 +87,59 @@ class RAGService:
                 "La question de recherche est vide."
             )
 
+        query = query.strip()
+
+        print("=" * 60)
+
         print(
-            f"[RAG] Recherche : {query}"
+            "[RAG] Question :",
+            query
         )
 
+        print("=" * 60)
+
+
         # =====================================================
-        # 1. GÉNÉRATION EMBEDDING DE LA REQUÊTE
+        # 2. EMBEDDING DE LA QUESTION
         # =====================================================
 
         print(
-            "[RAG] Génération de l'embedding "
-            "de la requête..."
+            "[RAG] Génération embedding "
+            "de la question..."
         )
 
         query_embedding = (
-
             self.embedding_service
-
             .generate_query_embedding(
-
                 query
+            )
+        )
 
+
+        if not query_embedding:
+
+            raise RuntimeError(
+                "Impossible de générer "
+                "l'embedding de la question."
             )
 
-        )
 
         print(
-            "[RAG] Embedding généré."
+            "[RAG] Embedding généré :",
+            len(query_embedding),
+            "dimensions"
         )
 
+
         # =====================================================
-        # 2. RECHERCHE VECTORIELLE SUPABASE
+        # 3. RECHERCHE VECTORIELLE SUPABASE
         # =====================================================
 
         print(
             "[RAG] Recherche vectorielle "
-            "dans documents_rag..."
+            "dans Supabase..."
         )
+
 
         response = (
 
@@ -157,27 +168,44 @@ class RAGService:
 
         )
 
+
         # =====================================================
-        # 3. VÉRIFIER LES RÉSULTATS
+        # 4. RÉSULTATS
         # =====================================================
 
-        if not response.data:
-
-            print(
-                "[RAG] Aucun document trouvé."
-            )
-
-            return []
-
-        print(
-
-            f"[RAG] "
-            f"{len(response.data)} "
-            f"document(s) trouvé(s)."
-
+        documents = (
+            response.data
+            or []
         )
 
-        return response.data
+
+        print(
+            "[RAG] Documents trouvés :",
+            len(documents)
+        )
+
+
+        for index, document in enumerate(
+            documents,
+            start=1
+        ):
+
+            print(
+                f"[RAG] Résultat {index} :",
+                document.get(
+                    "titre"
+                )
+            )
+
+            print(
+                "[RAG] Similarité :",
+                document.get(
+                    "similarity"
+                )
+            )
+
+
+        return documents
 
 
 # =========================================================
@@ -189,107 +217,110 @@ def test_rag():
     try:
 
         # =====================================================
-        # INITIALISER LE SERVICE
+        # 1. INITIALISER LE SERVICE
         # =====================================================
 
-        rag = RAGService()
+        rag = (
+            RAGService()
+        )
+
 
         # =====================================================
-        # QUESTION DE TEST
+        # 2. QUESTION DE TEST
+        #
+        # Cette question correspond volontairement
+        # aux documents FAO que nous venons d'ingérer.
         # =====================================================
 
         question = (
-
-            "Comment cultiver "
-            "le maïs au Bénin ?"
-
+            "Quel est l'effet de la matière organique "
+            "et de la fertilisation sur la fertilité "
+            "des sols ?"
         )
 
+
         # =====================================================
-        # RECHERCHE
+        # 3. RECHERCHE
         # =====================================================
 
         documents = (
-
             rag.search_documents(
 
                 query=question,
 
-                match_threshold=0.3,
+                # Seuil volontairement assez bas
+                # pour notre premier test.
+                match_threshold=0.20,
 
                 match_count=5
 
             )
-
         )
 
+
         # =====================================================
-        # FORMATER LES RÉSULTATS
+        # 4. FORMATER LES RÉSULTATS
         # =====================================================
 
         results = []
 
+
         for document in documents:
 
             content = (
-
                 document.get(
-                    "content",
-                    ""
+                    "content"
                 )
-
                 or
-
                 ""
-
             )
+
 
             results.append({
 
                 "id":
-
                     document.get(
                         "id"
                     ),
 
                 "titre":
-
                     document.get(
                         "titre"
                     ),
 
                 "organisme":
-
                     document.get(
                         "organisme"
                     ),
 
                 "culture":
-
                     document.get(
                         "culture"
                     ),
 
                 "zone_geographique":
-
                     document.get(
                         "zone_geographique"
                     ),
 
                 "similarity":
-
                     document.get(
                         "similarity"
                     ),
 
-                "content_preview":
+                "source_path":
+                    document.get(
+                        "source_path"
+                    ),
 
-                    content[:500]
+                "content_preview":
+                    content[:1000]
 
             })
 
+
         # =====================================================
-        # RÉSULTAT FINAL
+        # 5. RÉSULTAT FINAL
         # =====================================================
 
         return {
@@ -310,11 +341,14 @@ def test_rag():
 
         }
 
+
     except Exception as e:
 
         print(
-            f"[RAG] Erreur : {e}"
+            "[RAG] Erreur :",
+            e
         )
+
 
         return {
 
@@ -322,6 +356,8 @@ def test_rag():
                 "error",
 
             "message":
-                str(e)
+                str(
+                    e
+                )
 
         }
