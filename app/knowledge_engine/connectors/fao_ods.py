@@ -1,7 +1,4 @@
 import requests
-from pathlib import Path
-
-from app.knowledge_engine.config import config
 
 
 class FAOODSDownloader:
@@ -10,46 +7,34 @@ class FAOODSDownloader:
 
         self.source_name = "fao_agris_ods"
 
-        self.download_dir = (
-            config.raw_dir
-            / "fao"
-            / "ods"
-        )
-
-        self.download_dir.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
         self.download_url = (
             "https://agris.fao.org/ods/AGRIS.ODS.xml"
-        )
-
-        self.file_path = (
-            self.download_dir
-            / "AGRIS.ODS.xml"
         )
 
         self.headers = {
             "User-Agent": (
                 "Mozilla/5.0 "
                 "(compatible; "
-                "SikaGle-KnowledgeEngine/1.0)"
+                "SikaGle-KnowledgeEngine/2.0)"
             )
         }
+
+
+    # =========================================================
+    # TÉLÉCHARGER AGRIS ODS EN MÉMOIRE
+    # =========================================================
 
     def download(self):
 
         print(
             "[FAO ODS] Téléchargement "
-            "du fichier AGRIS.ODS.xml..."
+            "AGRIS.ODS.xml en mémoire..."
         )
 
         response = requests.get(
             self.download_url,
             headers=self.headers,
-            timeout=600,
-            stream=True
+            timeout=120
         )
 
         print(
@@ -59,89 +44,58 @@ class FAOODSDownloader:
 
         response.raise_for_status()
 
-        total_size = 0
-
-        with open(
-            self.file_path,
-            "wb"
-        ) as file:
-
-            for chunk in response.iter_content(
-                chunk_size=1024 * 1024
-            ):
-
-                if chunk:
-
-                    file.write(
-                        chunk
-                    )
-
-                    total_size += len(
-                        chunk
-                    )
+        content = response.content
 
         print(
             "[FAO ODS] Téléchargement terminé."
         )
 
         print(
-            "[FAO ODS] Taille du fichier :",
-            total_size,
+            "[FAO ODS] Taille :",
+            len(content),
             "octets"
         )
 
-        print(
-            "[FAO ODS] Fichier enregistré :",
-            self.file_path
-        )
+        return {
+            "filename": "AGRIS.ODS.xml",
+            "url": self.download_url,
+            "content": content
+        }
 
-        return self.file_path
 
+# =============================================================
+# TEST
+# =============================================================
 
 def test_fao_ods():
 
     print("=" * 50)
 
     print(
-        "SikaGlé - Test téléchargement "
-        "FAO AGRIS ODS"
+        "SikaGlé - Test FAO AGRIS ODS en mémoire"
     )
 
     print("=" * 50)
 
-    downloader = FAOODSDownloader()
-
     try:
 
-        file_path = downloader.download()
+        downloader = FAOODSDownloader()
 
-        if file_path and file_path.exists():
-
-            print(
-                "✅ Fichier AGRIS ODS téléchargé :",
-                file_path
-            )
-
-            return {
-                "status": "success",
-                "file": str(
-                    file_path
-                )
-            }
-
-        print(
-            "⚠️ Fichier non trouvé."
-        )
+        dataset = downloader.download()
 
         return {
-            "status": "warning"
+            "status": "success",
+            "filename": dataset["filename"],
+            "url": dataset["url"],
+            "size": len(
+                dataset["content"]
+            )
         }
 
     except Exception as e:
 
         print(
-            "❌ Erreur téléchargement "
-            "AGRIS ODS :",
+            "❌ Erreur téléchargement AGRIS ODS :",
             e
         )
 
