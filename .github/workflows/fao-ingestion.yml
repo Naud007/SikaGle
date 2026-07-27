@@ -1,0 +1,18 @@
+name: FAO AGRIS Ingestion
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+
+  workflow_dispatch:
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Call SikaGle FAO ingestion pipeline
+        run: |
+          curl --fail --show-error --silent \
+            --max-time 300 \
+            "https://sikagle-backend.onrender.com/knowledge/fao-dataset-pipeline-test?dataset_limit=1&rag_limit=3"
