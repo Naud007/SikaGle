@@ -49,14 +49,12 @@ def init_knowledge_directories():
 
     print(
         "[KNOWLEDGE] "
-        f"Dossier ODS : "
-        f"{FAO_ODS_DIR}"
+        f"Dossier ODS : {FAO_ODS_DIR}"
     )
 
     print(
         "[KNOWLEDGE] "
-        f"Dossier datasets : "
-        f"{FAO_DATASETS_DIR}"
+        f"Dossier datasets : {FAO_DATASETS_DIR}"
     )
 
 
@@ -67,22 +65,10 @@ def init_knowledge_directories():
 def run():
 
     print("=" * 50)
-
-    print(
-        "SikaGlé Knowledge Engine"
-    )
-
+    print("SikaGlé Knowledge Engine")
     print("=" * 50)
 
-    # -----------------------------------------------------
-    # INITIALISER LES DOSSIERS
-    # -----------------------------------------------------
-
     init_knowledge_directories()
-
-    # -----------------------------------------------------
-    # PARCOURIR LES CONNECTEURS ENREGISTRÉS
-    # -----------------------------------------------------
 
     for connector_class in registry.all():
 
@@ -90,64 +76,36 @@ def run():
 
         try:
 
-            # =================================================
-            # 1. DÉCOUVERTE
-            # =================================================
-
-            documents = (
-                connector.discover()
-            )
+            documents = connector.discover()
 
             print(
                 f"{connector.source_name} : "
                 f"{len(documents)} document(s) trouvé(s)"
             )
 
-
-            # =================================================
-            # 2. TÉLÉCHARGEMENT
-            # =================================================
-
             for document in documents:
 
                 print(
-                    "Document : "
-                    f"{document.title}"
+                    f"Document : {document.title}"
                 )
 
                 try:
 
-                    file_path = (
-                        connector.download(
-                            document
-                        )
+                    result = connector.download(
+                        document
                     )
 
-
-                    # -------------------------------------------------
-                    # VÉRIFICATION FICHIER
-                    # -------------------------------------------------
-
-                    if (
-                        file_path
-                        and
-                        Path(
-                            file_path
-                        ).exists()
-                    ):
+                    if result:
 
                         print(
-                            "✅ Téléchargé : "
-                            f"{file_path}"
+                            "✅ Téléchargement effectué."
                         )
 
                     else:
 
                         print(
-                            "⚠️ Aucun fichier "
-                            "téléchargé."
+                            "⚠️ Aucun résultat."
                         )
-
 
                 except Exception as e:
 
@@ -155,7 +113,6 @@ def run():
                         "❌ Erreur téléchargement : "
                         f"{e}"
                     )
-
 
         except Exception as e:
 
@@ -173,93 +130,74 @@ def run():
 def test_fao_ods():
 
     print("=" * 50)
-
-    print(
-        "SikaGlé - Test FAO AGRIS ODS"
-    )
-
+    print("SikaGlé - Test FAO AGRIS ODS")
     print("=" * 50)
 
     try:
-
-        # -------------------------------------------------
-        # INITIALISER LES DOSSIERS
-        # -------------------------------------------------
-
-        init_knowledge_directories()
-
-
-        # -------------------------------------------------
-        # IMPORT DOWNLOADER
-        # -------------------------------------------------
 
         from app.knowledge_engine.connectors.fao_ods import (
             FAOODSDownloader
         )
 
+        downloader = FAOODSDownloader()
+
+        result = downloader.download()
+
+        if not result:
+
+            return {
+                "status": "warning",
+                "message": "Aucune donnée AGRIS reçue"
+            }
 
         # -------------------------------------------------
-        # CRÉER LE DOWNLOADER
+        # ANCIEN FORMAT : PATH
         # -------------------------------------------------
 
-        downloader = (
-            FAOODSDownloader()
-        )
-
-
-        # -------------------------------------------------
-        # TÉLÉCHARGER LE CATALOGUE AGRIS
-        # -------------------------------------------------
-
-        file_path = (
-            downloader.download()
-        )
-
-
-        # -------------------------------------------------
-        # VÉRIFIER LE FICHIER
-        # -------------------------------------------------
-
-        if (
-            file_path
-            and
-            Path(
-                file_path
-            ).exists()
+        if isinstance(
+            result,
+            (str, Path)
         ):
 
-            print(
-                "✅ Catalogue AGRIS enregistré : "
-                f"{file_path}"
+            return {
+                "status": "success",
+                "mode": "file",
+                "file": str(result)
+            }
+
+        # -------------------------------------------------
+        # NOUVEAU FORMAT : MÉMOIRE
+        # -------------------------------------------------
+
+        if isinstance(
+            result,
+            dict
+        ):
+
+            content = result.get(
+                "content",
+                b""
             )
 
             return {
-
-                "status":
-                    "success",
-
-                "file":
-                    str(
-                        file_path
-                    )
-
+                "status": "success",
+                "mode": "memory",
+                "filename": result.get(
+                    "filename"
+                ),
+                "url": result.get(
+                    "url"
+                ),
+                "size": len(content)
             }
 
-
-        print(
-            "⚠️ Aucun fichier AGRIS reçu."
-        )
-
         return {
-
-            "status":
-                "warning",
-
-            "message":
-                "Aucun fichier AGRIS reçu"
-
+            "status": "error",
+            "message": (
+                "Format retourné par "
+                "FAOODSDownloader non reconnu."
+            )
         }
-
 
     except Exception as e:
 
@@ -269,15 +207,8 @@ def test_fao_ods():
         )
 
         return {
-
-            "status":
-                "error",
-
-            "message":
-                str(
-                    e
-                )
-
+            "status": "error",
+            "message": str(e)
         }
 
 
@@ -288,25 +219,10 @@ def test_fao_ods():
 def test_fao_parser():
 
     print("=" * 50)
-
-    print(
-        "SikaGlé - Test Parser FAO AGRIS"
-    )
-
+    print("SikaGlé - Test Parser FAO AGRIS")
     print("=" * 50)
 
     try:
-
-        # -------------------------------------------------
-        # INITIALISATION
-        # -------------------------------------------------
-
-        init_knowledge_directories()
-
-
-        # -------------------------------------------------
-        # IMPORTS
-        # -------------------------------------------------
 
         from app.knowledge_engine.connectors.fao_ods import (
             FAOODSDownloader
@@ -316,118 +232,85 @@ def test_fao_parser():
             FAOODSParser
         )
 
+        downloader = FAOODSDownloader()
 
-        # -------------------------------------------------
-        # 1. TÉLÉCHARGER AGRIS ODS
-        # -------------------------------------------------
+        ods_result = downloader.download()
 
-        downloader = (
-            FAOODSDownloader()
-        )
-
-        xml_path = (
-            downloader.download()
-        )
-
-
-        # -------------------------------------------------
-        # VÉRIFIER LE FICHIER
-        # -------------------------------------------------
-
-        if (
-            not xml_path
-            or
-            not Path(
-                xml_path
-            ).exists()
-        ):
-
-            print(
-                "❌ Téléchargement AGRIS impossible."
-            )
+        if not ods_result:
 
             return {
-
-                "status":
-                    "error",
-
-                "message":
-                    "Téléchargement AGRIS impossible"
-
+                "status": "error",
+                "message": "Téléchargement AGRIS impossible"
             }
 
-
         # -------------------------------------------------
-        # 2. PARSER AGRIS ODS
-        # -------------------------------------------------
-
-        parser = (
-            FAOODSParser(
-                xml_path
-            )
-        )
-
-        documents = (
-            parser.parse()
-        )
-
-
-        print("=" * 50)
-
-        print(
-            "Résultat du parsing : "
-            f"{len(documents)} document(s)"
-        )
-
-        print("=" * 50)
-
-
-        # -------------------------------------------------
-        # 3. AFFICHER LES 10 PREMIERS DATASETS
+        # FORMAT FICHIER
         # -------------------------------------------------
 
-        for index, document in enumerate(
-            documents[:10],
-            start=1
+        if isinstance(
+            ods_result,
+            (str, Path)
         ):
 
-            print(
-                f"\nDocument {index}"
+            parser = FAOODSParser(
+                ods_result
             )
 
-            print(
-                "Titre :",
-                document.title
+            documents = parser.parse()
+
+        # -------------------------------------------------
+        # FORMAT MÉMOIRE
+        # -------------------------------------------------
+
+        elif isinstance(
+            ods_result,
+            dict
+        ):
+
+            content = ods_result.get(
+                "content"
             )
 
-            print(
-                "URL :",
-                document.url
-            )
+            if not content:
 
-            if hasattr(
-                document,
-                "description"
-            ):
+                return {
+                    "status": "error",
+                    "message": (
+                        "Le catalogue AGRIS "
+                        "ne contient aucune donnée XML."
+                    )
+                }
 
-                print(
-                    "Description :",
-                    document.description
+            # Le parser ODS actuel peut encore
+            # nécessiter un fichier.
+            # Cette branche sera adaptée séparément.
+
+            return {
+                "status": "warning",
+                "message": (
+                    "Catalogue AGRIS reçu en mémoire. "
+                    "Le parser ODS doit être adapté "
+                    "au mode mémoire."
+                ),
+                "filename": ods_result.get(
+                    "filename"
+                ),
+                "size": len(content)
+            }
+
+        else:
+
+            return {
+                "status": "error",
+                "message": (
+                    "Format AGRIS ODS non reconnu."
                 )
-
+            }
 
         return {
-
-            "status":
-                "success",
-
-            "count":
-                len(
-                    documents
-                )
-
+            "status": "success",
+            "count": len(documents)
         }
-
 
     except Exception as e:
 
@@ -437,15 +320,8 @@ def test_fao_parser():
         )
 
         return {
-
-            "status":
-                "error",
-
-            "message":
-                str(
-                    e
-                )
-
+            "status": "error",
+            "message": str(e)
         }
 
 
@@ -458,119 +334,108 @@ def download_fao_datasets(
 ):
 
     print("=" * 50)
-
     print(
         "SikaGlé - Téléchargement des datasets FAO"
     )
-
     print("=" * 50)
-
 
     try:
 
         # =================================================
-        # INITIALISATION
-        # =================================================
-
-        init_knowledge_directories()
-
-
-        # =================================================
-        # 1. DOWNLOADER AGRIS ODS
+        # 1. TÉLÉCHARGER LE CATALOGUE AGRIS
         # =================================================
 
         from app.knowledge_engine.connectors.fao_ods import (
             FAOODSDownloader
         )
 
-        ods_downloader = (
-            FAOODSDownloader()
-        )
+        ods_downloader = FAOODSDownloader()
 
+        ods_result = ods_downloader.download()
 
-        # =================================================
-        # 2. TÉLÉCHARGER LE CATALOGUE AGRIS
-        # =================================================
-
-        ods_path = (
-            ods_downloader.download()
-        )
-
-
-        if (
-            not ods_path
-            or
-            not Path(
-                ods_path
-            ).exists()
-        ):
-
-            print(
-                "❌ Impossible de télécharger "
-                "AGRIS ODS."
-            )
+        if not ods_result:
 
             return {
-
-                "status":
-                    "error",
-
-                "message":
-                    "AGRIS ODS indisponible"
-
+                "status": "error",
+                "message": "AGRIS ODS indisponible"
             }
 
-
-        print(
-            "✅ Catalogue AGRIS disponible : "
-            f"{ods_path}"
-        )
-
-
         # =================================================
-        # 3. PARSER LE CATALOGUE AGRIS
+        # 2. PARSER LE CATALOGUE AGRIS
         # =================================================
 
         from app.knowledge_engine.parsers.fao_ods_parser import (
             FAOODSParser
         )
 
-        parser = (
-            FAOODSParser(
-                ods_path
+        # -------------------------------------------------
+        # FORMAT ACTUEL DU ODS : FICHIER
+        # -------------------------------------------------
+
+        if isinstance(
+            ods_result,
+            (str, Path)
+        ):
+
+            ods_parser = FAOODSParser(
+                ods_result
             )
-        )
 
-        documents = (
-            parser.parse()
-        )
+            documents = ods_parser.parse()
 
+        # -------------------------------------------------
+        # FORMAT FUTUR : MÉMOIRE
+        # -------------------------------------------------
+
+        elif isinstance(
+            ods_result,
+            dict
+        ):
+
+            ods_content = ods_result.get(
+                "content"
+            )
+
+            if not ods_content:
+
+                return {
+                    "status": "error",
+                    "message": (
+                        "Le catalogue AGRIS "
+                        "est vide."
+                    )
+                }
+
+            return {
+                "status": "error",
+                "message": (
+                    "Le catalogue AGRIS est maintenant "
+                    "en mémoire mais FAOODSParser "
+                    "n'est pas encore adapté."
+                )
+            }
+
+        else:
+
+            return {
+                "status": "error",
+                "message": (
+                    "Format du catalogue AGRIS "
+                    "non reconnu."
+                )
+            }
 
         print(
             "[FAO DATASET] "
-            f"{len(documents)} dataset(s) "
-            "découvert(s)."
+            f"{len(documents)} dataset(s) découvert(s)."
         )
-
-
-        # =================================================
-        # 4. LIMITER LE NOMBRE
-        # =================================================
 
         documents_to_download = (
             documents[:limit]
         )
 
-
-        print(
-            "[FAO DATASET] "
-            f"{len(documents_to_download)} dataset(s) "
-            "sélectionné(s)."
-        )
-
-
         # =================================================
-        # 5. DOWNLOADER DATASETS
+        # 3. DOWNLOADER LES DATASETS
         # =================================================
 
         from app.knowledge_engine.connectors.fao_datasets import (
@@ -581,28 +446,19 @@ def download_fao_datasets(
             FAODatasetsDownloader()
         )
 
-
-        downloaded_files = []
-
+        datasets = []
 
         # =================================================
-        # 6. TÉLÉCHARGER CHAQUE DATASET
+        # 4. TÉLÉCHARGEMENT EN MÉMOIRE
         # =================================================
 
-        for document in (
-            documents_to_download
-        ):
+        for document in documents_to_download:
 
             try:
-
-                # -----------------------------------------
-                # URL
-                # -----------------------------------------
 
                 url = str(
                     document.url
                 ).strip()
-
 
                 if not url:
 
@@ -613,140 +469,114 @@ def download_fao_datasets(
 
                     continue
 
-
-                # -----------------------------------------
-                # NOM DU FICHIER
-                # -----------------------------------------
-
                 filename = (
                     url
                     .rstrip("/")
-                    .split("/")
-                    [-1]
+                    .split("/")[-1]
                 )
-
 
                 if not filename:
 
-                    filename = (
-                        "dataset.xml"
-                    )
+                    filename = "dataset.xml"
 
-
-                # -----------------------------------------
-                # TÉLÉCHARGEMENT
-                # -----------------------------------------
-
-                output_path = (
+                dataset = (
                     dataset_downloader.download(
                         url=url,
                         filename=filename
                     )
                 )
 
-
-                # -----------------------------------------
-                # VÉRIFICATION
-                # -----------------------------------------
-
-                if (
-                    output_path
-                    and
-                    Path(
-                        output_path
-                    ).exists()
+                if not isinstance(
+                    dataset,
+                    dict
                 ):
 
-                    downloaded_files.append(
-                        Path(
-                            output_path
-                        )
-                    )
-
                     print(
-                        "✅ Dataset disponible : "
-                        f"{output_path}"
-                    )
-
-                else:
-
-                    print(
-                        "⚠️ Dataset non enregistré : "
+                        "⚠️ Format dataset incorrect : "
                         f"{filename}"
                     )
 
+                    continue
+
+                content = dataset.get(
+                    "content"
+                )
+
+                if not content:
+
+                    print(
+                        "⚠️ Dataset vide : "
+                        f"{filename}"
+                    )
+
+                    continue
+
+                datasets.append(
+                    dataset
+                )
+
+                print(
+                    "✅ Dataset chargé en mémoire : "
+                    f"{filename} "
+                    f"({len(content)} octets)"
+                )
 
             except Exception as e:
 
                 print(
-                    "❌ Erreur téléchargement "
-                    f"{document.url} : "
+                    "❌ Erreur dataset : "
                     f"{e}"
                 )
 
-
         # =================================================
-        # 7. RÉSULTAT
+        # 5. RÉSULTAT
         # =================================================
-
-        print("=" * 50)
-
-        print(
-            "✅ Téléchargement terminé : "
-            f"{len(downloaded_files)} fichier(s)"
-        )
-
-        print("=" * 50)
-
 
         return {
+            "status": "success",
 
-            "status":
-                "success",
+            "count": len(
+                datasets
+            ),
 
-            "count":
-                len(
-                    downloaded_files
-                ),
+            "datasets": [
+                {
+                    "filename": dataset.get(
+                        "filename"
+                    ),
 
-            "files": [
+                    "url": dataset.get(
+                        "url"
+                    ),
 
-                str(
-                    path
-                )
+                    "size": len(
+                        dataset.get(
+                            "content",
+                            b""
+                        )
+                    )
+                }
 
-                for path
-                in downloaded_files
-
+                for dataset in datasets
             ]
-
         }
-
 
     except Exception as e:
 
         print(
-            "❌ Erreur téléchargement "
-            f"datasets FAO : "
-            f"{e}"
+            "❌ Erreur téléchargement datasets FAO :",
+            e
         )
 
         return {
-
-            "status":
-                "error",
-
-            "message":
-                str(
-                    e
-                )
-
+            "status": "error",
+            "message": str(e)
         }
 
 
 # =========================================================
 # TEST PARSER DES DATASETS FAO
-# + SAUVEGARDE DOCUMENTS
+# MODE 100 % MÉMOIRE
 # =========================================================
 
 def test_fao_dataset_parser(
@@ -754,265 +584,230 @@ def test_fao_dataset_parser(
 ):
 
     print("=" * 50)
-
     print(
         "SikaGlé - Test Parser Datasets FAO"
     )
-
     print("=" * 50)
-
 
     try:
 
         # =================================================
-        # 1. INITIALISATION
+        # 1. CATALOGUE AGRIS
         # =================================================
 
-        init_knowledge_directories()
-
-
-        # =================================================
-        # 2. CHERCHER LES DATASETS LOCAUX
-        # =================================================
-
-        dataset_files = sorted(
-            FAO_DATASETS_DIR.glob(
-                "*.xml"
-            )
+        from app.knowledge_engine.connectors.fao_ods import (
+            FAOODSDownloader
         )
 
-
-        print(
-            "[FAO DATASET PARSER] "
-            f"{len(dataset_files)} fichier(s) XML "
-            "trouvé(s)."
+        from app.knowledge_engine.parsers.fao_ods_parser import (
+            FAOODSParser
         )
 
+        ods_downloader = FAOODSDownloader()
 
-        # =================================================
-        # 3. TÉLÉCHARGEMENT AUTOMATIQUE SI NÉCESSAIRE
-        # =================================================
+        ods_result = ods_downloader.download()
 
-        if not dataset_files:
-
-            print(
-                "⚠️ Aucun dataset FAO local trouvé."
-            )
-
-            print(
-                "➡️ Téléchargement automatique "
-                "des datasets..."
-            )
-
-
-            result = (
-                download_fao_datasets(
-                    limit=limit
-                )
-            )
-
-
-            if (
-                result.get(
-                    "status"
-                )
-                != "success"
-            ):
-
-                return result
-
-
-            dataset_files = sorted(
-                FAO_DATASETS_DIR.glob(
-                    "*.xml"
-                )
-            )
-
-
-        # =================================================
-        # 4. VÉRIFICATION FINALE
-        # =================================================
-
-        if not dataset_files:
+        if not ods_result:
 
             return {
-
-                "status":
-                    "error",
-
-                "message":
-                    "Aucun dataset XML disponible "
-                    "après téléchargement."
-
+                "status": "error",
+                "message": "AGRIS ODS indisponible"
             }
 
+        # =================================================
+        # 2. PARSER LE CATALOGUE
+        # =================================================
 
-        print(
-            "[FAO DATASET PARSER] "
-            f"{len(dataset_files)} dataset(s) "
-            "disponible(s) pour parsing."
+        if isinstance(
+            ods_result,
+            (str, Path)
+        ):
+
+            ods_parser = FAOODSParser(
+                ods_result
+            )
+
+            dataset_documents = (
+                ods_parser.parse()
+            )
+
+        elif isinstance(
+            ods_result,
+            dict
+        ):
+
+            return {
+                "status": "error",
+                "message": (
+                    "FAOODSParser doit encore être "
+                    "adapté au mode mémoire."
+                )
+            }
+
+        else:
+
+            return {
+                "status": "error",
+                "message": (
+                    "Format catalogue AGRIS non reconnu."
+                )
+            }
+
+        if not dataset_documents:
+
+            return {
+                "status": "warning",
+                "message": (
+                    "Aucun dataset trouvé "
+                    "dans le catalogue AGRIS."
+                )
+            }
+
+        # =================================================
+        # 3. DOWNLOADER DATASETS
+        # =================================================
+
+        from app.knowledge_engine.connectors.fao_datasets import (
+            FAODatasetsDownloader
         )
-
-
-        # =================================================
-        # 5. IMPORT PARSER
-        # =================================================
 
         from app.knowledge_engine.parsers.fao_dataset_parser import (
             FAODatasetParser
         )
 
+        dataset_downloader = (
+            FAODatasetsDownloader()
+        )
 
-        parser = (
+        dataset_parser = (
             FAODatasetParser()
         )
 
-
-        parsed_count = 0
-
         all_documents = []
 
+        datasets_processed = 0
 
         # =================================================
-        # 6. PARSER LES DATASETS
+        # 4. TRAITEMENT DIRECT EN MÉMOIRE
         # =================================================
 
-        for dataset_file in (
-            dataset_files[:limit]
+        for dataset_document in (
+            dataset_documents[:limit]
         ):
-
-            print("=" * 50)
-
-            print(
-                "[FAO DATASET PARSER] "
-                f"Fichier : "
-                f"{dataset_file.name}"
-            )
-
 
             try:
 
-                # -----------------------------------------
-                # PARSER LE FICHIER XML
-                # -----------------------------------------
+                url = str(
+                    dataset_document.url
+                ).strip()
 
-                documents = (
-                    parser.parse(
-                        dataset_file
+                if not url:
+
+                    continue
+
+                filename = (
+                    url
+                    .rstrip("/")
+                    .split("/")[-1]
+                )
+
+                if not filename:
+
+                    filename = "dataset.xml"
+
+                print(
+                    "[FAO PIPELINE] "
+                    f"Téléchargement : {filename}"
+                )
+
+                dataset = (
+                    dataset_downloader.download(
+                        url=url,
+                        filename=filename
                     )
                 )
 
+                if not isinstance(
+                    dataset,
+                    dict
+                ):
+
+                    print(
+                        "⚠️ Dataset ignoré : "
+                        "format incorrect."
+                    )
+
+                    continue
+
+                xml_content = dataset.get(
+                    "content"
+                )
+
+                if not xml_content:
+
+                    print(
+                        "⚠️ Dataset vide : "
+                        f"{filename}"
+                    )
+
+                    continue
 
                 # -----------------------------------------
-                # AJOUTER LES DOCUMENTS
+                # PARSING DIRECT DES BYTES XML
                 # -----------------------------------------
+
+                documents = (
+                    dataset_parser.parse(
+                        xml_content=xml_content,
+                        filename=filename,
+                        source_url=url
+                    )
+                )
 
                 all_documents.extend(
                     documents
                 )
 
+                datasets_processed += 1
 
                 print(
                     "✅ "
                     f"{len(documents)} document(s) "
-                    "trouvé(s)"
+                    f"extrait(s) de {filename}"
                 )
-
-
-                parsed_count += (
-                    len(
-                        documents
-                    )
-                )
-
-
-                # -----------------------------------------
-                # AFFICHER LES 3 PREMIERS DOCUMENTS
-                # -----------------------------------------
-
-                for index, document in enumerate(
-                    documents[:3],
-                    start=1
-                ):
-
-                    print(
-                        f"\nDocument {index}"
-                    )
-
-                    print(
-                        "Titre :",
-                        document.title
-                    )
-
-                    print(
-                        "URL :",
-                        document.url
-                    )
-
 
             except Exception as e:
 
                 print(
-                    "❌ Erreur parsing "
-                    f"{dataset_file.name} : "
+                    "❌ Erreur traitement dataset : "
                     f"{e}"
                 )
 
-
         # =================================================
-        # 7. VÉRIFIER LE RÉSULTAT DU PARSING
+        # 5. VÉRIFICATION
         # =================================================
 
         if not all_documents:
 
-            print(
-                "⚠️ Aucun document n'a été extrait "
-                "des datasets FAO."
-            )
-
             return {
-
-                "status":
-                    "warning",
-
-                "datasets":
-                    len(
-                        dataset_files[:limit]
-                    ),
-
-                "documents_parsed":
-                    0,
-
-                "documents_added":
-                    0,
-
-                "documents_total":
-                    0
-
+                "status": "warning",
+                "datasets": datasets_processed,
+                "documents_parsed": 0,
+                "documents_added": 0,
+                "documents_total": 0
             }
 
-
         # =================================================
-        # 8. SAUVEGARDE DANS DOCUMENT STORE
+        # 6. DOCUMENT STORE
         # =================================================
-
-        print("=" * 50)
-
-        print(
-            "[DOCUMENT STORE] "
-            "Sauvegarde des documents FAO..."
-        )
-
 
         from app.knowledge_engine.storage.document_store import (
             DocumentStore
         )
 
-
         document_store = (
             DocumentStore()
         )
-
 
         store_result = (
             document_store.add_documents(
@@ -1020,90 +815,38 @@ def test_fao_dataset_parser(
             )
         )
 
-
-        print(
-            "[DOCUMENT STORE] "
-            f"{store_result['added']} "
-            "document(s) ajouté(s)."
-        )
-
-
-        print(
-            "[DOCUMENT STORE] "
-            f"{store_result['total']} "
-            "document(s) au total."
-        )
-
-
-        print(
-            "[DOCUMENT STORE] "
-            f"Fichier : "
-            f"{store_result['file']}"
-        )
-
-
         # =================================================
-        # 9. RÉSULTAT FINAL
+        # 7. RÉSULTAT
         # =================================================
-
-        print("=" * 50)
-
-        print(
-            "✅ Parsing terminé."
-        )
-
-
-        print(
-            "Documents analysés : "
-            f"{parsed_count}"
-        )
-
-
-        print(
-            "Documents ajoutés : "
-            f"{store_result['added']}"
-        )
-
-
-        print(
-            "Documents dans la base : "
-            f"{store_result['total']}"
-        )
-
-
-        print("=" * 50)
-
 
         return {
-
-            "status":
-                "success",
+            "status": "success",
 
             "datasets":
-                len(
-                    dataset_files[:limit]
-                ),
+                datasets_processed,
 
             "documents_parsed":
-                parsed_count,
+                len(
+                    all_documents
+                ),
 
             "documents_added":
-                store_result[
-                    "added"
-                ],
+                store_result.get(
+                    "added",
+                    0
+                ),
 
             "documents_total":
-                store_result[
-                    "total"
-                ],
+                store_result.get(
+                    "total",
+                    0
+                ),
 
             "storage_file":
-                store_result[
+                store_result.get(
                     "file"
-                ]
-
+                )
         }
-
 
     except Exception as e:
 
@@ -1112,17 +855,9 @@ def test_fao_dataset_parser(
             e
         )
 
-
         return {
-
-            "status":
-                "error",
-
-            "message":
-                str(
-                    e
-                )
-
+            "status": "error",
+            "message": str(e)
         }
 
 
