@@ -1,41 +1,21 @@
 import requests
-from pathlib import Path
-
-from app.knowledge_engine.config import config
 
 
 class FAODatasetsDownloader:
 
     def __init__(self):
 
-        # =====================================================
-        # DOSSIER DE STOCKAGE DES DATASETS FAO
-        # =====================================================
-
-        self.storage_dir = (
-            config.raw_dir
-            / "fao"
-            / "datasets"
-        )
-
-        # Créer automatiquement le dossier
-        # s'il n'existe pas
-
-        self.storage_dir.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        print(
-            "[FAO DATASET] "
-            f"Dossier de stockage : "
-            f"{self.storage_dir}"
-        )
+        self.headers = {
+            "User-Agent": (
+                "Mozilla/5.0 "
+                "(compatible; "
+                "SikaGle-KnowledgeEngine/1.0)"
+            )
+        }
 
 
     # =========================================================
-    # TÉLÉCHARGER UN DATASET FAO
-    # ET LE SAUVEGARDER SUR DISQUE
+    # TÉLÉCHARGER UN DATASET FAO EN MÉMOIRE
     # =========================================================
 
     def download(
@@ -44,52 +24,41 @@ class FAODatasetsDownloader:
         filename: str
     ):
 
+        # =====================================================
+        # VALIDATION
+        # =====================================================
+
+        if not url:
+
+            raise ValueError(
+                "URL du dataset manquante."
+            )
+
+        if not filename:
+
+            raise ValueError(
+                "Nom du dataset manquant."
+            )
+
+
+        url = str(
+            url
+        ).strip()
+
+        filename = str(
+            filename
+        ).strip()
+
+
         print(
             "[FAO DATASET] "
-            f"Téléchargement : "
-            f"{filename}"
+            f"Téléchargement : {filename}"
         )
 
         print(
             "[FAO DATASET] "
-            f"URL : "
-            f"{url}"
+            f"URL : {url}"
         )
-
-
-        # =====================================================
-        # CHEMIN LOCAL DU FICHIER
-        # =====================================================
-
-        file_path = (
-            self.storage_dir
-            / filename
-        )
-
-
-        # =====================================================
-        # ÉVITER DE RETÉLÉCHARGER UN FICHIER EXISTANT
-        # =====================================================
-
-        if file_path.exists():
-
-            file_size = (
-                file_path.stat().st_size
-            )
-
-            print(
-                "[FAO DATASET] "
-                f"Dataset déjà présent : "
-                f"{file_path}"
-            )
-
-            print(
-                "[FAO DATASET] "
-                f"Taille : "
-                f"{file_size} octets"
-            )
-
-            return file_path
 
 
         # =====================================================
@@ -100,64 +69,81 @@ class FAODatasetsDownloader:
 
             response = requests.get(
                 url,
+                headers=self.headers,
                 timeout=120
+            )
+
+            print(
+                "[FAO DATASET] "
+                f"Statut HTTP : "
+                f"{response.status_code}"
             )
 
             response.raise_for_status()
 
 
             # =================================================
-            # SAUVEGARDE SUR DISQUE
+            # CONTENU EN MÉMOIRE
             # =================================================
 
-            file_path.write_bytes(
+            content = (
                 response.content
             )
 
 
-            # =================================================
-            # VÉRIFICATION
-            # =================================================
-
-            if not file_path.exists():
+            if not content:
 
                 raise RuntimeError(
-                    "Le fichier dataset "
-                    "n'a pas été créé."
+                    "Le dataset téléchargé est vide."
                 )
-
-
-            file_size = (
-                file_path.stat().st_size
-            )
 
 
             print(
                 "[FAO DATASET] "
-                f"Dataset enregistré : "
-                f"{file_path}"
+                "Dataset téléchargé en mémoire : "
+                f"{filename}"
             )
 
             print(
                 "[FAO DATASET] "
                 f"Taille : "
-                f"{file_size} octets"
+                f"{len(content)} octets"
             )
 
 
             # =================================================
-            # RETOURNER LE CHEMIN LOCAL
+            # RETOUR STANDARDISÉ
             # =================================================
 
-            return file_path
+            return {
+
+                "filename":
+                    filename,
+
+                "url":
+                    url,
+
+                "content":
+                    content,
+
+                "content_type":
+                    response.headers.get(
+                        "Content-Type"
+                    ),
+
+                "size":
+                    len(
+                        content
+                    )
+
+            }
 
 
         except requests.RequestException as e:
 
             print(
                 "[FAO DATASET] "
-                "Erreur HTTP :",
-                e
+                f"Erreur HTTP : {e}"
             )
 
             raise
@@ -167,8 +153,7 @@ class FAODatasetsDownloader:
 
             print(
                 "[FAO DATASET] "
-                "Erreur sauvegarde :",
-                e
+                f"Erreur téléchargement : {e}"
             )
 
             raise
