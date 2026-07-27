@@ -203,7 +203,7 @@ def send_whatsapp_message(
         return False
 
 # =========================================================
-# DEBUG STRUCTURE XML AGRIS ODS
+# DEBUG RETOUR FAO ODS DOWNLOADER
 # =========================================================
 
 @app.get(
@@ -211,89 +211,86 @@ def send_whatsapp_message(
 )
 def fao_ods_structure():
 
-    import xml.etree.ElementTree as ET
-
     from app.knowledge_engine.connectors.fao_ods import (
         FAOODSDownloader
     )
 
     try:
 
-        # -------------------------------------------------
-        # 1. TÉLÉCHARGER AGRIS ODS
-        # -------------------------------------------------
-
         downloader = FAOODSDownloader()
 
-        xml_path = downloader.download()
+        result = downloader.download()
 
-        # -------------------------------------------------
-        # 2. PARSER LE XML BRUT
-        # -------------------------------------------------
+        # =================================================
+        # CAS 1 : DICTIONNAIRE
+        # =================================================
 
-        tree = ET.parse(
-            xml_path
-        )
+        if isinstance(result, dict):
 
-        root = tree.getroot()
+            content = result.get("content")
 
-        # -------------------------------------------------
-        # 3. RÉCUPÉRER LES PREMIERS ÉLÉMENTS
-        # -------------------------------------------------
+            return {
 
-        elements = []
+                "status":
+                    "success",
 
-        for index, element in enumerate(
-            root.iter()
-        ):
+                "returned_type":
+                    "dict",
 
-            elements.append({
+                "keys":
+                    list(result.keys()),
 
-                "index":
-                    index,
+                "filename":
+                    result.get("filename"),
 
-                "tag":
-                    element.tag,
+                "url":
+                    result.get("url"),
 
-                "text":
+                "has_content":
+                    content is not None,
+
+                "content_type":
                     (
-                        element.text.strip()[:300]
-                        if element.text
-                        and element.text.strip()
+                        type(content).__name__
+                        if content is not None
                         else None
                     ),
 
-                "attributes":
-                    element.attrib
+                "content_size":
+                    (
+                        len(content)
+                        if content is not None
+                        else 0
+                    ),
 
-            })
+                "content_preview":
+                    (
+                        content[:1000].decode(
+                            "utf-8",
+                            errors="replace"
+                        )
+                        if isinstance(content, bytes)
+                        else str(content)[:1000]
+                        if content is not None
+                        else None
+                    )
 
-            if index >= 40:
-                break
+            }
 
-        # -------------------------------------------------
-        # 4. RÉSULTAT
-        # -------------------------------------------------
+        # =================================================
+        # CAS 2 : CHEMIN / AUTRE VALEUR
+        # =================================================
 
         return {
 
             "status":
                 "success",
 
-            "xml_path":
-                str(xml_path),
+            "returned_type":
+                type(result).__name__,
 
-            "root_tag":
-                root.tag,
-
-            "root_attributes":
-                root.attrib,
-
-            "children_count":
-                len(list(root)),
-
-            "elements":
-                elements
+            "returned_value":
+                str(result)
 
         }
 
@@ -303,6 +300,9 @@ def fao_ods_structure():
 
             "status":
                 "error",
+
+            "error_type":
+                type(e).__name__,
 
             "message":
                 str(e)
