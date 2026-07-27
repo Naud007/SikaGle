@@ -3,10 +3,6 @@ import time
 
 from supabase import create_client, Client
 
-from app.knowledge_engine.storage.document_store import (
-    DocumentStore
-)
-
 from app.ai.embeddings import (
     GeminiEmbeddingService
 )
@@ -29,50 +25,65 @@ class RAGIngestion:
         )
 
         if not supabase_url:
-
             raise ValueError(
                 "SUPABASE_URL manquante."
             )
 
         if not supabase_key:
-
             raise ValueError(
                 "SUPABASE_KEY manquante."
             )
 
-        self.supabase: Client = (
-            create_client(
-                supabase_url,
-                supabase_key
-            )
+        self.supabase: Client = create_client(
+            supabase_url,
+            supabase_key
         )
-
-
-        # =====================================================
-        # DOCUMENT STORE
-        # =====================================================
-
-        self.document_store = (
-            DocumentStore()
-        )
-
 
         # =====================================================
         # SERVICE EMBEDDING GEMINI
         # =====================================================
 
         self.embedding_service = (
-
             GeminiEmbeddingService(
-
                 model="gemini-embedding-001",
-
                 output_dimensionality=1536
-
             )
-
         )
 
+    # =========================================================
+    # CONVERTIR UN DOCUMENT EN DICTIONNAIRE
+    # =========================================================
+
+    def normalize_document(
+        self,
+        document
+    ):
+
+        if isinstance(
+            document,
+            dict
+        ):
+            return document
+
+        # Pydantic v2
+        if hasattr(
+            document,
+            "model_dump"
+        ):
+            return document.model_dump(
+                mode="json"
+            )
+
+        # Pydantic v1
+        if hasattr(
+            document,
+            "dict"
+        ):
+            return document.dict()
+
+        raise ValueError(
+            "Format de document non supporté."
+        )
 
     # =========================================================
     # RÉCUPÉRER LES SOURCES DÉJÀ INGÉRÉES
@@ -85,82 +96,57 @@ class RAGIngestion:
         try:
 
             response = (
-
                 self.supabase
-
                 .table(
                     "documents_rag"
                 )
-
                 .select(
                     "source_path"
                 )
-
                 .execute()
-
             )
 
-
             existing_sources = set()
-
 
             for row in (
                 response.data
                 or []
             ):
 
-                source_path = (
-
-                    row.get(
-                        "source_path"
-                    )
-
+                source_path = row.get(
+                    "source_path"
                 )
-
 
                 if source_path:
 
                     existing_sources.add(
-
                         str(
                             source_path
                         ).strip()
-
                     )
 
-
             print(
-
                 "[RAG INGESTION] "
-
                 f"{len(existing_sources)} "
                 "source(s) déjà présente(s) "
                 "dans Supabase."
-
             )
 
-
             return existing_sources
-
 
         except Exception as e:
 
             print(
-
                 "[RAG INGESTION] "
-
                 "Erreur récupération "
-                "sources existantes :",
-
+                "des sources existantes :",
                 e
-
             )
 
             return set()
 
-
     # =========================================================
-    # EXTRAIRE LA SOURCE DU DOCUMENT
+    # EXTRAIRE LA SOURCE / URL
     # =========================================================
 
     def get_document_source(
@@ -168,40 +154,25 @@ class RAGIngestion:
         document
     ):
 
-        # -----------------------------------------------------
-        # URL DU PARSER
-        # -----------------------------------------------------
-
         url = document.get(
             "url"
         )
 
-
         if url:
-
             return str(
                 url
             ).strip()
-
-
-        # -----------------------------------------------------
-        # SOURCE_PATH
-        # -----------------------------------------------------
 
         source_path = document.get(
             "source_path"
         )
 
-
         if source_path:
-
             return str(
                 source_path
             ).strip()
 
-
         return None
-
 
     # =========================================================
     # EXTRAIRE LE TITRE
@@ -212,45 +183,28 @@ class RAGIngestion:
         document
     ):
 
-        # -----------------------------------------------------
-        # FORMAT PARSER FAO
-        # -----------------------------------------------------
-
         title = document.get(
             "title"
         )
 
-
         if title:
-
             return str(
                 title
             ).strip()
-
-
-        # -----------------------------------------------------
-        # FORMAT SUPABASE
-        # -----------------------------------------------------
 
         titre = document.get(
             "titre"
         )
 
-
         if titre:
-
             return str(
                 titre
             ).strip()
 
-
-        return (
-            "Document sans titre"
-        )
-
+        return "Document sans titre"
 
     # =========================================================
-    # EXTRAIRE LE CONTENU COMPLET
+    # EXTRAIRE LE CONTENU
     # =========================================================
 
     def get_document_content(
@@ -262,35 +216,24 @@ class RAGIngestion:
             "content"
         )
 
-
         if content:
-
             return str(
                 content
             ).strip()
-
-
-        # -----------------------------------------------------
-        # FALLBACK DESCRIPTION
-        # -----------------------------------------------------
 
         description = document.get(
             "description"
         )
 
-
         if description:
-
             return str(
                 description
             ).strip()
 
-
         return ""
 
-
     # =========================================================
-    # EXTRAIRE LA SOURCE / ORGANISME
+    # EXTRAIRE ORGANISME / SOURCE
     # =========================================================
 
     def get_document_source_name(
@@ -302,33 +245,24 @@ class RAGIngestion:
             "source"
         )
 
-
         if source:
-
             return str(
                 source
             ).strip()
-
 
         organisme = document.get(
             "organisme"
         )
 
-
         if organisme:
-
             return str(
                 organisme
             ).strip()
 
-
-        return (
-            "FAO AGRIS"
-        )
-
+        return "FAO AGRIS"
 
     # =========================================================
-    # CONSTRUIRE LE TEXTE RAG
+    # CONSTRUIRE LE TEXTE POUR LE RAG
     # =========================================================
 
     def build_rag_text(
@@ -336,459 +270,255 @@ class RAGIngestion:
         document
     ):
 
-        title = (
-
-            self.get_document_title(
-                document
-            )
-
+        title = self.get_document_title(
+            document
         )
 
-
-        content = (
-
-            self.get_document_content(
-                document
-            )
-
+        content = self.get_document_content(
+            document
         )
 
-
-        source = (
-
-            self.get_document_source_name(
-                document
-            )
-
+        source = self.get_document_source_name(
+            document
         )
 
-
-        url = (
-
-            self.get_document_source(
-                document
-            )
-
+        url = self.get_document_source(
+            document
         )
 
-
-        parts = []
-
-
-        # -----------------------------------------------------
-        # TITRE
-        # -----------------------------------------------------
-
-        parts.append(
-
+        parts = [
             f"Titre : {title}"
-
-        )
-
-
-        # -----------------------------------------------------
-        # CONTENU
-        # -----------------------------------------------------
+        ]
 
         if content:
-
             parts.append(
-
                 f"Contenu :\n{content}"
-
             )
-
-
-        # -----------------------------------------------------
-        # SOURCE
-        # -----------------------------------------------------
 
         if source:
-
             parts.append(
-
                 f"Source : {source}"
-
             )
-
-
-        # -----------------------------------------------------
-        # URL
-        # -----------------------------------------------------
 
         if url:
-
             parts.append(
-
                 f"URL : {url}"
-
             )
-
 
         return "\n\n".join(
             parts
         )
 
-
     # =========================================================
-    # INGESTION PAR LOT
+    # INGÉRER DIRECTEMENT UNE LISTE DE DOCUMENTS
     # =========================================================
 
-    def ingest(
+    def ingest_documents(
         self,
-        limit=100,
-        offset=0
+        documents,
+        limit=None
     ):
 
-        # =====================================================
-        # VALIDATION
-        # =====================================================
-
-        if limit <= 0:
+        if documents is None:
 
             raise ValueError(
-
-                "limit doit être "
-                "supérieur à 0."
-
+                "Aucun document fourni."
             )
 
+        documents = list(
+            documents
+        )
 
-        if offset < 0:
-
-            raise ValueError(
-
-                "offset ne peut pas "
-                "être négatif."
-
-            )
-
-
-        # =====================================================
-        # CHARGER DOCUMENTS DEPUIS documents.json
-        # =====================================================
+        total_documents = len(
+            documents
+        )
 
         print(
-
             "[RAG INGESTION] "
-
-            "Chargement des documents "
-            "depuis le stockage local..."
-
+            f"{total_documents} document(s) "
+            "reçu(s) directement en mémoire."
         )
 
+        if limit is not None:
 
-        all_documents = (
+            if limit <= 0:
+                raise ValueError(
+                    "limit doit être supérieur à 0."
+                )
 
-            self.document_store._load()
-
-        )
-
-
-        total_documents = (
-
-            len(
-                all_documents
-            )
-
-        )
-
-
-        print(
-
-            "[RAG INGESTION] "
-
-            f"{total_documents} "
-            "document(s) disponible(s) "
-            "dans documents.json."
-
-        )
-
-
-        # =====================================================
-        # AUCUN DOCUMENT
-        # =====================================================
-
-        if total_documents == 0:
-
-            print(
-
-                "[RAG INGESTION] "
-
-                "Aucun document à ingérer."
-
-            )
-
-
-            return {
-
-                "status":
-                    "success",
-
-                "message":
-                    "Aucun document disponible "
-                    "dans documents.json.",
-
-                "total_documents":
-                    0,
-
-                "batch_offset":
-                    offset,
-
-                "batch_limit":
-                    limit,
-
-                "batch_processed":
-                    0,
-
-                "inserted":
-                    0,
-
-                "skipped":
-                    0,
-
-                "errors":
-                    0,
-
-                "next_offset":
-                    offset
-
-            }
-
-
-        # =====================================================
-        # SOURCES DÉJÀ PRÉSENTES DANS SUPABASE
-        # =====================================================
-
-        existing_sources = (
-
-            self.get_existing_sources()
-
-        )
-
-
-        # =====================================================
-        # SÉLECTION DU BATCH
-        # =====================================================
-
-        batch = (
-
-            all_documents[
-
-                offset:
-
-                offset + limit
-
+            documents = documents[
+                :limit
             ]
 
+        if not documents:
+
+            return {
+                "status": "success",
+                "message": (
+                    "Aucun document à ingérer."
+                ),
+                "total_documents": 0,
+                "processed": 0,
+                "inserted": 0,
+                "skipped": 0,
+                "errors": 0
+            }
+
+        existing_sources = (
+            self.get_existing_sources()
         )
-
-
-        print(
-
-            "[RAG INGESTION] "
-
-            f"Batch sélectionné : "
-
-            f"{offset} → "
-
-            f"{offset + len(batch)}"
-
-        )
-
 
         inserted = 0
-
         skipped = 0
-
         errors = 0
 
-
         # =====================================================
-        # TRAITEMENT DES DOCUMENTS
+        # TRAITEMENT
         # =====================================================
 
-        for index, document in enumerate(
-
-            batch,
-
-            start=offset + 1
-
+        for index, raw_document in enumerate(
+            documents,
+            start=1
         ):
 
             try:
 
                 # -------------------------------------------------
-                # VÉRIFIER FORMAT DOCUMENT
+                # NORMALISATION
                 # -------------------------------------------------
 
-                if not isinstance(
-                    document,
-                    dict
-                ):
-
-                    print(
-
-                        f"❌ [{index}] "
-
-                        "Format document invalide."
-
+                document = (
+                    self.normalize_document(
+                        raw_document
                     )
-
-                    errors += 1
-
-                    continue
-
+                )
 
                 # -------------------------------------------------
                 # MÉTADONNÉES
                 # -------------------------------------------------
 
                 title = (
-
                     self.get_document_title(
                         document
                     )
-
                 )
 
-
                 source = (
-
                     self.get_document_source_name(
                         document
                     )
-
                 )
 
-
                 url = (
-
                     self.get_document_source(
                         document
                     )
-
                 )
 
-
                 content = (
-
                     self.get_document_content(
                         document
                     )
-
                 )
 
-
                 # -------------------------------------------------
-                # VÉRIFIER LE CONTENU
+                # VÉRIFICATION CONTENU
                 # -------------------------------------------------
 
                 if not content:
 
                     print(
-
                         f"⚠️ [{index}] "
-
-                        f"Document sans contenu : "
-
+                        "Document sans contenu : "
                         f"{title}"
-
                     )
 
                     errors += 1
-
                     continue
 
-
                 # -------------------------------------------------
-                # VÉRIFIER LES DOUBLONS
+                # VÉRIFICATION DOUBLON
                 # -------------------------------------------------
 
                 if (
-
                     url
-
-                    and
-
-                    url
-                    in existing_sources
-
+                    and url in existing_sources
                 ):
 
                     print(
-
                         f"⏭️ [{index}] "
-
-                        f"Déjà présent : "
-
+                        "Déjà présent : "
                         f"{title[:80]}"
-
                     )
 
                     skipped += 1
-
                     continue
-
 
                 # -------------------------------------------------
                 # CONSTRUIRE TEXTE RAG
                 # -------------------------------------------------
 
                 text = (
-
                     self.build_rag_text(
                         document
                     )
-
                 )
-
 
                 print(
-
                     f"🤖 [{index}] "
-
-                    f"Embedding : "
-
+                    "Embedding : "
                     f"{title[:80]}"
-
                 )
 
-
                 # -------------------------------------------------
-                # GÉNÉRER EMBEDDING
+                # EMBEDDING GEMINI
                 # -------------------------------------------------
 
                 embedding = (
-
                     self.embedding_service
-
                     .generate_document_embedding(
-
                         text
-
                     )
-
                 )
-
 
                 if not embedding:
 
                     print(
-
                         f"❌ [{index}] "
-
                         "Embedding vide."
-
                     )
 
                     errors += 1
-
                     continue
 
+                # -------------------------------------------------
+                # MOTS-CLÉS
+                # -------------------------------------------------
+
+                keywords = (
+                    document.get(
+                        "keywords"
+                    )
+                    or document.get(
+                        "mots_cles"
+                    )
+                )
 
                 # -------------------------------------------------
-                # CONSTRUIRE LIGNE SUPABASE
+                # ANNÉE
+                # -------------------------------------------------
+
+                year = (
+                    document.get(
+                        "year"
+                    )
+                    or document.get(
+                        "annee"
+                    )
+                )
+
+                # -------------------------------------------------
+                # LIGNE SUPABASE
                 # -------------------------------------------------
 
                 row = {
@@ -799,154 +529,131 @@ class RAGIngestion:
                     "organisme":
                         source,
 
+                    "annee":
+                        year,
+
                     "langue":
-
-                        document.get(
-                            "language"
-                        )
-
-                        or
-
-                        document.get(
-                            "langue"
-                        )
-
-                        or
-
-                        "fr",
-
-
-                    "type_document":
-
-                        document.get(
-                            "document_type"
-                        )
-
-                        or
-
-                        document.get(
-                            "type_document"
-                        )
-
-                        or
-
-                        "technical_sheet",
-
-
-                    "culture":
-
-                        document.get(
-                            "crop"
-                        )
-
-                        or
-
-                        document.get(
-                            "culture"
+                        (
+                            document.get(
+                                "language"
+                            )
+                            or document.get(
+                                "langue"
+                            )
+                            or "fr"
                         ),
 
+                    "type_document":
+                        (
+                            document.get(
+                                "document_type"
+                            )
+                            or document.get(
+                                "type_document"
+                            )
+                            or "agricultural_document"
+                        ),
+
+                    "culture":
+                        (
+                            document.get(
+                                "crop"
+                            )
+                            or document.get(
+                                "culture"
+                            )
+                        ),
 
                     "zone_geographique":
+                        (
+                            document.get(
+                                "country"
+                            )
+                            or document.get(
+                                "zone_geographique"
+                            )
+                        ),
 
-                        document.get(
-                            "country"
-                        )
-
-                        or
-
-                        document.get(
-                            "zone_geographique"
-                        )
-
-                        or
-
-                        "Bénin",
-
+                    "mots_cles":
+                        keywords,
 
                     "source_path":
                         url,
 
-
                     "content":
                         text,
 
-
                     "embedding":
                         embedding
-
                 }
 
+                # -------------------------------------------------
+                # RETIRER LES VALEURS NONE FACULTATIVES
+                # -------------------------------------------------
+
+                optional_fields = [
+                    "annee",
+                    "culture",
+                    "zone_geographique",
+                    "mots_cles",
+                ]
+
+                for field in optional_fields:
+
+                    if row.get(
+                        field
+                    ) is None:
+
+                        row.pop(
+                            field,
+                            None
+                        )
 
                 # -------------------------------------------------
                 # INSERTION SUPABASE
                 # -------------------------------------------------
 
                 (
-
                     self.supabase
-
                     .table(
                         "documents_rag"
                     )
-
                     .insert(
                         row
                     )
-
                     .execute()
-
                 )
-
-
-                # -------------------------------------------------
-                # SUCCÈS
-                # -------------------------------------------------
 
                 inserted += 1
 
-
                 if url:
-
                     existing_sources.add(
                         url
                     )
 
-
                 print(
-
                     f"✅ [{index}] "
-
-                    f"Document inséré : "
-
+                    "Document inséré : "
                     f"{title[:80]}"
-
                 )
 
-
                 # -------------------------------------------------
-                # PAUSE ENTRE LES REQUÊTES GEMINI
+                # PAUSE GEMINI
                 # -------------------------------------------------
 
                 time.sleep(
                     0.7
                 )
 
-
             except Exception as e:
 
                 errors += 1
 
-
                 print(
-
                     f"❌ [{index}] "
-
-                    f"Erreur ingestion : "
-
+                    "Erreur ingestion : "
                     f"{e}"
-
                 )
-
 
         # =====================================================
         # RÉSULTAT
@@ -960,15 +667,9 @@ class RAGIngestion:
             "total_documents":
                 total_documents,
 
-            "batch_offset":
-                offset,
-
-            "batch_limit":
-                limit,
-
-            "batch_processed":
+            "processed":
                 len(
-                    batch
+                    documents
                 ),
 
             "inserted":
@@ -978,52 +679,26 @@ class RAGIngestion:
                 skipped,
 
             "errors":
-                errors,
-
-            "next_offset":
-                offset + len(
-                    batch
-                )
-
+                errors
         }
 
 
 # =============================================================
-# TEST RAG INGESTION
+# TEST SIMPLE DU SERVICE
 # =============================================================
 
 def test_rag_ingestion():
 
-    try:
+    return {
 
-        ingestion = (
-            RAGIngestion()
-        )
+        "status":
+            "success",
 
-
-        return (
-
-            ingestion.ingest(
-
-                limit=10,
-
-                offset=0
-
+        "message":
+            (
+                "RAGIngestion prêt. "
+                "Utilisez ingest_documents() "
+                "avec des documents parsés."
             )
 
-        )
-
-
-    except Exception as e:
-
-        return {
-
-            "status":
-                "error",
-
-            "message":
-                str(
-                    e
-                )
-
-        }
+    }
