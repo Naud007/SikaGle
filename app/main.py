@@ -308,6 +308,272 @@ def fao_ods_structure():
                 str(e)
 
         }
+
+# =========================================================
+# TEST PIPELINE FAO → RAG → SUPABASE
+# =========================================================
+
+@app.get(
+    "/knowledge/fao-rag-pipeline-test"
+)
+def fao_rag_pipeline_test():
+
+    from app.knowledge_engine.connectors.fao_ods import (
+        FAOODSDownloader
+    )
+
+    from app.knowledge_engine.parsers.fao_ods_parser import (
+        FAOODSParser
+    )
+
+    from app.knowledge_engine.connectors.fao_datasets import (
+        FAODatasetsDownloader
+    )
+
+    from app.knowledge_engine.parsers.fao_dataset_parser import (
+        FAODatasetParser
+    )
+
+    from app.knowledge_engine.storage.rag_ingestion import (
+        RAGIngestion
+    )
+
+    try:
+
+        # =====================================================
+        # 1. TÉLÉCHARGER LE CATALOGUE AGRIS
+        # =====================================================
+
+        print(
+            "[FAO RAG] "
+            "Téléchargement catalogue AGRIS..."
+        )
+
+        ods_downloader = (
+            FAOODSDownloader()
+        )
+
+        ods_downloaded = (
+            ods_downloader.download()
+        )
+
+        # =====================================================
+        # 2. EXTRAIRE LE CONTENU DU CATALOGUE
+        # =====================================================
+
+        if isinstance(
+            ods_downloaded,
+            dict
+        ):
+
+            ods_content = (
+                ods_downloaded.get(
+                    "content"
+                )
+            )
+
+        else:
+
+            ods_content = None
+
+        if not ods_content:
+
+            return {
+                "status": "error",
+                "step": "ods_download",
+                "message": (
+                    "Le catalogue AGRIS "
+                    "ne contient aucun contenu."
+                )
+            }
+
+        # =====================================================
+        # 3. PARSER LE CATALOGUE AGRIS
+        # =====================================================
+
+        print(
+            "[FAO RAG] "
+            "Parsing catalogue AGRIS..."
+        )
+
+        ods_parser = (
+            FAOODSParser(
+                ods_content
+            )
+        )
+
+        datasets = (
+            ods_parser.parse()
+        )
+
+        if not datasets:
+
+            return {
+                "status": "error",
+                "step": "ods_parse",
+                "message": (
+                    "Aucun dataset trouvé "
+                    "dans le catalogue AGRIS."
+                )
+            }
+
+        # =====================================================
+        # 4. PRENDRE LE PREMIER DATASET
+        # =====================================================
+
+        dataset = datasets[0]
+
+        dataset_url = str(
+            dataset.url
+        ).strip()
+
+        filename = (
+            dataset_url
+            .rstrip("/")
+            .split("/")[-1]
+        )
+
+        print(
+            "[FAO RAG] "
+            f"Dataset sélectionné : {filename}"
+        )
+
+        # =====================================================
+        # 5. TÉLÉCHARGER LE DATASET EN MÉMOIRE
+        # =====================================================
+
+        dataset_downloader = (
+            FAODatasetsDownloader()
+        )
+
+        downloaded = (
+            dataset_downloader.download(
+                url=dataset_url,
+                filename=filename
+            )
+        )
+
+        if not isinstance(
+            downloaded,
+            dict
+        ):
+
+            return {
+                "status": "error",
+                "step": "dataset_download",
+                "message": (
+                    "Format du dataset "
+                    "téléchargé invalide."
+                )
+            }
+
+        xml_content = (
+            downloaded.get(
+                "content"
+            )
+        )
+
+        if not xml_content:
+
+            return {
+                "status": "error",
+                "step": "dataset_content",
+                "message": (
+                    "Dataset XML vide."
+                )
+            }
+
+        # =====================================================
+        # 6. PARSER LE DATASET
+        # =====================================================
+
+        print(
+            "[FAO RAG] "
+            "Parsing du dataset..."
+        )
+
+        dataset_parser = (
+            FAODatasetParser()
+        )
+
+        documents = (
+            dataset_parser.parse(
+                xml_content=xml_content,
+                filename=filename,
+                source_url=dataset_url
+            )
+        )
+
+        if not documents:
+
+            return {
+                "status": "error",
+                "step": "dataset_parse",
+                "message": (
+                    "Aucun document extrait "
+                    "du dataset."
+                )
+            }
+
+        print(
+            "[FAO RAG] "
+            f"{len(documents)} document(s) extraits."
+        )
+
+        # =====================================================
+        # 7. INGESTION RAG
+        # =====================================================
+
+        print(
+            "[FAO RAG] "
+            "Début ingestion RAG..."
+        )
+
+        ingestion = (
+            RAGIngestion()
+        )
+
+        # Pour le premier test :
+        # seulement 3 documents.
+        #
+        # Cela évite de lancer inutilement
+        # beaucoup d'appels Gemini si une erreur
+        # Supabase apparaît.
+
+        ingestion_result = (
+            ingestion.ingest_documents(
+                documents=documents,
+                limit=3
+            )
+        )
+
+        # =====================================================
+        # 8. RÉSULTAT
+        # =====================================================
+
+        return {
+            "status": "success",
+            "dataset_url": dataset_url,
+            "dataset_filename": filename,
+            "documents_parsed": len(
+                documents
+            ),
+            "rag": ingestion_result
+        }
+
+    except Exception as e:
+
+        print(
+            "[FAO RAG] "
+            f"Erreur : {e}"
+        )
+
+        return {
+            "status": "error",
+            "message": str(
+                e
+            )
+        }
 # =========================================================
 # ROUTE RACINE
 # =========================================================
