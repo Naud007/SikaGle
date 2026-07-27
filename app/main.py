@@ -772,10 +772,10 @@ def fao_datasets_test(
     "/knowledge/fao-dataset-pipeline-test"
 )
 def fao_dataset_pipeline_test(
+    dataset_limit: int = 2,
+    dataset_offset: int = 0,
     rag_limit: int = 3
 ):
-
-    from pathlib import Path
 
     from app.knowledge_engine.connectors.fao_ods import (
         FAOODSDownloader
@@ -804,145 +804,107 @@ def fao_dataset_pipeline_test(
     try:
 
         # =====================================================
-        # VALIDATION
+        # 1. VALIDATION DES PARAMÈTRES
         # =====================================================
+
+        if dataset_limit <= 0:
+
+            return {
+                "status": "error",
+                "message": (
+                    "dataset_limit doit être "
+                    "supérieur à 0."
+                )
+            }
+
+        if dataset_limit > 5:
+
+            return {
+                "status": "error",
+                "message": (
+                    "Pour le moment, dataset_limit "
+                    "ne peut pas dépasser 5."
+                )
+            }
+
+        if dataset_offset < 0:
+
+            return {
+                "status": "error",
+                "message": (
+                    "dataset_offset ne peut pas "
+                    "être négatif."
+                )
+            }
 
         if rag_limit <= 0:
 
             return {
                 "status": "error",
-                "step": "validation",
                 "message": (
-                    "rag_limit doit être supérieur à 0."
+                    "rag_limit doit être "
+                    "supérieur à 0."
                 )
             }
 
 
-        if rag_limit > 20:
-
-            rag_limit = 20
-
-
         # =====================================================
-        # 1. TÉLÉCHARGER LE CATALOGUE AGRIS
+        # 2. TÉLÉCHARGER LE CATALOGUE AGRIS
         # =====================================================
 
         print("=" * 60)
 
         print(
-            "[PIPELINE] "
-            "1/7 - Téléchargement catalogue AGRIS..."
+            "[FAO MULTI PIPELINE] "
+            "Téléchargement catalogue AGRIS..."
         )
 
         print("=" * 60)
-
 
         ods_downloader = (
             FAOODSDownloader()
         )
 
-
-        ods_download = (
+        ods_result = (
             ods_downloader.download()
         )
 
 
-        if not ods_download:
-
-            return {
-                "status": "error",
-                "step": "ods_download",
-                "message": (
-                    "Téléchargement du catalogue "
-                    "AGRIS impossible."
-                )
-            }
-
-
         # =====================================================
-        # 2. EXTRAIRE LE CONTENU DU CATALOGUE
+        # 3. EXTRAIRE LE CONTENU DU CATALOGUE
         # =====================================================
-
-        ods_content = None
-        ods_filename = "AGRIS.ODS.xml"
-
-
-        # -----------------------------------------------------
-        # FORMAT DICTIONNAIRE
-        # -----------------------------------------------------
 
         if isinstance(
-            ods_download,
+            ods_result,
             dict
         ):
 
             ods_content = (
-                ods_download.get(
+                ods_result.get(
                     "content"
                 )
             )
 
-            ods_filename = (
-                ods_download.get(
+            catalog_filename = (
+                ods_result.get(
                     "filename"
                 )
-                or ods_filename
+                or
+                "AGRIS.ODS.xml"
             )
-
-
-        # -----------------------------------------------------
-        # FORMAT FICHIER
-        # -----------------------------------------------------
-
-        elif isinstance(
-            ods_download,
-            (
-                str,
-                Path
-            )
-        ):
-
-            ods_path = Path(
-                ods_download
-            )
-
-
-            if not ods_path.exists():
-
-                return {
-                    "status": "error",
-                    "step": "ods_file",
-                    "message": (
-                        "Le fichier catalogue AGRIS "
-                        "n'existe pas."
-                    ),
-                    "path": str(
-                        ods_path
-                    )
-                }
-
-
-            ods_content = (
-                ods_path.read_bytes()
-            )
-
-            ods_filename = (
-                ods_path.name
-            )
-
 
         else:
 
             return {
                 "status": "error",
-                "step": "ods_format",
+                "step": "catalog_download",
                 "message": (
                     "Format retourné par "
-                    "FAOODSDownloader non supporté."
+                    "FAOODSDownloader invalide."
                 ),
                 "returned_type": (
                     type(
-                        ods_download
+                        ods_result
                     ).__name__
                 )
             }
@@ -952,355 +914,369 @@ def fao_dataset_pipeline_test(
 
             return {
                 "status": "error",
-                "step": "ods_content",
+                "step": "catalog_download",
                 "message": (
-                    "Le catalogue AGRIS est vide."
+                    "Le catalogue AGRIS "
+                    "est vide."
                 )
             }
 
 
-        print(
-            "[PIPELINE] "
-            f"Catalogue chargé : "
-            f"{len(ods_content)} octets"
-        )
-
-
         # =====================================================
-        # 3. PARSER LE CATALOGUE AGRIS
+        # 4. PARSER LE CATALOGUE AGRIS
         # =====================================================
 
         print(
-            "[PIPELINE] "
-            "2/7 - Parsing catalogue AGRIS..."
+            "[FAO MULTI PIPELINE] "
+            "Parsing catalogue..."
         )
-
 
         ods_parser = (
             FAOODSParser(
-                ods_content
+                ods_result
             )
         )
-
 
         datasets = (
             ods_parser.parse()
         )
 
+        total_datasets = len(
+            datasets
+        )
 
-        if not datasets:
+
+        print(
+            "[FAO MULTI PIPELINE] "
+            f"{total_datasets} dataset(s) "
+            "disponible(s)."
+        )
+
+
+        if total_datasets == 0:
 
             return {
                 "status": "error",
-                "step": "ods_parse",
+                "step": "catalog_parse",
                 "message": (
-                    "Aucun dataset trouvé "
-                    "dans le catalogue AGRIS."
+                    "Aucun dataset AGRIS trouvé."
                 )
             }
 
 
-        print(
-            "[PIPELINE] "
-            f"{len(datasets)} dataset(s) découvert(s)."
-        )
-
-
         # =====================================================
-        # 4. SÉLECTIONNER LE PREMIER DATASET
+        # 5. VÉRIFIER L'OFFSET
         # =====================================================
 
-        print(
-            "[PIPELINE] "
-            "3/7 - Sélection du dataset..."
-        )
-
-
-        dataset = (
-            datasets[0]
-        )
-
-
-        dataset_url = str(
-            dataset.url
-        ).strip()
-
-
-        if not dataset_url:
+        if dataset_offset >= total_datasets:
 
             return {
-                "status": "error",
-                "step": "dataset_url",
+                "status": "success",
                 "message": (
-                    "Le dataset sélectionné "
-                    "ne possède pas d'URL."
-                )
+                    "Tous les datasets AGRIS "
+                    "ont été parcourus."
+                ),
+                "datasets_found": (
+                    total_datasets
+                ),
+                "dataset_offset": (
+                    dataset_offset
+                ),
+                "dataset_limit": (
+                    dataset_limit
+                ),
+                "datasets_processed": 0,
+                "next_dataset_offset": (
+                    dataset_offset
+                ),
+                "has_more_datasets": False
             }
 
 
-        dataset_filename = (
-            dataset_url
-            .rstrip("/")
-            .split("/")[-1]
+        # =====================================================
+        # 6. SÉLECTIONNER LE LOT DE DATASETS
+        # =====================================================
+
+        selected_datasets = (
+
+            datasets[
+
+                dataset_offset:
+
+                dataset_offset
+                + dataset_limit
+
+            ]
+
         )
 
 
-        if not dataset_filename:
-
-            dataset_filename = (
-                "dataset.xml"
-            )
-
-
         print(
-            "[PIPELINE] "
-            f"Dataset : {dataset_filename}"
-        )
-
-        print(
-            "[PIPELINE] "
-            f"URL : {dataset_url}"
+            "[FAO MULTI PIPELINE] "
+            f"Traitement datasets "
+            f"{dataset_offset} → "
+            f"{dataset_offset + len(selected_datasets) - 1}"
         )
 
 
         # =====================================================
-        # 5. TÉLÉCHARGER LE DATASET
+        # 7. SERVICES
         # =====================================================
-
-        print(
-            "[PIPELINE] "
-            "4/7 - Téléchargement dataset..."
-        )
-
 
         dataset_downloader = (
             FAODatasetsDownloader()
         )
 
-
-        downloaded = (
-            dataset_downloader.download(
-                url=dataset_url,
-                filename=dataset_filename
-            )
-        )
-
-
-        if not downloaded:
-
-            return {
-                "status": "error",
-                "step": "dataset_download",
-                "message": (
-                    "Dataset impossible à télécharger."
-                )
-            }
-
-
-        # =====================================================
-        # EXTRAIRE LE XML DU DATASET
-        # =====================================================
-
-        xml_content = None
-
-
-        if isinstance(
-            downloaded,
-            dict
-        ):
-
-            xml_content = (
-                downloaded.get(
-                    "content"
-                )
-            )
-
-            dataset_filename = (
-                downloaded.get(
-                    "filename"
-                )
-                or dataset_filename
-            )
-
-
-        elif isinstance(
-            downloaded,
-            (
-                str,
-                Path
-            )
-        ):
-
-            dataset_path = Path(
-                downloaded
-            )
-
-
-            if not dataset_path.exists():
-
-                return {
-                    "status": "error",
-                    "step": "dataset_file",
-                    "message": (
-                        "Le fichier dataset "
-                        "n'existe pas."
-                    ),
-                    "path": str(
-                        dataset_path
-                    )
-                }
-
-
-            xml_content = (
-                dataset_path.read_bytes()
-            )
-
-
-        else:
-
-            return {
-                "status": "error",
-                "step": "dataset_format",
-                "message": (
-                    "Format du dataset "
-                    "téléchargé invalide."
-                ),
-                "returned_type": (
-                    type(
-                        downloaded
-                    ).__name__
-                )
-            }
-
-
-        if not xml_content:
-
-            return {
-                "status": "error",
-                "step": "dataset_content",
-                "message": (
-                    "Le dataset téléchargé "
-                    "ne contient aucun XML."
-                )
-            }
-
-
-        print(
-            "[PIPELINE] "
-            f"Dataset chargé : "
-            f"{len(xml_content)} octets"
-        )
-
-
-        # =====================================================
-        # 6. PARSER LES PUBLICATIONS
-        # =====================================================
-
-        print(
-            "[PIPELINE] "
-            "5/7 - Parsing des publications..."
-        )
-
-
         dataset_parser = (
             FAODatasetParser()
         )
-
-
-        documents = (
-            dataset_parser.parse(
-                xml_content=xml_content,
-                filename=dataset_filename,
-                source_url=dataset_url
-            )
-        )
-
-
-        documents_count = (
-            len(
-                documents
-            )
-        )
-
-
-        print(
-            "[PIPELINE] "
-            f"{documents_count} "
-            "document(s) parsé(s)."
-        )
-
-
-        if not documents:
-
-            return {
-                "status": "warning",
-                "step": "dataset_parse",
-                "dataset_url": dataset_url,
-                "dataset_filename": dataset_filename,
-                "documents_parsed": 0,
-                "message": (
-                    "Aucun document extrait "
-                    "du dataset."
-                )
-            }
-
-
-        # =====================================================
-        # 7. SAUVEGARDER TEMPORAIREMENT LES DOCUMENTS
-        # =====================================================
-
-        print(
-            "[PIPELINE] "
-            "6/7 - Préparation des documents RAG..."
-        )
-
 
         document_store = (
             DocumentStore()
         )
 
 
-        # -----------------------------------------------------
-        # IMPORTANT
-        #
-        # Pour ce test, nous repartons uniquement
-        # des documents du dataset actuel.
-        # -----------------------------------------------------
+        # =====================================================
+        # 8. COMPTEURS
+        # =====================================================
 
-        document_store.clear()
+        datasets_processed = 0
+        datasets_success = 0
+        datasets_errors = 0
+
+        total_documents_parsed = 0
+        total_documents_stored = 0
+
+        dataset_results = []
 
 
-        store_result = (
-            document_store.add_documents(
-                documents
+        # =====================================================
+        # 9. TRAITER CHAQUE DATASET
+        # =====================================================
+
+        for local_index, dataset in enumerate(
+            selected_datasets
+        ):
+
+            absolute_index = (
+                dataset_offset
+                + local_index
             )
-        )
+
+            dataset_url = str(
+                dataset.url
+            ).strip()
+
+            filename = (
+                dataset_url
+                .rstrip("/")
+                .split("/")
+                [-1]
+            )
+
+            if not filename:
+
+                filename = (
+                    f"dataset_{absolute_index}.xml"
+                )
 
 
-        print(
-            "[PIPELINE] "
-            f"{store_result['total']} "
-            "document(s) dans le stockage temporaire."
-        )
+            print("=" * 60)
+
+            print(
+                "[FAO MULTI PIPELINE] "
+                f"Dataset #{absolute_index}"
+            )
+
+            print(
+                "[FAO MULTI PIPELINE] "
+                f"URL : {dataset_url}"
+            )
+
+            print("=" * 60)
+
+
+            datasets_processed += 1
+
+
+            try:
+
+                # =============================================
+                # 9.1 TÉLÉCHARGEMENT
+                # =============================================
+
+                downloaded = (
+                    dataset_downloader.download(
+                        url=dataset_url,
+                        filename=filename
+                    )
+                )
+
+
+                if not isinstance(
+                    downloaded,
+                    dict
+                ):
+
+                    raise ValueError(
+                        "Format retourné par "
+                        "FAODatasetsDownloader invalide : "
+                        f"{type(downloaded).__name__}"
+                    )
+
+
+                xml_content = (
+                    downloaded.get(
+                        "content"
+                    )
+                )
+
+
+                if not xml_content:
+
+                    raise ValueError(
+                        "Dataset XML vide."
+                    )
+
+
+                # =============================================
+                # 9.2 PARSING
+                # =============================================
+
+                documents = (
+                    dataset_parser.parse(
+                        xml_content=xml_content,
+                        filename=filename,
+                        source_url=dataset_url
+                    )
+                )
+
+
+                parsed_count = len(
+                    documents
+                )
+
+
+                total_documents_parsed += (
+                    parsed_count
+                )
+
+
+                # =============================================
+                # 9.3 STOCKAGE TEMPORAIRE
+                # =============================================
+
+                store_result = (
+                    document_store.add_documents(
+                        documents
+                    )
+                )
+
+
+                stored_count = (
+                    store_result.get(
+                        "added",
+                        0
+                    )
+                )
+
+
+                total_documents_stored += (
+                    stored_count
+                )
+
+
+                datasets_success += 1
+
+
+                # =============================================
+                # 9.4 RÉSULTAT DATASET
+                # =============================================
+
+                dataset_results.append({
+
+                    "dataset_index":
+                        absolute_index,
+
+                    "status":
+                        "success",
+
+                    "dataset_url":
+                        dataset_url,
+
+                    "dataset_filename":
+                        filename,
+
+                    "xml_size":
+                        len(
+                            xml_content
+                        ),
+
+                    "documents_parsed":
+                        parsed_count,
+
+                    "documents_added_to_store":
+                        stored_count
+
+                })
+
+
+            except Exception as dataset_error:
+
+                datasets_errors += 1
+
+
+                print(
+                    "[FAO MULTI PIPELINE] "
+                    f"Erreur dataset "
+                    f"#{absolute_index} : "
+                    f"{dataset_error}"
+                )
+
+
+                dataset_results.append({
+
+                    "dataset_index":
+                        absolute_index,
+
+                    "status":
+                        "error",
+
+                    "dataset_url":
+                        dataset_url,
+
+                    "dataset_filename":
+                        filename,
+
+                    "message":
+                        str(
+                            dataset_error
+                        )
+
+                })
 
 
         # =====================================================
-        # 8. INGESTION RAG
+        # 10. INGESTION RAG
         # =====================================================
 
+        print("=" * 60)
+
         print(
-            "[PIPELINE] "
-            "7/7 - Ingestion RAG..."
+            "[FAO MULTI PIPELINE] "
+            "Ingestion RAG..."
         )
 
+        print("=" * 60)
 
-        ingestion = (
+
+        rag = (
             RAGIngestion()
         )
 
 
         rag_result = (
-            ingestion.ingest(
+            rag.ingest(
                 limit=rag_limit,
                 offset=0
             )
@@ -1308,71 +1284,25 @@ def fao_dataset_pipeline_test(
 
 
         # =====================================================
-        # PREVIEW
+        # 11. PROCHAIN OFFSET DATASET
         # =====================================================
 
-        documents_preview = []
+        next_dataset_offset = (
+            dataset_offset
+            + len(
+                selected_datasets
+            )
+        )
 
 
-        for document in documents[:3]:
-
-            documents_preview.append({
-
-                "title":
-                    document.title,
-
-                "url":
-                    str(
-                        document.url
-                    ),
-
-                "description":
-                    getattr(
-                        document,
-                        "description",
-                        None
-                    ),
-
-                "language":
-                    getattr(
-                        document,
-                        "language",
-                        None
-                    ),
-
-                "country":
-                    getattr(
-                        document,
-                        "country",
-                        None
-                    ),
-
-                "zone_geographique":
-                    getattr(
-                        document,
-                        "zone_geographique",
-                        None
-                    ),
-
-                "culture":
-                    getattr(
-                        document,
-                        "culture",
-                        None
-                    ),
-
-                "mots_cles":
-                    getattr(
-                        document,
-                        "mots_cles",
-                        None
-                    )
-
-            })
+        has_more_datasets = (
+            next_dataset_offset
+            < total_datasets
+        )
 
 
         # =====================================================
-        # RÉSULTAT FINAL
+        # 12. RÉSULTAT FINAL
         # =====================================================
 
         return {
@@ -1381,31 +1311,31 @@ def fao_dataset_pipeline_test(
                 "success",
 
             "catalog_filename":
-                ods_filename,
+                catalog_filename,
 
             "datasets_found":
-                len(
-                    datasets
-                ),
+                total_datasets,
 
-            "dataset_url":
-                dataset_url,
+            "dataset_offset":
+                dataset_offset,
 
-            "dataset_filename":
-                dataset_filename,
+            "dataset_limit":
+                dataset_limit,
 
-            "xml_size":
-                len(
-                    xml_content
-                ),
+            "datasets_processed":
+                datasets_processed,
+
+            "datasets_success":
+                datasets_success,
+
+            "datasets_errors":
+                datasets_errors,
 
             "documents_parsed":
-                documents_count,
+                total_documents_parsed,
 
-            "documents_stored":
-                store_result[
-                    "total"
-                ],
+            "documents_added_to_store":
+                total_documents_stored,
 
             "rag_limit":
                 rag_limit,
@@ -1413,8 +1343,14 @@ def fao_dataset_pipeline_test(
             "rag":
                 rag_result,
 
-            "documents_preview":
-                documents_preview
+            "next_dataset_offset":
+                next_dataset_offset,
+
+            "has_more_datasets":
+                has_more_datasets,
+
+            "datasets":
+                dataset_results
 
         }
 
@@ -1422,18 +1358,14 @@ def fao_dataset_pipeline_test(
     except Exception as e:
 
         print(
-            "[PIPELINE] "
-            f"Erreur : {e}"
+            "[FAO MULTI PIPELINE] "
+            f"Erreur générale : {e}"
         )
-
 
         return {
 
             "status":
                 "error",
-
-            "step":
-                "unexpected_error",
 
             "message":
                 str(
