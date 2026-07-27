@@ -11,15 +11,16 @@ class FAODatasetParser:
         """
         Parser des datasets XML AGRIS.
 
-        Le dataset est traité directement en mémoire.
-        Aucun stockage local n'est nécessaire.
+        Le parser reçoit directement le contenu XML
+        téléchargé en mémoire.
 
         Objectifs :
-        - extraire les notices AGRIS ;
-        - conserver les métadonnées disponibles ;
-        - ne jamais inventer un pays, une langue ou une culture ;
-        - produire un contenu exploitable par le RAG.
+        - extraire les publications AGRIS ;
+        - conserver les métadonnées réelles ;
+        - ne jamais inventer un pays ou une culture ;
+        - préparer des documents propres pour le RAG.
         """
+
         pass
 
 
@@ -35,10 +36,12 @@ class FAODatasetParser:
     ):
 
         print("=" * 60)
+
         print(
             "[FAO DATASET PARSER] "
             f"Analyse : {filename or 'dataset XML'}"
         )
+
         print("=" * 60)
 
         documents = []
@@ -155,6 +158,8 @@ class FAODatasetParser:
             )
 
 
+            # Le root peut lui-même être une notice.
+
             if (
                 self._local_name(
                     root.tag
@@ -174,11 +179,6 @@ class FAODatasetParser:
 
             if not records:
 
-                print(
-                    "[FAO DATASET PARSER] "
-                    "Recherche générique..."
-                )
-
                 for element in root.iter():
 
                     if (
@@ -195,7 +195,8 @@ class FAODatasetParser:
 
             print(
                 "[FAO DATASET PARSER] "
-                f"{len(records)} notice(s) trouvée(s)."
+                f"{len(records)} "
+                "notice(s) trouvée(s)."
             )
 
 
@@ -205,7 +206,7 @@ class FAODatasetParser:
 
 
             # =================================================
-            # 6. PARCOURIR LES NOTICES
+            # 6. PARSER LES NOTICES
             # =================================================
 
             for index, record in enumerate(
@@ -215,13 +216,16 @@ class FAODatasetParser:
 
                 try:
 
-                    document = self._parse_record(
-                        record=record,
-                        namespaces=namespaces,
-                        filename=filename,
-                        source_url=source_url,
-                        index=index
+                    document = (
+                        self._parse_record(
+                            record=record,
+                            namespaces=namespaces,
+                            filename=filename,
+                            source_url=source_url,
+                            index=index
+                        )
                     )
+
 
                     if document:
 
@@ -234,7 +238,8 @@ class FAODatasetParser:
 
                     print(
                         "[FAO DATASET PARSER] "
-                        f"Notice {index} ignorée : {e}"
+                        f"Notice {index} ignorée : "
+                        f"{e}"
                     )
 
 
@@ -246,6 +251,7 @@ class FAODatasetParser:
             )
 
             print("=" * 60)
+
 
             return documents
 
@@ -271,7 +277,7 @@ class FAODatasetParser:
 
 
     # =========================================================
-    # PARSER UNE NOTICE AGRIS
+    # PARSER UNE NOTICE
     # =========================================================
 
     def _parse_record(
@@ -296,11 +302,17 @@ class FAODatasetParser:
             namespaces
         )
 
+
         if not title:
 
             title = (
                 f"Document AGRIS {index}"
             )
+
+
+        title = self._clean_text(
+            title
+        )
 
 
         # =====================================================
@@ -312,8 +324,15 @@ class FAODatasetParser:
             [
                 "dc:description",
                 "dct:description",
+                "dc:abstract",
+                "dct:abstract",
             ],
             namespaces
+        )
+
+
+        description = self._clean_text(
+            description
         )
 
 
@@ -326,6 +345,8 @@ class FAODatasetParser:
             [
                 "dc:creator",
                 "dct:creator",
+                "dc:contributor",
+                "dct:contributor",
             ],
             namespaces
         )
@@ -335,23 +356,35 @@ class FAODatasetParser:
         # DATE
         # =====================================================
 
-        raw_date = self._get_text(
+        date_value = self._get_text(
             record,
             [
                 "dc:date",
                 "dct:date",
                 "dct:issued",
+                "dct:created",
+                "dct:modified",
             ],
             namespaces
         )
 
-        published_at = self._parse_date(
-            raw_date
+
+        published_at = (
+            self._parse_date(
+                date_value
+            )
+        )
+
+
+        year = (
+            self._extract_year(
+                date_value
+            )
         )
 
 
         # =====================================================
-        # TYPE DE PUBLICATION
+        # TYPE DU DOCUMENT
         # =====================================================
 
         publication_type = self._get_text(
@@ -361,6 +394,13 @@ class FAODatasetParser:
                 "dct:type",
             ],
             namespaces
+        )
+
+
+        publication_type = (
+            self._clean_text(
+                publication_type
+            )
         )
 
 
@@ -378,6 +418,13 @@ class FAODatasetParser:
         )
 
 
+        keywords = (
+            self._clean_list(
+                keywords
+            )
+        )
+
+
         # =====================================================
         # SOURCE DE PUBLICATION
         # =====================================================
@@ -389,6 +436,13 @@ class FAODatasetParser:
                 "dct:source",
             ],
             namespaces
+        )
+
+
+        publication_source = (
+            self._clean_text(
+                publication_source
+            )
         )
 
 
@@ -406,6 +460,11 @@ class FAODatasetParser:
         )
 
 
+        publisher = self._clean_text(
+            publisher
+        )
+
+
         # =====================================================
         # LANGUE
         # =====================================================
@@ -419,22 +478,11 @@ class FAODatasetParser:
             namespaces
         )
 
-        language = self._normalize_language(
-            language
-        )
 
-
-        # =====================================================
-        # IDENTIFIANTS
-        # =====================================================
-
-        identifiers = self._get_all_text(
-            record,
-            [
-                "dc:identifier",
-                "dct:identifier",
-            ],
-            namespaces
+        language = (
+            self._normalize_language(
+                language
+            )
         )
 
 
@@ -446,23 +494,6 @@ class FAODatasetParser:
             record,
             namespaces
         )
-
-        if (
-            not agris_id
-            and identifiers
-        ):
-
-            for identifier in identifiers:
-
-                if not identifier.startswith(
-                    (
-                        "http://",
-                        "https://"
-                    )
-                ):
-
-                    agris_id = identifier
-                    break
 
 
         # =====================================================
@@ -488,7 +519,9 @@ class FAODatasetParser:
 
             elif source_url:
 
-                url = source_url
+                url = str(
+                    source_url
+                ).strip()
 
             else:
 
@@ -498,57 +531,52 @@ class FAODatasetParser:
 
 
         # =====================================================
-        # LOCALISATION
-        # =====================================================
-        #
-        # IMPORTANT :
-        # Nous ne mettons PAS "Bénin" automatiquement.
-        #
-        # On conserve seulement une localisation lorsqu'elle
-        # existe réellement dans les métadonnées AGRIS.
+        # ZONE GÉOGRAPHIQUE
         # =====================================================
 
-        geographic_values = self._get_all_text(
-            record,
-            [
-                "dc:coverage",
-                "dct:coverage",
-                "dct:spatial",
-            ],
-            namespaces
+        geographic_values = (
+            self._get_geographic_values(
+                record
+            )
         )
+
+
+        country = (
+            self._detect_country(
+                geographic_values,
+                title,
+                description
+            )
+        )
+
 
         zone_geographique = (
-            geographic_values[0]
-            if geographic_values
-            else None
-        )
-
-        country = self._extract_country(
-            geographic_values
+            self._build_geographic_zone(
+                geographic_values,
+                country
+            )
         )
 
 
         # =====================================================
         # CULTURE
         # =====================================================
-        #
-        # Pour le moment nous ne déduisons pas automatiquement
-        # une culture à partir du texte.
-        #
-        # Une mauvaise culture serait plus dangereuse qu'une
-        # valeur absente.
-        # =====================================================
 
-        crop = None
-        culture = None
+        culture = (
+            self._detect_crop(
+                title=title,
+                description=description,
+                keywords=keywords
+            )
+        )
 
 
         # =====================================================
-        # CONSTRUIRE LE CONTENU RAG
+        # CONTENU POUR LE RAG
         # =====================================================
 
         content_parts = []
+
 
         content_parts.append(
             f"Titre : {title}"
@@ -572,10 +600,10 @@ class FAODatasetParser:
             )
 
 
-        if raw_date:
+        if year:
 
             content_parts.append(
-                f"Date : {raw_date}"
+                f"Année : {year}"
             )
 
 
@@ -593,6 +621,28 @@ class FAODatasetParser:
                 + ", ".join(
                     keywords
                 )
+            )
+
+
+        if culture:
+
+            content_parts.append(
+                f"Culture : {culture}"
+            )
+
+
+        if country:
+
+            content_parts.append(
+                f"Pays / contexte géographique : {country}"
+            )
+
+
+        elif zone_geographique:
+
+            content_parts.append(
+                "Zone géographique : "
+                f"{zone_geographique}"
             )
 
 
@@ -615,21 +665,6 @@ class FAODatasetParser:
 
             content_parts.append(
                 f"Langue : {language}"
-            )
-
-
-        if zone_geographique:
-
-            content_parts.append(
-                "Zone géographique : "
-                f"{zone_geographique}"
-            )
-
-
-        if country:
-
-            content_parts.append(
-                f"Pays : {country}"
             )
 
 
@@ -662,7 +697,7 @@ class FAODatasetParser:
 
 
         # =====================================================
-        # DONNÉES DOCUMENT
+        # DOCUMENT STANDARDISÉ
         # =====================================================
 
         document_data = {
@@ -682,9 +717,21 @@ class FAODatasetParser:
             "language":
                 language,
 
+            "country":
+                country,
+
+            "crop":
+                culture,
+
+            "culture":
+                culture,
+
             "document_type":
-                publication_type
-                or "agricultural_publication",
+                (
+                    publication_type
+                    or
+                    "agricultural_publication"
+                ),
 
             "content":
                 content,
@@ -692,54 +739,33 @@ class FAODatasetParser:
             "description":
                 description,
 
-            "crop":
-                crop,
-
-            "culture":
-                culture,
-
-            "keywords":
-                keywords
-                if keywords
-                else None,
-
-            "mots_cles":
-                keywords
-                if keywords
-                else None,
-
-            "country":
-                country,
-
             "zone_geographique":
                 zone_geographique,
 
-            "author":
-                (
-                    ", ".join(authors)
-                    if authors
-                    else None
-                ),
-
-            "authors":
-                authors
-                if authors
-                else None,
-
-            "publisher":
-                publisher,
-
-            "dataset_filename":
-                filename,
-
-            "identifier":
-                agris_id,
+            "mots_cles":
+                keywords,
 
         }
 
 
         # =====================================================
-        # NE GARDER QUE LES CHAMPS ACCEPTÉS
+        # NE PAS FORCER DE FAUSSES VALEURS
+        # =====================================================
+
+        document_data = {
+
+            key: value
+
+            for key, value
+            in document_data.items()
+
+            if value is not None
+
+        }
+
+
+        # =====================================================
+        # NE GARDER QUE LES CHAMPS DU SCHÉMA
         # =====================================================
 
         document_fields = (
@@ -754,17 +780,10 @@ class FAODatasetParser:
             for key, value
             in document_data.items()
 
-            if (
-                key in document_fields
-                and value is not None
-            )
+            if key in document_fields
 
         }
 
-
-        # =====================================================
-        # CRÉER LE DOCUMENT
-        # =====================================================
 
         return DocumentMetadata(
             **filtered_data
@@ -791,13 +810,17 @@ class FAODatasetParser:
                     namespaces
                 )
 
+
                 if (
                     child is not None
                     and child.text
                     and child.text.strip()
                 ):
 
-                    return child.text.strip()
+                    return (
+                        child.text.strip()
+                    )
+
 
             except Exception:
 
@@ -806,7 +829,9 @@ class FAODatasetParser:
 
         expected_names = {
 
-            path.split(":")[-1].lower()
+            path
+            .split(":")[-1]
+            .lower()
 
             for path in paths
 
@@ -818,24 +843,31 @@ class FAODatasetParser:
             local_name = (
                 self._local_name(
                     child.tag
-                ).lower()
+                )
+                .lower()
             )
+
 
             if (
                 local_name
                 in expected_names
-                and child.text
-                and child.text.strip()
             ):
 
-                return child.text.strip()
+                if (
+                    child.text
+                    and child.text.strip()
+                ):
+
+                    return (
+                        child.text.strip()
+                    )
 
 
         return None
 
 
     # =========================================================
-    # EXTRAIRE PLUSIEURS VALEURS
+    # EXTRAIRE PLUSIEURS TEXTES
     # =========================================================
 
     def _get_all_text(
@@ -847,9 +879,12 @@ class FAODatasetParser:
 
         values = []
 
+
         expected_names = {
 
-            path.split(":")[-1].lower()
+            path
+            .split(":")[-1]
+            .lower()
 
             for path in paths
 
@@ -861,7 +896,8 @@ class FAODatasetParser:
             local_name = (
                 self._local_name(
                     child.tag
-                ).lower()
+                )
+                .lower()
             )
 
 
@@ -878,9 +914,17 @@ class FAODatasetParser:
                 and child.text.strip()
             ):
 
-                value = child.text.strip()
+                value = (
+                    self._clean_text(
+                        child.text
+                    )
+                )
 
-                if value not in values:
+
+                if (
+                    value
+                    and value not in values
+                ):
 
                     values.append(
                         value
@@ -891,225 +935,465 @@ class FAODatasetParser:
 
 
     # =========================================================
-    # IDENTIFIANT AGRIS
+    # EXTRAIRE INFORMATIONS GÉOGRAPHIQUES
     # =========================================================
 
-    def _get_agris_id(
+    def _get_geographic_values(
         self,
-        element,
-        namespaces
+        element
     ):
 
-        xml_id = element.attrib.get(
-            "{http://www.w3.org/XML/1998/namespace}id"
-        )
+        geographic_names = {
 
-        if xml_id:
+            "coverage",
+            "spatial",
+            "location",
+            "geographiccoverage",
+            "geographic",
+            "country",
 
-            return xml_id.strip()
-
-
-        try:
-
-            identifiers = element.findall(
-                "dc:identifier",
-                namespaces
-            )
-
-            for identifier in identifiers:
-
-                identifier_type = (
-                    identifier.attrib.get(
-                        "type",
-                        ""
-                    )
-                    .strip()
-                    .lower()
-                )
-
-                if (
-                    identifier_type == "agris"
-                    and identifier.text
-                    and identifier.text.strip()
-                ):
-
-                    return identifier.text.strip()
-
-        except Exception:
-
-            pass
+        }
 
 
-        return None
+        values = []
 
-
-    # =========================================================
-    # URL DU DOCUMENT
-    # =========================================================
-
-    def _get_document_url(
-        self,
-        element,
-        namespaces
-    ):
-
-        # -----------------------------------------------------
-        # 1. IDENTIFIANTS DC
-        # -----------------------------------------------------
-
-        try:
-
-            identifiers = element.findall(
-                "dc:identifier",
-                namespaces
-            )
-
-            # Priorité aux identifiants explicitement URL
-
-            for identifier in identifiers:
-
-                value = (
-                    identifier.text.strip()
-                    if (
-                        identifier.text
-                        and identifier.text.strip()
-                    )
-                    else None
-                )
-
-                if not value:
-
-                    continue
-
-                identifier_type = (
-                    identifier.attrib.get(
-                        "type",
-                        ""
-                    )
-                    .strip()
-                    .lower()
-                )
-
-                if (
-                    identifier_type == "url"
-                    and value.startswith(
-                        (
-                            "http://",
-                            "https://"
-                        )
-                    )
-                ):
-
-                    return value
-
-
-            # Ensuite n'importe quelle URL valide
-
-            for identifier in identifiers:
-
-                if (
-                    identifier.text
-                    and identifier.text.strip()
-                ):
-
-                    value = identifier.text.strip()
-
-                    if value.startswith(
-                        (
-                            "http://",
-                            "https://"
-                        )
-                    ):
-
-                        return value
-
-        except Exception:
-
-            pass
-
-
-        # -----------------------------------------------------
-        # 2. IDENTIFIANTS DCT
-        # -----------------------------------------------------
-
-        try:
-
-            identifiers = element.findall(
-                "dct:identifier",
-                namespaces
-            )
-
-            for identifier in identifiers:
-
-                if (
-                    identifier.text
-                    and identifier.text.strip()
-                ):
-
-                    value = identifier.text.strip()
-
-                    if value.startswith(
-                        (
-                            "http://",
-                            "https://"
-                        )
-                    ):
-
-                        return value
-
-        except Exception:
-
-            pass
-
-
-        # -----------------------------------------------------
-        # 3. FALLBACK GÉNÉRIQUE
-        # -----------------------------------------------------
 
         for child in element.iter():
-
-            if not (
-                child.text
-                and child.text.strip()
-            ):
-
-                continue
-
-
-            value = child.text.strip()
-
-            if not value.startswith(
-                (
-                    "http://",
-                    "https://"
-                )
-            ):
-
-                continue
-
 
             local_name = (
                 self._local_name(
                     child.tag
-                ).lower()
+                )
+                .lower()
             )
 
 
-            if local_name in [
-                "identifier",
-                "url",
-                "landingpage",
-                "accessurl",
-            ]:
+            if (
+                local_name
+                not in geographic_names
+            ):
 
-                return value
+                continue
+
+
+            if (
+                child.text
+                and child.text.strip()
+            ):
+
+                value = (
+                    self._clean_text(
+                        child.text
+                    )
+                )
+
+
+                if (
+                    value
+                    and value not in values
+                ):
+
+                    values.append(
+                        value
+                    )
+
+
+        return values
+
+
+    # =========================================================
+    # CONSTRUIRE ZONE GÉOGRAPHIQUE
+    # =========================================================
+
+    def _build_geographic_zone(
+        self,
+        geographic_values,
+        country
+    ):
+
+        if geographic_values:
+
+            return ", ".join(
+                geographic_values[:5]
+            )
+
+
+        if country:
+
+            return country
 
 
         return None
 
 
     # =========================================================
-    # NORMALISER LA LANGUE
+    # DÉTECTER PAYS
+    # =========================================================
+
+    def _detect_country(
+        self,
+        geographic_values,
+        title,
+        description
+    ):
+
+        countries = {
+
+            "benin":
+                "Bénin",
+
+            "bénin":
+                "Bénin",
+
+            "nigeria":
+                "Nigeria",
+
+            "niger":
+                "Niger",
+
+            "togo":
+                "Togo",
+
+            "ghana":
+                "Ghana",
+
+            "burkina faso":
+                "Burkina Faso",
+
+            "mali":
+                "Mali",
+
+            "senegal":
+                "Sénégal",
+
+            "sénégal":
+                "Sénégal",
+
+            "cameroon":
+                "Cameroun",
+
+            "cameroun":
+                "Cameroun",
+
+            "bulgaria":
+                "Bulgarie",
+
+            "bulgarie":
+                "Bulgarie",
+
+            "nepal":
+                "Népal",
+
+            "népal":
+                "Népal",
+
+            "kenya":
+                "Kenya",
+
+            "uganda":
+                "Ouganda",
+
+            "ethiopia":
+                "Éthiopie",
+
+            "ethiopie":
+                "Éthiopie",
+
+            "éthiopie":
+                "Éthiopie",
+
+            "ivory coast":
+                "Côte d'Ivoire",
+
+            "côte d'ivoire":
+                "Côte d'Ivoire",
+
+            "cote d'ivoire":
+                "Côte d'Ivoire",
+
+        }
+
+
+        # -----------------------------------------------------
+        # PRIORITÉ AUX MÉTADONNÉES GÉOGRAPHIQUES
+        # -----------------------------------------------------
+
+        geographic_text = " ".join(
+            geographic_values
+        ).lower()
+
+
+        for name, normalized in countries.items():
+
+            if self._contains_word(
+                geographic_text,
+                name
+            ):
+
+                return normalized
+
+
+        # -----------------------------------------------------
+        # FALLBACK TITRE + DESCRIPTION
+        # -----------------------------------------------------
+
+        combined_text = (
+            f"{title or ''} "
+            f"{description or ''}"
+        ).lower()
+
+
+        for name, normalized in countries.items():
+
+            if self._contains_word(
+                combined_text,
+                name
+            ):
+
+                return normalized
+
+
+        # IMPORTANT :
+        # aucun pays n'est inventé.
+
+        return None
+
+
+    # =========================================================
+    # DÉTECTER CULTURE
+    # =========================================================
+
+    def _detect_crop(
+        self,
+        title,
+        description,
+        keywords
+    ):
+
+        crop_names = {
+
+            "maize":
+                "maïs",
+
+            "corn":
+                "maïs",
+
+            "maïs":
+                "maïs",
+
+            "maize crop":
+                "maïs",
+
+            "rice":
+                "riz",
+
+            "riz":
+                "riz",
+
+            "cassava":
+                "manioc",
+
+            "manioc":
+                "manioc",
+
+            "yam":
+                "igname",
+
+            "igname":
+                "igname",
+
+            "soybean":
+                "soja",
+
+            "soybeans":
+                "soja",
+
+            "soya":
+                "soja",
+
+            "soja":
+                "soja",
+
+            "cotton":
+                "coton",
+
+            "coton":
+                "coton",
+
+            "tomato":
+                "tomate",
+
+            "tomatoes":
+                "tomate",
+
+            "tomate":
+                "tomate",
+
+            "carrot":
+                "carotte",
+
+            "carrots":
+                "carotte",
+
+            "carotte":
+                "carotte",
+
+            "millet":
+                "mil",
+
+            "finger millet":
+                "mil",
+
+            "sorghum":
+                "sorgho",
+
+            "sorgho":
+                "sorgho",
+
+            "wheat":
+                "blé",
+
+            "einkorn":
+                "blé",
+
+            "emmer":
+                "blé",
+
+            "blé":
+                "blé",
+
+            "groundnut":
+                "arachide",
+
+            "peanut":
+                "arachide",
+
+            "arachide":
+                "arachide",
+
+            "cowpea":
+                "niébé",
+
+            "niébé":
+                "niébé",
+
+            "niebe":
+                "niébé",
+
+            "cashew":
+                "anacarde",
+
+            "cashew nut":
+                "anacarde",
+
+            "anacardier":
+                "anacarde",
+
+            "anacarde":
+                "anacarde",
+
+            "pineapple":
+                "ananas",
+
+            "ananas":
+                "ananas",
+
+            "banana":
+                "banane",
+
+            "plantain":
+                "banane plantain",
+
+            "potato":
+                "pomme de terre",
+
+            "sweet potato":
+                "patate douce",
+
+            "cocoa":
+                "cacao",
+
+            "cacao":
+                "cacao",
+
+            "coffee":
+                "café",
+
+            "café":
+                "café",
+
+        }
+
+
+        # -----------------------------------------------------
+        # LES MOTS-CLÉS SONT PRIORITAIRES
+        # -----------------------------------------------------
+
+        keyword_text = " ".join(
+            keywords or []
+        ).lower()
+
+
+        # -----------------------------------------------------
+        # TITRE ENSUITE
+        # -----------------------------------------------------
+
+        title_text = (
+            title or ""
+        ).lower()
+
+
+        # -----------------------------------------------------
+        # DESCRIPTION EN DERNIER
+        # -----------------------------------------------------
+
+        description_text = (
+            description or ""
+        ).lower()
+
+
+        search_areas = [
+
+            keyword_text,
+            title_text,
+            description_text,
+
+        ]
+
+
+        # Les expressions longues doivent passer
+        # avant les expressions courtes.
+
+        ordered_crops = sorted(
+
+            crop_names.items(),
+
+            key=lambda item: len(
+                item[0]
+            ),
+
+            reverse=True
+
+        )
+
+
+        for text in search_areas:
+
+            for name, normalized in ordered_crops:
+
+                if self._contains_word(
+                    text,
+                    name
+                ):
+
+                    return normalized
+
+
+        return None
+
+
+    # =========================================================
+    # NORMALISER LANGUE
     # =========================================================
 
     def _normalize_language(
@@ -1122,44 +1406,314 @@ class FAODatasetParser:
             return None
 
 
-        value = str(
-            language
-        ).strip()
+        value = (
+            str(language)
+            .strip()
+            .lower()
+        )
 
 
-        if not value:
+        mapping = {
 
-            return None
+            "en":
+                "en",
 
+            "eng":
+                "en",
 
-        normalized = {
-            "english": "en",
-            "eng": "en",
-            "en": "en",
+            "english":
+                "en",
 
-            "french": "fr",
-            "fra": "fr",
-            "fre": "fr",
-            "fr": "fr",
+            "fr":
+                "fr",
 
-            "portuguese": "pt",
-            "por": "pt",
-            "pt": "pt",
+            "fra":
+                "fr",
 
-            "spanish": "es",
-            "spa": "es",
-            "es": "es",
+            "fre":
+                "fr",
+
+            "french":
+                "fr",
+
+            "français":
+                "fr",
+
+            "pt":
+                "pt",
+
+            "por":
+                "pt",
+
+            "portuguese":
+                "pt",
+
+            "es":
+                "es",
+
+            "spa":
+                "es",
+
+            "spanish":
+                "es",
+
+            "de":
+                "de",
+
+            "deu":
+                "de",
+
+            "ger":
+                "de",
+
         }
 
 
-        return normalized.get(
-            value.lower(),
-            value
+        return mapping.get(
+            value,
+            value[:10]
         )
 
 
     # =========================================================
-    # CONVERTIR UNE DATE
+    # EXTRAIRE IDENTIFIANT AGRIS
+    # =========================================================
+
+    def _get_agris_id(
+        self,
+        element,
+        namespaces
+    ):
+
+        xml_id = element.attrib.get(
+            "{http://www.w3.org/XML/1998/namespace}id"
+        )
+
+
+        if xml_id:
+
+            return (
+                xml_id.strip()
+            )
+
+
+        try:
+
+            identifiers = element.findall(
+                "dc:identifier",
+                namespaces
+            )
+
+
+            for identifier in identifiers:
+
+                identifier_type = (
+                    identifier.attrib.get(
+                        "type",
+                        ""
+                    )
+                    .strip()
+                    .lower()
+                )
+
+
+                if (
+                    identifier_type == "agris"
+                    and identifier.text
+                    and identifier.text.strip()
+                ):
+
+                    return (
+                        identifier.text.strip()
+                    )
+
+
+        except Exception:
+
+            pass
+
+
+        return None
+
+
+    # =========================================================
+    # EXTRAIRE URL
+    # =========================================================
+
+    def _get_document_url(
+        self,
+        element,
+        namespaces
+    ):
+
+        # -----------------------------------------------------
+        # DC IDENTIFIER
+        # -----------------------------------------------------
+
+        try:
+
+            identifiers = element.findall(
+                "dc:identifier",
+                namespaces
+            )
+
+
+            # Priorité à type URL
+
+            for identifier in identifiers:
+
+                value = (
+                    identifier.text.strip()
+                    if (
+                        identifier.text
+                        and identifier.text.strip()
+                    )
+                    else None
+                )
+
+
+                if not value:
+
+                    continue
+
+
+                identifier_type = (
+                    identifier.attrib.get(
+                        "type",
+                        ""
+                    )
+                    .strip()
+                    .lower()
+                )
+
+
+                if (
+                    identifier_type == "url"
+                    and self._is_url(
+                        value
+                    )
+                ):
+
+                    return value
+
+
+            # Ensuite n'importe quelle URL
+
+            for identifier in identifiers:
+
+                if (
+                    identifier.text
+                    and identifier.text.strip()
+                ):
+
+                    value = (
+                        identifier.text.strip()
+                    )
+
+
+                    if self._is_url(
+                        value
+                    ):
+
+                        return value
+
+
+        except Exception:
+
+            pass
+
+
+        # -----------------------------------------------------
+        # DCT IDENTIFIER
+        # -----------------------------------------------------
+
+        try:
+
+            identifiers = element.findall(
+                "dct:identifier",
+                namespaces
+            )
+
+
+            for identifier in identifiers:
+
+                if (
+                    identifier.text
+                    and identifier.text.strip()
+                ):
+
+                    value = (
+                        identifier.text.strip()
+                    )
+
+
+                    if self._is_url(
+                        value
+                    ):
+
+                        return value
+
+
+        except Exception:
+
+            pass
+
+
+        # -----------------------------------------------------
+        # FALLBACK
+        # -----------------------------------------------------
+
+        allowed_names = {
+
+            "identifier",
+            "url",
+            "landingpage",
+            "accessurl",
+            "downloadurl",
+
+        }
+
+
+        for child in element.iter():
+
+            if (
+                not child.text
+                or not child.text.strip()
+            ):
+
+                continue
+
+
+            value = (
+                child.text.strip()
+            )
+
+
+            if not self._is_url(
+                value
+            ):
+
+                continue
+
+
+            local_name = (
+                self._local_name(
+                    child.tag
+                )
+                .lower()
+            )
+
+
+            if local_name in allowed_names:
+
+                return value
+
+
+        return None
+
+
+    # =========================================================
+    # PARSER DATE
     # =========================================================
 
     def _parse_date(
@@ -1181,23 +1735,8 @@ class FAODatasetParser:
         # YYYY-MM-DD
         # -----------------------------------------------------
 
-        try:
-
-            return date.fromisoformat(
-                value[:10]
-            )
-
-        except Exception:
-
-            pass
-
-
-        # -----------------------------------------------------
-        # ANNÉE SEULE : YYYY
-        # -----------------------------------------------------
-
         match = re.search(
-            r"\b(19|20)\d{2}\b",
+            r"\b(\d{4})-(\d{2})-(\d{2})\b",
             value
         )
 
@@ -1207,14 +1746,36 @@ class FAODatasetParser:
             try:
 
                 return date(
-                    int(
-                        match.group(0)
-                    ),
+                    int(match.group(1)),
+                    int(match.group(2)),
+                    int(match.group(3))
+                )
+
+            except ValueError:
+
+                pass
+
+
+        # -----------------------------------------------------
+        # YYYY
+        # -----------------------------------------------------
+
+        year = self._extract_year(
+            value
+        )
+
+
+        if year:
+
+            try:
+
+                return date(
+                    int(year),
                     1,
                     1
                 )
 
-            except Exception:
+            except ValueError:
 
                 pass
 
@@ -1223,43 +1784,194 @@ class FAODatasetParser:
 
 
     # =========================================================
-    # EXTRAIRE LE PAYS
+    # EXTRAIRE ANNÉE
     # =========================================================
 
-    def _extract_country(
+    def _extract_year(
         self,
-        geographic_values
+        value
     ):
 
-        if not geographic_values:
+        if not value:
 
             return None
 
 
-        # Pour l'instant, nous conservons uniquement
-        # une valeur géographique explicite.
-        #
-        # Nous n'essayons PAS de deviner le pays depuis
-        # le titre ou la description.
+        match = re.search(
+            r"\b(19|20)\d{2}\b",
+            str(value)
+        )
 
-        if len(
-            geographic_values
-        ) == 1:
 
-            value = str(
-                geographic_values[0]
-            ).strip()
+        if match:
 
-            if value:
-
-                return value
+            return match.group(
+                0
+            )
 
 
         return None
 
 
     # =========================================================
-    # NOM LOCAL D'UN TAG XML
+    # NETTOYER TEXTE
+    # =========================================================
+
+    def _clean_text(
+        self,
+        value
+    ):
+
+        if not value:
+
+            return None
+
+
+        value = str(
+            value
+        )
+
+
+        # Quelques entités HTML fréquentes.
+
+        replacements = {
+
+            "&nbsp;":
+                " ",
+
+            "&#160;":
+                " ",
+
+            "\xa0":
+                " ",
+
+        }
+
+
+        for old, new in replacements.items():
+
+            value = value.replace(
+                old,
+                new
+            )
+
+
+        value = re.sub(
+            r"\s+",
+            " ",
+            value
+        )
+
+
+        value = value.strip()
+
+
+        return (
+            value
+            if value
+            else None
+        )
+
+
+    # =========================================================
+    # NETTOYER LISTE
+    # =========================================================
+
+    def _clean_list(
+        self,
+        values
+    ):
+
+        cleaned = []
+
+
+        for value in (
+            values or []
+        ):
+
+            value = (
+                self._clean_text(
+                    value
+                )
+            )
+
+
+            if (
+                value
+                and value not in cleaned
+            ):
+
+                cleaned.append(
+                    value
+                )
+
+
+        return cleaned
+
+
+    # =========================================================
+    # VÉRIFIER URL
+    # =========================================================
+
+    def _is_url(
+        self,
+        value
+    ):
+
+        if not value:
+
+            return False
+
+
+        return str(
+            value
+        ).strip().startswith(
+            (
+                "http://",
+                "https://"
+            )
+        )
+
+
+    # =========================================================
+    # RECHERCHE MOT / EXPRESSION
+    # =========================================================
+
+    def _contains_word(
+        self,
+        text,
+        expression
+    ):
+
+        if (
+            not text
+            or not expression
+        ):
+
+            return False
+
+
+        pattern = (
+
+            r"(?<!\w)"
+            + re.escape(
+                expression.lower()
+            )
+            + r"(?!\w)"
+
+        )
+
+
+        return bool(
+            re.search(
+                pattern,
+                text.lower()
+            )
+        )
+
+
+    # =========================================================
+    # NOM LOCAL TAG XML
     # =========================================================
 
     def _local_name(
