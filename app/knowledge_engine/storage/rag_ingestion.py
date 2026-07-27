@@ -13,7 +13,7 @@ from app.ai.embeddings import (
 
 
 # =========================================================
-# INGESTION DES DOCUMENTS DANS LE RAG
+# RAG INGESTION
 # =========================================================
 
 class RAGIngestion:
@@ -33,21 +33,14 @@ class RAGIngestion:
         )
 
         if not supabase_url:
-
             raise ValueError(
                 "SUPABASE_URL manquante."
             )
 
         if not supabase_key:
-
             raise ValueError(
                 "SUPABASE_KEY manquante."
             )
-
-
-        # =====================================================
-        # CONNEXION SUPABASE
-        # =====================================================
 
         self.supabase: Client = (
             create_client(
@@ -55,7 +48,6 @@ class RAGIngestion:
                 supabase_key
             )
         )
-
 
         # =====================================================
         # DOCUMENT STORE
@@ -65,9 +57,8 @@ class RAGIngestion:
             DocumentStore()
         )
 
-
         # =====================================================
-        # SERVICE EMBEDDING GEMINI
+        # SERVICE EMBEDDING
         # =====================================================
 
         self.embedding_service = (
@@ -79,20 +70,22 @@ class RAGIngestion:
 
 
     # =========================================================
-    # RÉCUPÉRER LES SOURCES DÉJÀ INGÉRÉES
+    # CHARGER LES DOCUMENTS DÉJÀ PRÉSENTS
     # =========================================================
 
-    def get_existing_sources(
-        self
-    ):
+    def get_existing_documents(self):
+
+        print(
+            "[RAG INGESTION] "
+            "Chargement des documents existants..."
+        )
+
+        existing_documents = {}
+
+        batch_size = 1000
+        offset = 0
 
         try:
-
-            existing_sources = set()
-
-            batch_size = 1000
-            offset = 0
-
 
             while True:
 
@@ -105,7 +98,16 @@ class RAGIngestion:
                     )
 
                     .select(
-                        "source_path"
+                        "id, "
+                        "titre, "
+                        "organisme, "
+                        "langue, "
+                        "type_document, "
+                        "culture, "
+                        "zone_geographique, "
+                        "mots_cles, "
+                        "source_path, "
+                        "content"
                     )
 
                     .range(
@@ -114,22 +116,17 @@ class RAGIngestion:
                     )
 
                     .execute()
-
                 )
 
-
-                rows = (
+                batch = (
                     response.data
                     or []
                 )
 
-
-                if not rows:
-
+                if not batch:
                     break
 
-
-                for row in rows:
+                for row in batch:
 
                     source_path = (
                         row.get(
@@ -137,53 +134,42 @@ class RAGIngestion:
                         )
                     )
 
-
                     if source_path:
 
-                        existing_sources.add(
-                            str(
-                                source_path
-                            ).strip()
-                        )
+                        source_path = str(
+                            source_path
+                        ).strip()
 
+                        existing_documents[
+                            source_path
+                        ] = row
 
-                if len(
-                    rows
-                ) < batch_size:
-
+                if len(batch) < batch_size:
                     break
 
-
-                offset += (
-                    batch_size
-                )
-
+                offset += batch_size
 
             print(
                 "[RAG INGESTION] "
-                f"{len(existing_sources)} "
-                "source(s) déjà présente(s) "
-                "dans Supabase."
+                f"{len(existing_documents)} "
+                "source(s) existante(s)."
             )
 
-
-            return existing_sources
-
+            return existing_documents
 
         except Exception as e:
 
             print(
                 "[RAG INGESTION] "
-                "Erreur récupération "
-                "sources existantes :",
+                "Erreur chargement documents :",
                 e
             )
 
-            return set()
+            return {}
 
 
     # =========================================================
-    # EXTRAIRE L'URL / SOURCE UNIQUE
+    # SOURCE UNIQUE DU DOCUMENT
     # =========================================================
 
     def get_document_source(
@@ -195,18 +181,15 @@ class RAGIngestion:
             "url"
         )
 
-
         if url:
 
             return str(
                 url
             ).strip()
 
-
         source_path = document.get(
             "source_path"
         )
-
 
         if source_path:
 
@@ -214,12 +197,11 @@ class RAGIngestion:
                 source_path
             ).strip()
 
-
         return None
 
 
     # =========================================================
-    # EXTRAIRE LE TITRE
+    # TITRE
     # =========================================================
 
     def get_document_title(
@@ -227,10 +209,15 @@ class RAGIngestion:
         document
     ):
 
-        title = document.get(
-            "title"
+        title = (
+            document.get(
+                "title"
+            )
+            or
+            document.get(
+                "titre"
+            )
         )
-
 
         if title:
 
@@ -238,26 +225,11 @@ class RAGIngestion:
                 title
             ).strip()
 
-
-        titre = document.get(
-            "titre"
-        )
-
-
-        if titre:
-
-            return str(
-                titre
-            ).strip()
-
-
-        return (
-            "Document sans titre"
-        )
+        return "Document sans titre"
 
 
     # =========================================================
-    # EXTRAIRE LE CONTENU
+    # CONTENU
     # =========================================================
 
     def get_document_content(
@@ -269,18 +241,15 @@ class RAGIngestion:
             "content"
         )
 
-
         if content:
 
             return str(
                 content
             ).strip()
 
-
         description = document.get(
             "description"
         )
-
 
         if description:
 
@@ -288,12 +257,11 @@ class RAGIngestion:
                 description
             ).strip()
 
-
         return ""
 
 
     # =========================================================
-    # EXTRAIRE LE NOM DE LA SOURCE / ORGANISME
+    # ORGANISME / SOURCE
     # =========================================================
 
     def get_document_source_name(
@@ -301,10 +269,15 @@ class RAGIngestion:
         document
     ):
 
-        source = document.get(
-            "source"
+        source = (
+            document.get(
+                "source"
+            )
+            or
+            document.get(
+                "organisme"
+            )
         )
-
 
         if source:
 
@@ -312,26 +285,11 @@ class RAGIngestion:
                 source
             ).strip()
 
-
-        organisme = document.get(
-            "organisme"
-        )
-
-
-        if organisme:
-
-            return str(
-                organisme
-            ).strip()
-
-
-        return (
-            "FAO AGRIS"
-        )
+        return "FAO AGRIS"
 
 
     # =========================================================
-    # EXTRAIRE LA LANGUE
+    # LANGUE
     # =========================================================
 
     def get_document_language(
@@ -349,63 +307,82 @@ class RAGIngestion:
             )
         )
 
+        if language:
 
-        if not language:
+            language = str(
+                language
+            ).strip().lower()
 
-            return None
+            # ---------------------------------------------
+            # NORMALISATION
+            # ---------------------------------------------
 
+            language_map = {
 
-        language = str(
-            language
-        ).strip()
+                "english":
+                    "en",
 
+                "eng":
+                    "en",
 
-        return (
-            language
-            if language
-            else None
-        )
+                "en":
+                    "en",
+
+                "french":
+                    "fr",
+
+                "fra":
+                    "fr",
+
+                "fre":
+                    "fr",
+
+                "fr":
+                    "fr",
+
+                "français":
+                    "fr",
+
+                "portuguese":
+                    "pt",
+
+                "por":
+                    "pt",
+
+                "pt":
+                    "pt",
+
+                "spanish":
+                    "es",
+
+                "spa":
+                    "es",
+
+                "es":
+                    "es",
+
+            }
+
+            if language in language_map:
+
+                return language_map[
+                    language
+                ]
+
+            return language
+
+        # ---------------------------------------------
+        # FALLBACK
+        #
+        # Les datasets AGRIS actuellement traités
+        # sont majoritairement en anglais.
+        # ---------------------------------------------
+
+        return "en"
 
 
     # =========================================================
-    # EXTRAIRE LE TYPE DE DOCUMENT
-    # =========================================================
-
-    def get_document_type(
-        self,
-        document
-    ):
-
-        document_type = (
-            document.get(
-                "document_type"
-            )
-            or
-            document.get(
-                "type_document"
-            )
-        )
-
-
-        if not document_type:
-
-            return None
-
-
-        document_type = str(
-            document_type
-        ).strip()
-
-
-        return (
-            document_type
-            if document_type
-            else None
-        )
-
-
-    # =========================================================
-    # EXTRAIRE LA CULTURE
+    # CULTURE
     # =========================================================
 
     def get_document_crop(
@@ -423,83 +400,45 @@ class RAGIngestion:
             )
         )
 
+        if crop:
 
-        if not crop:
-
-            return None
-
-
-        crop = str(
-            crop
-        ).strip()
-
-
-        return (
-            crop
-            if crop
-            else None
-        )
-
-
-    # =========================================================
-    # EXTRAIRE LA ZONE GÉOGRAPHIQUE
-    # =========================================================
-
-    def get_document_geographic_area(
-        self,
-        document
-    ):
-
-        # -----------------------------------------------------
-        # PRIORITÉ À LA ZONE GÉOGRAPHIQUE EXPLICITE
-        # -----------------------------------------------------
-
-        zone = document.get(
-            "zone_geographique"
-        )
-
-
-        if zone:
-
-            zone = str(
-                zone
+            return str(
+                crop
             ).strip()
-
-            if zone:
-
-                return zone
-
-
-        # -----------------------------------------------------
-        # SINON UTILISER LE PAYS S'IL EST RÉELLEMENT CONNU
-        # -----------------------------------------------------
-
-        country = document.get(
-            "country"
-        )
-
-
-        if country:
-
-            country = str(
-                country
-            ).strip()
-
-            if country:
-
-                return country
-
-
-        # -----------------------------------------------------
-        # IMPORTANT :
-        # AUCUN "BÉNIN" AUTOMATIQUE
-        # -----------------------------------------------------
 
         return None
 
 
     # =========================================================
-    # EXTRAIRE LES MOTS-CLÉS
+    # ZONE GÉOGRAPHIQUE
+    # =========================================================
+
+    def get_document_geography(
+        self,
+        document
+    ):
+
+        geography = (
+            document.get(
+                "zone_geographique"
+            )
+            or
+            document.get(
+                "country"
+            )
+        )
+
+        if geography:
+
+            return str(
+                geography
+            ).strip()
+
+        return None
+
+
+    # =========================================================
+    # MOTS-CLÉS
     # =========================================================
 
     def get_document_keywords(
@@ -509,23 +448,17 @@ class RAGIngestion:
 
         keywords = (
             document.get(
-                "keywords"
+                "mots_cles"
             )
             or
             document.get(
-                "mots_cles"
+                "keywords"
             )
         )
-
 
         if not keywords:
 
             return None
-
-
-        # -----------------------------------------------------
-        # LISTE DE MOTS-CLÉS
-        # -----------------------------------------------------
 
         if isinstance(
             keywords,
@@ -536,25 +469,20 @@ class RAGIngestion:
 
             for keyword in keywords:
 
-                if keyword is None:
+                if keyword:
 
-                    continue
+                    value = str(
+                        keyword
+                    ).strip()
 
-
-                value = str(
-                    keyword
-                ).strip()
-
-
-                if (
-                    value
-                    and value not in cleaned
-                ):
-
-                    cleaned.append(
+                    if (
                         value
-                    )
+                        and value not in cleaned
+                    ):
 
+                        cleaned.append(
+                            value
+                        )
 
             return (
                 cleaned
@@ -562,128 +490,61 @@ class RAGIngestion:
                 else None
             )
 
+        if isinstance(
+            keywords,
+            str
+        ):
 
-        # -----------------------------------------------------
-        # CHAÎNE DE CARACTÈRES
-        # -----------------------------------------------------
+            values = [
 
-        value = str(
-            keywords
-        ).strip()
+                value.strip()
 
+                for value
+                in keywords.split(",")
 
-        if not value:
+                if value.strip()
 
-            return None
+            ]
 
-
-        return [
-            value
-        ]
-
-
-    # =========================================================
-    # EXTRAIRE L'ANNÉE
-    # =========================================================
-
-    def get_document_year(
-        self,
-        document
-    ):
-
-        # -----------------------------------------------------
-        # FORMAT DÉJÀ PRÉSENT
-        # -----------------------------------------------------
-
-        year = (
-            document.get(
-                "year"
+            return (
+                values
+                if values
+                else None
             )
-            or
-            document.get(
-                "annee"
-            )
-        )
-
-
-        if year:
-
-            value = str(
-                year
-            ).strip()
-
-
-            if len(
-                value
-            ) >= 4:
-
-                try:
-
-                    parsed_year = int(
-                        value[:4]
-                    )
-
-
-                    if (
-                        1000
-                        <= parsed_year
-                        <= 9999
-                    ):
-
-                        return parsed_year
-
-
-                except Exception:
-
-                    pass
-
-
-        # -----------------------------------------------------
-        # FORMAT published_at
-        # -----------------------------------------------------
-
-        published_at = document.get(
-            "published_at"
-        )
-
-
-        if published_at:
-
-            value = str(
-                published_at
-            ).strip()
-
-
-            if len(
-                value
-            ) >= 4:
-
-                try:
-
-                    parsed_year = int(
-                        value[:4]
-                    )
-
-
-                    if (
-                        1000
-                        <= parsed_year
-                        <= 9999
-                    ):
-
-                        return parsed_year
-
-
-                except Exception:
-
-                    pass
-
 
         return None
 
 
     # =========================================================
-    # CONSTRUIRE LE TEXTE POUR LE RAG
+    # TYPE DOCUMENT
+    # =========================================================
+
+    def get_document_type(
+        self,
+        document
+    ):
+
+        document_type = (
+            document.get(
+                "document_type"
+            )
+            or
+            document.get(
+                "type_document"
+            )
+        )
+
+        if document_type:
+
+            return str(
+                document_type
+            ).strip()
+
+        return "agricultural_publication"
+
+
+    # =========================================================
+    # CONSTRUIRE LE TEXTE RAG
     # =========================================================
 
     def build_rag_text(
@@ -697,13 +558,11 @@ class RAGIngestion:
             )
         )
 
-
         content = (
             self.get_document_content(
                 document
             )
         )
-
 
         source = (
             self.get_document_source_name(
@@ -711,13 +570,11 @@ class RAGIngestion:
             )
         )
 
-
         url = (
             self.get_document_source(
                 document
             )
         )
-
 
         language = (
             self.get_document_language(
@@ -725,27 +582,17 @@ class RAGIngestion:
             )
         )
 
-
-        document_type = (
-            self.get_document_type(
-                document
-            )
-        )
-
-
         crop = (
             self.get_document_crop(
                 document
             )
         )
 
-
-        geographic_area = (
-            self.get_document_geographic_area(
+        geography = (
+            self.get_document_geography(
                 document
             )
         )
-
 
         keywords = (
             self.get_document_keywords(
@@ -753,29 +600,11 @@ class RAGIngestion:
             )
         )
 
-
-        year = (
-            self.get_document_year(
-                document
-            )
-        )
-
-
         parts = []
-
-
-        # -----------------------------------------------------
-        # TITRE
-        # -----------------------------------------------------
 
         parts.append(
             f"Titre : {title}"
         )
-
-
-        # -----------------------------------------------------
-        # CONTENU
-        # -----------------------------------------------------
 
         if content:
 
@@ -783,21 +612,11 @@ class RAGIngestion:
                 f"Contenu :\n{content}"
             )
 
-
-        # -----------------------------------------------------
-        # ANNÉE
-        # -----------------------------------------------------
-
-        if year:
+        if source:
 
             parts.append(
-                f"Année : {year}"
+                f"Source : {source}"
             )
-
-
-        # -----------------------------------------------------
-        # LANGUE
-        # -----------------------------------------------------
 
         if language:
 
@@ -805,45 +624,18 @@ class RAGIngestion:
                 f"Langue : {language}"
             )
 
-
-        # -----------------------------------------------------
-        # TYPE
-        # -----------------------------------------------------
-
-        if document_type:
-
-            parts.append(
-                "Type de document : "
-                f"{document_type}"
-            )
-
-
-        # -----------------------------------------------------
-        # CULTURE
-        # -----------------------------------------------------
-
         if crop:
 
             parts.append(
                 f"Culture : {crop}"
             )
 
-
-        # -----------------------------------------------------
-        # LOCALISATION
-        # -----------------------------------------------------
-
-        if geographic_area:
+        if geography:
 
             parts.append(
                 "Zone géographique : "
-                f"{geographic_area}"
+                f"{geography}"
             )
-
-
-        # -----------------------------------------------------
-        # MOTS-CLÉS
-        # -----------------------------------------------------
 
         if keywords:
 
@@ -854,28 +646,11 @@ class RAGIngestion:
                 )
             )
 
-
-        # -----------------------------------------------------
-        # SOURCE
-        # -----------------------------------------------------
-
-        if source:
-
-            parts.append(
-                f"Source : {source}"
-            )
-
-
-        # -----------------------------------------------------
-        # URL
-        # -----------------------------------------------------
-
         if url:
 
             parts.append(
                 f"URL : {url}"
             )
-
 
         return "\n\n".join(
             parts
@@ -883,7 +658,30 @@ class RAGIngestion:
 
 
     # =========================================================
-    # INGESTION PAR LOT
+    # VÉRIFIER SI LE CONTENU RAG A CHANGÉ
+    # =========================================================
+
+    def content_has_changed(
+        self,
+        existing_document,
+        new_content
+    ):
+
+        existing_content = (
+            existing_document.get(
+                "content"
+            )
+            or ""
+        )
+
+        return (
+            existing_content.strip()
+            != new_content.strip()
+        )
+
+
+    # =========================================================
+    # INGESTION
     # =========================================================
 
     def ingest(
@@ -902,7 +700,6 @@ class RAGIngestion:
                 "limit doit être supérieur à 0."
             )
 
-
         if offset < 0:
 
             raise ValueError(
@@ -911,30 +708,25 @@ class RAGIngestion:
 
 
         # =====================================================
-        # CHARGER LES DOCUMENTS LOCAUX
+        # CHARGER DOCUMENTS LOCAUX
         # =====================================================
 
         print(
             "[RAG INGESTION] "
-            "Chargement des documents "
-            "depuis le stockage local..."
+            "Chargement des documents locaux..."
         )
-
 
         all_documents = (
             self.document_store._load()
         )
 
-
         total_documents = len(
             all_documents
         )
 
-
         print(
             "[RAG INGESTION] "
-            f"{total_documents} document(s) "
-            "disponible(s)."
+            f"{total_documents} document(s) disponible(s)."
         )
 
 
@@ -948,9 +740,6 @@ class RAGIngestion:
 
                 "status":
                     "success",
-
-                "message":
-                    "Aucun document disponible.",
 
                 "total_documents":
                     0,
@@ -967,6 +756,9 @@ class RAGIngestion:
                 "inserted":
                     0,
 
+                "updated":
+                    0,
+
                 "skipped":
                     0,
 
@@ -974,45 +766,51 @@ class RAGIngestion:
                     0,
 
                 "next_offset":
-                    offset
+                    offset,
+
+                "has_more":
+                    False
 
             }
 
 
         # =====================================================
-        # SOURCES DÉJÀ INGÉRÉES
+        # DOCUMENTS EXISTANTS SUPABASE
         # =====================================================
 
-        existing_sources = (
-            self.get_existing_sources()
+        existing_documents = (
+            self.get_existing_documents()
         )
 
 
         # =====================================================
-        # SÉLECTIONNER LE BATCH
+        # BATCH
         # =====================================================
 
-        batch = all_documents[
-            offset:
-            offset + limit
-        ]
+        batch = (
 
+            all_documents[
 
-        print(
-            "[RAG INGESTION] "
-            f"Batch sélectionné : "
-            f"{offset} → "
-            f"{offset + len(batch)}"
+                offset:
+
+                offset + limit
+
+            ]
+
         )
 
 
         inserted = 0
+
+        updated = 0
+
         skipped = 0
+
         errors = 0
 
 
         # =====================================================
-        # TRAITER LES DOCUMENTS
+        # TRAITEMENT
         # =====================================================
 
         for index, document in enumerate(
@@ -1022,28 +820,23 @@ class RAGIngestion:
 
             try:
 
-                # -------------------------------------------------
+                # =================================================
                 # FORMAT
-                # -------------------------------------------------
+                # =================================================
 
                 if not isinstance(
                     document,
                     dict
                 ):
 
-                    print(
-                        f"❌ [{index}] "
-                        "Format document invalide."
-                    )
-
                     errors += 1
 
                     continue
 
 
-                # -------------------------------------------------
-                # MÉTADONNÉES
-                # -------------------------------------------------
+                # =================================================
+                # DONNÉES
+                # =================================================
 
                 title = (
                     self.get_document_title(
@@ -1051,13 +844,11 @@ class RAGIngestion:
                     )
                 )
 
-
                 source = (
                     self.get_document_source_name(
                         document
                     )
                 )
-
 
                 url = (
                     self.get_document_source(
@@ -1065,20 +856,29 @@ class RAGIngestion:
                     )
                 )
 
-
-                content = (
-                    self.get_document_content(
-                        document
-                    )
-                )
-
-
                 language = (
                     self.get_document_language(
                         document
                     )
                 )
 
+                crop = (
+                    self.get_document_crop(
+                        document
+                    )
+                )
+
+                geography = (
+                    self.get_document_geography(
+                        document
+                    )
+                )
+
+                keywords = (
+                    self.get_document_keywords(
+                        document
+                    )
+                )
 
                 document_type = (
                     self.get_document_type(
@@ -1087,44 +887,15 @@ class RAGIngestion:
                 )
 
 
-                crop = (
-                    self.get_document_crop(
-                        document
-                    )
-                )
+                # =================================================
+                # URL OBLIGATOIRE POUR DÉDOUBLONNAGE
+                # =================================================
 
-
-                geographic_area = (
-                    self.get_document_geographic_area(
-                        document
-                    )
-                )
-
-
-                keywords = (
-                    self.get_document_keywords(
-                        document
-                    )
-                )
-
-
-                year = (
-                    self.get_document_year(
-                        document
-                    )
-                )
-
-
-                # -------------------------------------------------
-                # CONTENU OBLIGATOIRE
-                # -------------------------------------------------
-
-                if not content:
+                if not url:
 
                     print(
                         f"⚠️ [{index}] "
-                        "Document sans contenu : "
-                        f"{title}"
+                        f"Document sans URL : {title}"
                     )
 
                     errors += 1
@@ -1132,54 +903,213 @@ class RAGIngestion:
                     continue
 
 
-                # -------------------------------------------------
-                # DOUBLONS
-                # -------------------------------------------------
+                # =================================================
+                # CONTENU RAG
+                # =================================================
 
-                if (
-                    url
-                    and url in existing_sources
-                ):
-
-                    print(
-                        f"⏭️ [{index}] "
-                        "Déjà présent : "
-                        f"{title[:80]}"
-                    )
-
-                    skipped += 1
-
-                    continue
-
-
-                # -------------------------------------------------
-                # TEXTE RAG
-                # -------------------------------------------------
-
-                text = (
+                rag_text = (
                     self.build_rag_text(
                         document
                     )
                 )
 
 
-                print(
-                    f"🤖 [{index}] "
-                    "Embedding : "
-                    f"{title[:80]}"
+                if not rag_text.strip():
+
+                    print(
+                        f"⚠️ [{index}] "
+                        f"Contenu vide : {title}"
+                    )
+
+                    errors += 1
+
+                    continue
+
+
+                # =================================================
+                # LIGNE DE BASE
+                # =================================================
+
+                row = {
+
+                    "titre":
+                        title,
+
+                    "organisme":
+                        source,
+
+                    "langue":
+                        language,
+
+                    "type_document":
+                        document_type,
+
+                    "culture":
+                        crop,
+
+                    "zone_geographique":
+                        geography,
+
+                    "mots_cles":
+                        keywords,
+
+                    "source_path":
+                        url,
+
+                    "content":
+                        rag_text,
+
+                }
+
+
+                # =================================================
+                # DOCUMENT EXISTANT
+                # =================================================
+
+                existing = (
+                    existing_documents.get(
+                        url
+                    )
                 )
 
 
-                # -------------------------------------------------
-                # EMBEDDING
-                # -------------------------------------------------
+                if existing:
+
+                    document_id = (
+                        existing.get(
+                            "id"
+                        )
+                    )
+
+
+                    # =============================================
+                    # CONTENU MODIFIÉ ?
+                    # =============================================
+
+                    content_changed = (
+                        self.content_has_changed(
+                            existing,
+                            rag_text
+                        )
+                    )
+
+
+                    # =============================================
+                    # SI CONTENU MODIFIÉ :
+                    # REFAIRE EMBEDDING
+                    # =============================================
+
+                    if content_changed:
+
+                        print(
+                            f"🔄 [{index}] "
+                            f"Mise à jour + embedding : "
+                            f"{title[:80]}"
+                        )
+
+                        embedding = (
+
+                            self.embedding_service
+
+                            .generate_document_embedding(
+                                rag_text
+                            )
+
+                        )
+
+                        if not embedding:
+
+                            print(
+                                f"❌ [{index}] "
+                                "Embedding vide."
+                            )
+
+                            errors += 1
+
+                            continue
+
+                        row[
+                            "embedding"
+                        ] = embedding
+
+                        time.sleep(
+                            0.7
+                        )
+
+                    else:
+
+                        print(
+                            f"📝 [{index}] "
+                            f"Mise à jour métadonnées : "
+                            f"{title[:80]}"
+                        )
+
+
+                    # =============================================
+                    # UPDATE SUPABASE
+                    # =============================================
+
+                    (
+
+                        self.supabase
+
+                        .table(
+                            "documents_rag"
+                        )
+
+                        .update(
+                            row
+                        )
+
+                        .eq(
+                            "id",
+                            document_id
+                        )
+
+                        .execute()
+
+                    )
+
+
+                    updated += 1
+
+
+                    existing_documents[
+                        url
+                    ] = {
+
+                        **existing,
+
+                        **row
+
+                    }
+
+
+                    print(
+                        f"✅ [{index}] "
+                        f"Document mis à jour."
+                    )
+
+                    continue
+
+
+                # =================================================
+                # NOUVEAU DOCUMENT
+                # =================================================
+
+                print(
+                    f"🤖 [{index}] "
+                    f"Nouvel embedding : "
+                    f"{title[:80]}"
+                )
+
 
                 embedding = (
 
                     self.embedding_service
 
                     .generate_document_embedding(
-                        text
+                        rag_text
                     )
 
                 )
@@ -1197,71 +1127,16 @@ class RAGIngestion:
                     continue
 
 
-                # -------------------------------------------------
-                # LIGNE SUPABASE
-                # -------------------------------------------------
-
-                row = {
-
-                    "titre":
-                        title,
-
-                    "organisme":
-                        source,
-
-                    "annee":
-                        year,
-
-                    "langue":
-                        language,
-
-                    "type_document":
-                        document_type,
-
-                    "culture":
-                        crop,
-
-                    "zone_geographique":
-                        geographic_area,
-
-                    "mots_cles":
-                        keywords,
-
-                    "source_path":
-                        url,
-
-                    "content":
-                        text,
-
-                    "embedding":
-                        embedding
-
-                }
+                row[
+                    "embedding"
+                ] = embedding
 
 
-                # -------------------------------------------------
-                # RETIRER LES VALEURS None
-                #
-                # Cela évite d'inventer des métadonnées.
-                # -------------------------------------------------
+                # =================================================
+                # INSERT SUPABASE
+                # =================================================
 
-                row = {
-
-                    key: value
-
-                    for key, value
-                    in row.items()
-
-                    if value is not None
-
-                }
-
-
-                # -------------------------------------------------
-                # INSERTION SUPABASE
-                # -------------------------------------------------
-
-                (
+                response = (
 
                     self.supabase
 
@@ -1281,23 +1156,32 @@ class RAGIngestion:
                 inserted += 1
 
 
-                if url:
+                # =================================================
+                # AJOUT AU CACHE
+                # =================================================
 
-                    existing_sources.add(
-                        url
+                inserted_row = None
+
+                if response.data:
+
+                    inserted_row = (
+                        response.data[0]
                     )
+
+
+                existing_documents[
+                    url
+                ] = (
+                    inserted_row
+                    or row
+                )
 
 
                 print(
                     f"✅ [{index}] "
-                    "Document inséré : "
-                    f"{title[:80]}"
+                    f"Nouveau document inséré."
                 )
 
-
-                # -------------------------------------------------
-                # PETITE PAUSE GEMINI
-                # -------------------------------------------------
 
                 time.sleep(
                     0.7
@@ -1310,13 +1194,12 @@ class RAGIngestion:
 
                 print(
                     f"❌ [{index}] "
-                    "Erreur ingestion : "
-                    f"{e}"
+                    f"Erreur ingestion : {e}"
                 )
 
 
         # =====================================================
-        # RÉSULTAT
+        # PROCHAIN OFFSET
         # =====================================================
 
         next_offset = (
@@ -1324,12 +1207,15 @@ class RAGIngestion:
             + len(batch)
         )
 
-
         has_more = (
             next_offset
             < total_documents
         )
 
+
+        # =====================================================
+        # RÉSULTAT
+        # =====================================================
 
         return {
 
@@ -1350,6 +1236,9 @@ class RAGIngestion:
 
             "inserted":
                 inserted,
+
+            "updated":
+                updated,
 
             "skipped":
                 skipped,
@@ -1378,12 +1267,10 @@ def test_rag_ingestion():
             RAGIngestion()
         )
 
-
         return ingestion.ingest(
-            limit=10,
+            limit=3,
             offset=0
         )
-
 
     except Exception as e:
 
