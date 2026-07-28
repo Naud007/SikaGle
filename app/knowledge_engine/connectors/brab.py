@@ -8,12 +8,13 @@ from app.knowledge_engine.protocols.oai.client import OAIClient
 from app.knowledge_engine.protocols.oai.normalizer import OAINormalizer
 from app.knowledge_engine.protocols.oai.parser import OAIParser
 from app.knowledge_engine.utils.downloader import Downloader
+from app.schemas.attachment import DocumentAttachment
 from app.schemas.document import DocumentMetadata
 
 
 class BRABConnector(BaseConnector):
     """
-    Connecteur OAI-PMH de la Bibliothèque de Recherches Agricoles du Bénin (BRAB).
+    Connecteur OAI-PMH de la Bibliothèque de Recherches Agricoles du Bénin.
     """
 
     BASE_URL = "https://brab.bj/index.php/brab/oai"
@@ -71,37 +72,33 @@ class BRABConnector(BaseConnector):
         document: DocumentMetadata,
     ) -> Path:
         """
-        Télécharge localement le PDF d'un document BRAB.
-
-        Returns
-        -------
-        Path
-            Chemin du fichier téléchargé.
+        Télécharge le premier fichier associé au document.
         """
 
-        if document.pdf_url is None:
+        if not document.attachments:
             raise ValueError(
-                "Aucune URL PDF disponible pour ce document."
+                "Le document ne possède aucun fichier téléchargeable."
             )
+
+        attachment: DocumentAttachment = document.attachments[0]
 
         self.DOWNLOAD_DIR.mkdir(
             parents=True,
             exist_ok=True,
         )
 
-        article_id = (
-            str(document.url)
-            .rstrip("/")
-            .split("/")[-1]
+        filename = (
+            attachment.filename
+            or "document.pdf"
         )
 
         destination = (
             self.DOWNLOAD_DIR
-            / f"{article_id}.pdf"
+            / filename
         )
 
         return self.downloader.download_file(
-            url=str(document.pdf_url),
+            url=str(attachment.url),
             destination=destination,
         )
 
