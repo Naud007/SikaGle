@@ -53,6 +53,7 @@ class OAIParser:
             ]
 
             metadata = {}
+            raw_identifiers = []
 
             metadata_tag = record.find(
                 "metadata"
@@ -85,16 +86,23 @@ class OAIParser:
                         [],
                     ).append(value)
 
+                    if key == "identifier":
+                        raw_identifiers.append(
+                            value
+                        )
+
             records.append(
                 OAIRecord(
                     identifier=identifier,
                     datestamp=datestamp,
                     set_specs=set_specs,
                     metadata=metadata,
+                    raw_identifiers=raw_identifiers,
                 )
             )
 
         return records
+
     def parse_resumption_token(
         self,
         soup: BeautifulSoup,
