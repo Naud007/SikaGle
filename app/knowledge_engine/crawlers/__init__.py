@@ -5,7 +5,3 @@ __all__ = [
     "BaseCrawler",
     "INRABCrawler",
 ]
-def __init__(self):
-    super().__init__()
-
-    self.parser = INRABPublicationParser()
