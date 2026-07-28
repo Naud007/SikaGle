@@ -59,7 +59,8 @@ class BRABCrawler(BaseCrawler[BRABArticle]):
 
                 issue_articles = (
                     self.article_parser.parse(
-                        issue_soup
+                        self,
+                        issue_soup,
                     )
                 )
 
