@@ -10,59 +10,33 @@ class BaseConnector(ABC):
     Classe de base pour tous les connecteurs du Knowledge Engine.
     """
 
-    # Métadonnées du connecteur
-    source_name: str = ""
-    organization: str = ""
-    country: str = ""
-    supported_formats: list[str] = []
-    supported_document_types: list[str] = []
+    def __init__(self, source_name: str):
+        self.source_name = source_name
 
-    def __init__(self):
-        if not self.source_name:
-            raise ValueError(
-                "Chaque connecteur doit définir source_name."
-            )
-
-        self.storage_dir = config.raw_dir / self.source_name
-        self.storage_dir.mkdir(
-            parents=True,
-            exist_ok=True
-        )
+        # Dossier de stockage propre à chaque source
+        self.storage_dir = config.raw_dir / source_name
+        self.storage_dir.mkdir(parents=True, exist_ok=True)
 
     @abstractmethod
     def discover(self) -> list[DocumentMetadata]:
         """
-        Recherche les documents disponibles.
+        Recherche les documents disponibles auprès de la source.
+
+        Retourne une liste de DocumentMetadata.
         """
         pass
 
     @abstractmethod
-    def download(
-        self,
-        document: DocumentMetadata
-    ) -> Path:
+    def download(self, document: DocumentMetadata) -> Path:
         """
         Télécharge un document.
+
+        Retourne le chemin du fichier téléchargé.
         """
         pass
 
-    def capabilities(self) -> dict:
+    def log(self, message: str):
         """
-        Retourne les capacités du connecteur.
+        Affichage standardisé des logs.
         """
-
-        return {
-            "source": self.source_name,
-            "organization": self.organization,
-            "country": self.country,
-            "formats": self.supported_formats,
-            "document_types": self.supported_document_types,
-        }
-
-    def log(
-        self,
-        message: str
-    ):
-        print(
-            f"[{self.source_name.upper()}] {message}"
-        )
+        print(f"[{self.source_name.upper()}] {message}")
