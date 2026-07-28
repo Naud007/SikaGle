@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from app.knowledge_engine.protocols.oai.record import (
-    OAIRecord,
-)
+from app.knowledge_engine.protocols.oai.record import OAIRecord
 from app.schemas.document import DocumentMetadata
 
 
@@ -41,7 +39,6 @@ class OAINormalizer:
         if publication_date:
 
             try:
-
                 published_at = date.fromisoformat(
                     publication_date[:10]
                 )
@@ -52,7 +49,6 @@ class OAINormalizer:
         elif record.datestamp:
 
             try:
-
                 published_at = date.fromisoformat(
                     record.datestamp[:10]
                 )
@@ -61,7 +57,7 @@ class OAINormalizer:
                 pass
 
         # ==================================================
-        # AUTEURS (SUPPRESSION DES DOUBLONS)
+        # AUTEURS
         # ==================================================
 
         authors = []
@@ -77,11 +73,10 @@ class OAINormalizer:
                 author
                 and author not in authors
             ):
-
                 authors.append(author)
 
         # ==================================================
-        # MOTS-CLÉS (SUPPRESSION DES DOUBLONS)
+        # MOTS-CLÉS
         # ==================================================
 
         keywords = []
@@ -97,25 +92,38 @@ class OAINormalizer:
                 keyword
                 and keyword not in keywords
             ):
-
                 keywords.append(keyword)
 
         # ==================================================
-        # URL
+        # URL DE L'ARTICLE
         # ==================================================
 
-        identifier = first("identifier")
+        article_url = "https://example.org"
+
+        for identifier in record.raw_identifiers:
+
+            identifier = identifier.strip()
+
+            if (
+                identifier.startswith("http")
+                and "/article/view/" in identifier
+            ):
+
+                article_url = identifier
+                break
+
+        # ==================================================
+        # URL DU PDF
+        # ==================================================
+
+        pdf_url = None
 
         if (
-            identifier
-            and identifier.startswith("http")
+            source.upper() == "BRAB"
+            and "/article/view/" in article_url
         ):
 
-            url = identifier
-
-        else:
-
-            url = "https://example.org"
+            pdf_url = article_url.rstrip("/") + "/1"
 
         # ==================================================
         # DOCUMENT NORMALISÉ
@@ -127,7 +135,9 @@ class OAINormalizer:
 
             source=source,
 
-            url=url,
+            url=article_url,
+
+            pdf_url=pdf_url,
 
             published_at=published_at,
 
