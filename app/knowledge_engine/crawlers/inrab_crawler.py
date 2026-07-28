@@ -3,12 +3,11 @@ from __future__ import annotations
 from urllib.parse import urljoin
 
 from app.knowledge_engine.models import INRABPublication
-
-from .base_crawler import BaseCrawler
-
 from app.knowledge_engine.parsers.inrab_publication_parser import (
     INRABPublicationParser,
 )
+
+from .base_crawler import BaseCrawler
 
 
 class INRABCrawler(BaseCrawler[INRABPublication]):
@@ -22,17 +21,19 @@ class INRABCrawler(BaseCrawler[INRABPublication]):
         "https://publications-chercheurs.inrab.bj/publications/recherche_simple"
     )
 
+    def __init__(self):
+        super().__init__()
+        self.parser = INRABPublicationParser()
+
     def discover(self) -> list[INRABPublication]:
         """
-        Découvre les publications présentes sur la première page
-        du portail INRAB.
+        Découvre les publications disponibles.
         """
 
         soup = self.fetch(self.SEARCH_URL)
 
         publications: list[INRABPublication] = []
 
-        # Tous les liens "Lire les détails"
         detail_links = soup.find_all(
             "a",
             string=lambda text: text and "Lire les détails" in text,
@@ -47,35 +48,17 @@ class INRABCrawler(BaseCrawler[INRABPublication]):
 
             detail_url = urljoin(self.BASE_URL, href)
 
-            card = link.parent
+            try:
+                detail_soup = self.fetch(detail_url)
 
-            title = ""
-
-            authors = None
-
-            if card:
-
-                headings = card.find_all(["h3", "h4", "h5"])
-
-                if headings:
-                    title = headings[0].get_text(" ", strip=True)
-
-                author_text = card.get_text(" ", strip=True)
-
-                if "Auteur" in author_text:
-                    authors = (
-                        author_text
-                        .split("Auteur:", 1)[-1]
-                        .split("Lire les détails")[0]
-                        .strip()
-                    )
-
-            publications.append(
-                INRABPublication(
-                    title=title,
-                    authors=authors,
-                    detail_url=detail_url,
+                publication = self.parser.parse(
+                    detail_soup,
+                    detail_url,
                 )
-            )
+
+                publications.append(publication)
+
+            except Exception as exc:
+                print(f"Erreur lors de l'analyse de {detail_url}: {exc}")
 
         return publications
