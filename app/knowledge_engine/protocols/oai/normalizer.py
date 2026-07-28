@@ -41,10 +41,16 @@ class OAINormalizer:
             except ValueError:
                 published_at = None
 
-        authors = metadata.get(
+        authors = []
+
+        for author in metadata.get(
             "creator",
             [],
-        )
+        ):
+            author = author.strip()
+
+            if author and author not in authors:
+                authors.append(author)
 
         identifier = first("identifier")
 
