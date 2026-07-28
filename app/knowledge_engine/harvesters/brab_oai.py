@@ -32,18 +32,38 @@ class BRABOAIHarvester:
 
     def harvest(self):
 
+        documents = []
+
         soup = self.client.list_records()
 
-        records = self.parser.parse_records(
-            soup
-        )
+        while True:
 
-        documents = [
-            self.normalizer.normalize(
-                record,
-                source="BRAB",
+            records = self.parser.parse_records(
+                soup
             )
-            for record in records
-        ]
+
+            for record in records:
+
+                documents.append(
+                    self.normalizer.normalize(
+                        record,
+                        source="BRAB",
+                    )
+                )
+
+            token = (
+                self.parser.parse_resumption_token(
+                    soup
+                )
+            )
+
+            if not token:
+                break
+
+            soup = (
+                self.client.list_records_from_token(
+                    token
+                )
+            )
 
         return documents
