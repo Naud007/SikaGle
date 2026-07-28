@@ -1,11 +1,17 @@
 from __future__ import annotations
 
-from app.knowledge_engine.harvesters.base_oai import (
-    BaseOAIHarvester,
+from app.knowledge_engine.protocols.oai.client import (
+    OAIClient,
+)
+from app.knowledge_engine.protocols.oai.normalizer import (
+    OAINormalizer,
+)
+from app.knowledge_engine.protocols.oai.parser import (
+    OAIParser,
 )
 
 
-class BRABOAIHarvester(BaseOAIHarvester):
+class BRABOAIHarvester:
     """
     Harvester OAI-PMH du BRAB.
     """
@@ -15,63 +21,29 @@ class BRABOAIHarvester(BaseOAIHarvester):
     )
 
     def __init__(self):
-        super().__init__(self.BASE_URL)
+
+        self.client = OAIClient(
+            self.BASE_URL
+        )
+
+        self.parser = OAIParser()
+
+        self.normalizer = OAINormalizer()
 
     def harvest(self):
 
-        soup = self.fetch(
-            {
-                "verb": "ListMetadataFormats",
-            }
+        soup = self.client.list_records()
+
+        records = self.parser.parse_records(
+            soup
         )
 
-        formats = []
-
-        for metadata in soup.find_all(
-            "metadataFormat"
-        ):
-
-            prefix = metadata.find(
-                "metadataPrefix"
+        documents = [
+            self.normalizer.normalize(
+                record,
+                source="BRAB",
             )
+            for record in records
+        ]
 
-            schema = metadata.find(
-                "schema"
-            )
-
-            namespace = metadata.find(
-                "metadataNamespace"
-            )
-
-            formats.append(
-                {
-                    "prefix": (
-                        prefix.text
-                        if prefix
-                        else None
-                    ),
-                    "schema": (
-                        schema.text
-                        if schema
-                        else None
-                    ),
-                    "namespace": (
-                        namespace.text
-                        if namespace
-                        else None
-                    ),
-                }
-            )
-
-        print(
-            "[BRAB OAI] "
-            f"{len(formats)} format(s) trouvé(s)."
-        )
-
-        for fmt in formats:
-
-            print(
-                f"- {fmt['prefix']}"
-            )
-
-        return formats
+        return documents
