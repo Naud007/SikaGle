@@ -396,7 +396,7 @@ def test_knowledge_engine():
         }
 
 # =========================================================
-# TEST HARVESTER BRAB
+# TEST  BRAB
 # =========================================================
 
 from app.knowledge_engine.connectors.registry import (
@@ -411,11 +411,10 @@ def brab_test():
 
     try:
 
-        connector_class = registry.get(
+        connector = registry.get(
             "brab"
         )
 
-        connector = connector_class()
         documents = connector.discover()
 
         return {
