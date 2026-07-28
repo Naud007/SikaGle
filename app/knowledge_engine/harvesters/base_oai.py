@@ -1,9 +1,17 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import ABC
 
-import requests
-from bs4 import BeautifulSoup
+from app.knowledge_engine.protocols.oai.client import (
+    OAIClient,
+)
+from app.knowledge_engine.protocols.oai.normalizer import (
+    OAINormalizer,
+)
+from app.knowledge_engine.protocols.oai.parser import (
+    OAIParser,
+)
+from app.schemas.document import DocumentMetadata
 
 
 class BaseOAIHarvester(ABC):
@@ -11,40 +19,56 @@ class BaseOAIHarvester(ABC):
     Classe de base pour tous les harvesters OAI-PMH.
     """
 
-    def __init__(self, base_url: str):
-        self.base_url = base_url
+    BASE_URL: str = ""
 
-        self.session = requests.Session()
+    SOURCE: str = ""
 
-        self.session.headers.update(
-            {
-                "User-Agent": (
-                    "SikaGle Knowledge Engine"
-                )
-            }
+    METADATA_PREFIX: str = "oai_dc"
+
+    def __init__(self):
+
+        self.client = OAIClient(
+            self.BASE_URL
         )
 
-    def fetch(
+        self.parser = OAIParser()
+
+        self.normalizer = OAINormalizer()
+
+    def harvest(
         self,
-        params: dict,
-    ) -> BeautifulSoup:
+    ) -> list[DocumentMetadata]:
 
-        response = self.session.get(
-            self.base_url,
-            params=params,
-            timeout=60,
+        documents: list[DocumentMetadata] = []
+
+        soup = self.client.list_records(
+            metadata_prefix=self.METADATA_PREFIX,
         )
 
-        response.raise_for_status()
+        while True:
 
-        return BeautifulSoup(
-            response.content,
-            "xml",
-        )
+            records = self.parser.parse_records(
+                soup
+            )
 
-    @abstractmethod
-    def harvest(self):
-        """
-        Lance le moissonnage du dépôt OAI.
-        """
-        pass
+            for record in records:
+
+                documents.append(
+                    self.normalizer.normalize(
+                        record,
+                        source=self.SOURCE,
+                    )
+                )
+
+            token = self.parser.parse_resumption_token(
+                soup
+            )
+
+            if token is None:
+                break
+
+            soup = self.client.list_records_from_token(
+                token
+            )
+
+        return documents
