@@ -399,7 +399,7 @@ def test_knowledge_engine():
 # TEST HARVESTER BRAB
 # =========================================================
 
-from app.knowledge_engine.harvesters import (
+from app.knowledge_engine.connectors.registry import (
     registry,
 )
 
