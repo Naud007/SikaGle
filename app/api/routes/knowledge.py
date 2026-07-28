@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from fastapi import APIRouter, HTTPException
 
 from app.services.knowledge_service import KnowledgeService
@@ -12,36 +10,47 @@ router = APIRouter(
 service = KnowledgeService()
 
 
-@router.get("/discover")
-def discover(
-    source: str,
-):
-    """
-    Découvre les documents d'une source.
-    """
+@router.get("/test-download")
+def test_download():
 
     try:
 
-        return service.discover(
-            source=source,
+        documents = service.discover(
+            source="brab",
         )
 
-    except KeyError:
+        if not documents:
+
+            raise HTTPException(
+                status_code=404,
+                detail="Aucun document trouvé.",
+            )
+
+        document = documents[0]
+
+        if not document.attachments:
+
+            raise HTTPException(
+                status_code=404,
+                detail="Aucune pièce jointe disponible.",
+            )
+
+        path = service.download_attachment(
+            source="brab",
+            attachment=document.attachments[0],
+        )
+
+        return {
+            "title": document.title,
+            "source": document.source,
+            "article_url": str(document.url),
+            "attachment": document.attachments[0],
+            "saved_to": str(path),
+        }
+
+    except Exception as e:
 
         raise HTTPException(
-            status_code=404,
-            detail=f"Source '{source}' introuvable.",
+            status_code=500,
+            detail=str(e),
         )
-
-
-@router.get("/discover/all")
-def discover_all():
-    """
-    Découvre les documents de toutes les sources enregistrées.
-    """
-
-    return service.discover_all(
-        [
-            "brab",
-        ]
-    )
