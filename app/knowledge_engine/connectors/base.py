@@ -1,42 +1,61 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from app.knowledge_engine.config import config
+from app.knowledge_engine.utils.downloader import Downloader
 from app.schemas.document import DocumentMetadata
 
 
 class BaseConnector(ABC):
     """
-    Classe de base pour tous les connecteurs du Knowledge Engine.
+    Classe de base de tous les connecteurs.
     """
 
-    def __init__(self, source_name: str):
-        self.source_name = source_name
+    DOWNLOAD_ROOT = Path("data") / "documents"
 
-        # Dossier de stockage propre à chaque source
-        self.storage_dir = config.raw_dir / source_name
-        self.storage_dir.mkdir(parents=True, exist_ok=True)
-
-    @abstractmethod
-    def discover(self) -> list[DocumentMetadata]:
-        """
-        Recherche les documents disponibles auprès de la source.
-
-        Retourne une liste de DocumentMetadata.
-        """
-        pass
+    def __init__(
+        self,
+        name: str,
+    ):
+        self.name = name
+        self.downloader = Downloader()
 
     @abstractmethod
-    def download(self, document: DocumentMetadata) -> Path:
+    def discover(
+        self,
+    ) -> list[DocumentMetadata]:
         """
-        Télécharge un document.
+        Découvre les documents disponibles.
+        """
+        raise NotImplementedError()
 
-        Retourne le chemin du fichier téléchargé.
+    def download(
+        self,
+        document: DocumentMetadata,
+    ) -> Path:
         """
-        pass
+        Télécharge le premier fichier associé
+        au document.
+        """
 
-    def log(self, message: str):
-        """
-        Affichage standardisé des logs.
-        """
-        print(f"[{self.source_name.upper()}] {message}")
+        if not document.attachments:
+            raise ValueError(
+                "Le document ne possède aucun fichier téléchargeable."
+            )
+
+        attachment = document.attachments[0]
+
+        destination = (
+            self.DOWNLOAD_ROOT
+            / self.name
+            / (
+                attachment.filename
+                or "document"
+            )
+        )
+
+        return self.downloader.download_file(
+            url=str(attachment.url),
+            destination=destination,
+        )
