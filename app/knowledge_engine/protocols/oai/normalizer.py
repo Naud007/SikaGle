@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from app.knowledge_engine.protocols.oai.record import (
     OAIRecord,
 )
@@ -14,6 +16,7 @@ class OAINormalizer:
     def normalize(
         self,
         record: OAIRecord,
+        source: str,
     ) -> DocumentMetadata:
 
         metadata = record.metadata
@@ -27,20 +30,46 @@ class OAINormalizer:
 
             return values[0]
 
+        published_at = None
+
+        if record.datestamp:
+
+            try:
+                published_at = date.fromisoformat(
+                    record.datestamp[:10]
+                )
+            except ValueError:
+                published_at = None
+
+        authors = metadata.get(
+            "creator",
+            [],
+        )
+
+        identifier = first("identifier")
+
+        if (
+            identifier
+            and identifier.startswith("http")
+        ):
+            url = identifier
+        else:
+            url = "https://example.org"
+
         return DocumentMetadata(
-            identifier=record.identifier,
-            title=first("title"),
-            abstract=first("description"),
-            authors=metadata.get(
-                "creator",
-                [],
-            ),
+            title=first("title") or "Sans titre",
+            source=source,
+            url=url,
+            published_at=published_at,
+            language=first("language"),
+            document_type=first("type"),
+            description=first("description"),
             keywords=metadata.get(
                 "subject",
                 [],
             ),
-            language=first("language"),
-            publication_date=record.datestamp,
-            source="oai",
-            url=first("identifier"),
+            author=authors[0] if authors else None,
+            authors=authors,
+            publisher=first("publisher"),
+            identifier=record.identifier,
         )
