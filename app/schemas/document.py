@@ -32,6 +32,7 @@ class DocumentMetadata(BaseModel):
 
     url: HttpUrl
 
+    pdf_url: Optional[HttpUrl] = None
 
     # =========================================================
     # INFORMATIONS GÉNÉRALES
@@ -43,7 +44,6 @@ class DocumentMetadata(BaseModel):
 
     document_type: Optional[str] = None
 
-
     # =========================================================
     # CONTENU
     # =========================================================
@@ -51,7 +51,6 @@ class DocumentMetadata(BaseModel):
     content: Optional[str] = None
 
     description: Optional[str] = None
-
 
     # =========================================================
     # MÉTADONNÉES AGRICOLES
@@ -65,7 +64,6 @@ class DocumentMetadata(BaseModel):
 
     mots_cles: Optional[list[str]] = None
 
-
     # =========================================================
     # LOCALISATION GÉOGRAPHIQUE
     # =========================================================
@@ -73,7 +71,6 @@ class DocumentMetadata(BaseModel):
     country: Optional[str] = None
 
     zone_geographique: Optional[str] = None
-
 
     # =========================================================
     # AUTEURS / PUBLICATION
@@ -85,7 +82,6 @@ class DocumentMetadata(BaseModel):
 
     publisher: Optional[str] = None
 
-
     # =========================================================
     # INFORMATIONS SUR LE DATASET SOURCE
     # =========================================================
@@ -93,7 +89,6 @@ class DocumentMetadata(BaseModel):
     dataset_filename: Optional[str] = None
 
     identifier: Optional[str] = None
-
 
     # =========================================================
     # STOCKAGE LOCAL
