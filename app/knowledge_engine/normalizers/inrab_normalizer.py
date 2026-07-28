@@ -14,10 +14,12 @@ class INRABNormalizer:
 
         return DocumentMetadata(
             title=publication.title,
-            description=publication.abstract or "",
             source="inrab",
-            language=publication.language or "fr",
-            url=publication.detail_url or "",
-            download_url=publication.pdf_url,
-            keywords=publication.keywords or [],
+            url=publication.detail_url,
+            language=publication.language,
+            description=publication.abstract,
+            keywords=publication.keywords,
+            author=publication.authors,
+            publisher="INRAB",
+            document_type=publication.publication_type,
         )
