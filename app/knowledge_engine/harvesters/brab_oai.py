@@ -21,19 +21,57 @@ class BRABOAIHarvester(BaseOAIHarvester):
 
         soup = self.fetch(
             {
-                "verb": "Identify",
+                "verb": "ListMetadataFormats",
             }
         )
 
-        repository = soup.find(
-            "repositoryName"
-        )
+        formats = []
 
-        if repository:
+        for metadata in soup.find_all(
+            "metadataFormat"
+        ):
 
-            print(
-                "[BRAB OAI] "
-                f"Dépôt : {repository.text}"
+            prefix = metadata.find(
+                "metadataPrefix"
             )
 
-        return soup
+            schema = metadata.find(
+                "schema"
+            )
+
+            namespace = metadata.find(
+                "metadataNamespace"
+            )
+
+            formats.append(
+                {
+                    "prefix": (
+                        prefix.text
+                        if prefix
+                        else None
+                    ),
+                    "schema": (
+                        schema.text
+                        if schema
+                        else None
+                    ),
+                    "namespace": (
+                        namespace.text
+                        if namespace
+                        else None
+                    ),
+                }
+            )
+
+        print(
+            "[BRAB OAI] "
+            f"{len(formats)} format(s) trouvé(s)."
+        )
+
+        for fmt in formats:
+
+            print(
+                f"- {fmt['prefix']}"
+            )
+
+        return formats
