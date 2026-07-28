@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.knowledge_engine.connectors.registry import registry
+
 from app.knowledge_engine.harvesters.base_oai import (
     BaseOAIHarvester,
 )
@@ -15,3 +17,9 @@ class BRABOAIHarvester(BaseOAIHarvester):
     )
 
     SOURCE = "BRAB"
+    registry.register(
+    "brab",
+    BRABConnector
+)
+
+
