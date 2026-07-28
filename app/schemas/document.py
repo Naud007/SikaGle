@@ -1,9 +1,9 @@
 from datetime import date
 from typing import Optional
 
-from app.schemas.attachment import DocumentAttachment
-
 from pydantic import BaseModel, HttpUrl
+
+from app.schemas.attachment import DocumentAttachment
 
 
 class DocumentMetadata(BaseModel):
@@ -33,8 +33,6 @@ class DocumentMetadata(BaseModel):
     source: str
 
     url: HttpUrl
-
-    pdf_url: Optional[HttpUrl] = None
 
     # =========================================================
     # INFORMATIONS GÉNÉRALES
@@ -93,7 +91,7 @@ class DocumentMetadata(BaseModel):
     identifier: Optional[str] = None
 
     # =========================================================
-    # STOCKAGE LOCAL
+    # FICHIERS ASSOCIÉS
     # =========================================================
 
     attachments: list[DocumentAttachment] = []
