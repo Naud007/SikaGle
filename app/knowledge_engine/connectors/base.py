@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 
 from app.knowledge_engine.utils.downloader import Downloader
+from app.schemas.attachment import DocumentAttachment
 from app.schemas.document import DocumentMetadata
 
 
@@ -32,30 +33,46 @@ class BaseConnector(ABC):
 
     def download(
         self,
-        document: DocumentMetadata,
+        attachment: DocumentAttachment,
     ) -> Path:
         """
-        Télécharge le premier fichier associé
-        au document.
+        Télécharge une pièce jointe.
         """
 
-        if not document.attachments:
-            raise ValueError(
-                "Le document ne possède aucun fichier téléchargeable."
-            )
-
-        attachment = document.attachments[0]
+        filename = (
+            attachment.filename
+            or "document"
+        )
 
         destination = (
             self.DOWNLOAD_ROOT
             / self.name
-            / (
-                attachment.filename
-                or "document"
-            )
+            / filename
         )
 
         return self.downloader.download_file(
             url=str(attachment.url),
             destination=destination,
         )
+
+    def download_document(
+        self,
+        document: DocumentMetadata,
+    ) -> list[Path]:
+        """
+        Télécharge toutes les pièces jointes d'un document.
+        """
+
+        if not document.attachments:
+            return []
+
+        paths = []
+
+        for attachment in document.attachments:
+            paths.append(
+                self.download(
+                    attachment,
+                )
+            )
+
+        return paths
