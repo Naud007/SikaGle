@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from app.knowledge_engine.protocols.oai.record import OAIRecord
+from app.schemas.attachment import DocumentAttachment
 from app.schemas.document import DocumentMetadata
 
 
@@ -113,17 +114,31 @@ class OAINormalizer:
                 break
 
         # ==================================================
-        # URL DU PDF
+        # PIÈCES JOINTES
         # ==================================================
 
-        pdf_url = None
+        attachments: list[DocumentAttachment] = []
 
         if (
             source.upper() == "BRAB"
             and "/article/view/" in article_url
         ):
 
-            pdf_url = article_url.rstrip("/") + "/1"
+            article_id = (
+                article_url
+                .rstrip("/")
+                .split("/")[-1]
+            )
+
+            attachments.append(
+                DocumentAttachment(
+                    url=f"{article_url.rstrip('/')}/1",
+                    filename=f"{article_id}.pdf",
+                    mime_type="application/pdf",
+                    file_type="pdf",
+                    description="Article scientifique"
+                )
+            )
 
         # ==================================================
         # DOCUMENT NORMALISÉ
@@ -136,8 +151,6 @@ class OAINormalizer:
             source=source,
 
             url=article_url,
-
-            pdf_url=pdf_url,
 
             published_at=published_at,
 
@@ -156,4 +169,6 @@ class OAINormalizer:
             publisher=first("publisher"),
 
             identifier=record.identifier,
+
+            attachments=attachments,
         )
