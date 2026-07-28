@@ -19,3 +19,7 @@ class OAIRecord:
     metadata: dict[str, Any] = field(
         default_factory=dict
     )
+
+    raw_identifiers: list[str] = field(
+        default_factory=list
+    )
