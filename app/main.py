@@ -3,6 +3,8 @@ import os
 import requests
 from pathlib import Path
 
+from app.api.routes.knowledge import router as knowledge_router
+
 from fastapi import FastAPI, Request, Response
 from supabase import create_client, Client
 
@@ -228,6 +230,10 @@ def send_whatsapp_message(
         return False
 
 
+
+app.include_router(
+    knowledge_router,
+)
 
 @app.get("/knowledge/brab-page-test")
 def brab_page_test():
