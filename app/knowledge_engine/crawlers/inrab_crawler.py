@@ -6,6 +6,10 @@ from app.knowledge_engine.models import INRABPublication
 
 from .base_crawler import BaseCrawler
 
+from app.knowledge_engine.parsers.inrab_publication_parser import (
+    INRABPublicationParser,
+)
+
 
 class INRABCrawler(BaseCrawler[INRABPublication]):
     """
