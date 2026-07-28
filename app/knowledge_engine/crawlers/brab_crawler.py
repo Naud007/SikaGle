@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from app.knowledge_engine.models import BRABArticle
+from app.knowledge_engine.parsers.brab_issue_parser import (
+    BRABIssueParser,
+)
 
 from .base_crawler import BaseCrawler
 
@@ -19,19 +22,21 @@ class BRABCrawler(BaseCrawler[BRABArticle]):
 
     def __init__(self):
         super().__init__()
+        self.issue_parser = BRABIssueParser()
 
     def discover(self) -> list[BRABArticle]:
         """
         Découvre les numéros du BRAB.
-
-        Le parsing des archives sera implémenté
-        à l'étape suivante.
         """
 
         soup = self.fetch(self.ARCHIVES_URL)
 
+        issues = self.issue_parser.parse(soup)
+
         self.log(
-            "Archives BRAB récupérées avec succès."
+            f"{len(issues)} numéro(s) découvert(s)."
         )
 
+        # Les articles seront extraits
+        # à l'étape suivante.
         return []
