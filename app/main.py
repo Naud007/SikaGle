@@ -441,6 +441,40 @@ def brab_test():
                 str(e)
 
         }
+
+
+# =========================================================
+# TEST PREMIER DOCUMENT BRAB
+# =========================================================
+
+@app.get(
+    "/knowledge/brab-first"
+)
+def brab_first():
+
+    try:
+
+        connector = registry.get(
+            "brab"
+        )
+
+        document = connector.discover()[0]
+
+        return document.model_dump(
+            mode="json"
+        )
+
+    except Exception as e:
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(e)
+
+        }
 # =========================================================
 # DEBUG RETOUR FAO ODS DOWNLOADER
 # =========================================================
