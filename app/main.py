@@ -411,11 +411,12 @@ def brab_test():
 
     try:
 
-        harvester = registry.get(
+        connector_class = registry.get(
             "brab"
         )
 
-        documents = harvester.harvest()
+        connector = connector_class()
+        documents = connector.discover()
 
         return {
 
