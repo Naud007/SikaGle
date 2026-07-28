@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from urllib.parse import urlencode
-
 import requests
 from bs4 import BeautifulSoup
 
@@ -83,6 +81,20 @@ class OAIClient:
         return self.request(
             verb="ListRecords",
             metadataPrefix=metadata_prefix,
+        )
+
+    def list_records_from_token(
+        self,
+        token: str,
+    ):
+        """
+        Continue une récupération grâce à un
+        resumptionToken.
+        """
+
+        return self.request(
+            verb="ListRecords",
+            resumptionToken=token,
         )
 
     def get_record(
