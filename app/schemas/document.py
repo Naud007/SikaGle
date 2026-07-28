@@ -1,6 +1,8 @@
 from datetime import date
 from typing import Optional
 
+from app.schemas.attachment import DocumentAttachment
+
 from pydantic import BaseModel, HttpUrl
 
 
@@ -94,6 +96,4 @@ class DocumentMetadata(BaseModel):
     # STOCKAGE LOCAL
     # =========================================================
 
-    checksum: Optional[str] = None
-
-    local_path: Optional[str] = None
+    attachments: list[DocumentAttachment] = []
