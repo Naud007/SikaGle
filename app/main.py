@@ -6,6 +6,10 @@ from pathlib import Path
 from fastapi import FastAPI, Request, Response
 from supabase import create_client, Client
 
+from app.knowledge_engine.utils.pdf_extractor import (
+    PDFExtractor,
+)
+
 from app.ai.gemini_client import (
     test_gemini,
     list_gemini_models,
@@ -221,6 +225,19 @@ def send_whatsapp_message(
         return False
 
 
+
+@app.get("/knowledge/brab-pdf-test")
+def brab_pdf_test():
+
+    extractor = PDFExtractor()
+
+    pdf_url = extractor.extract_pdf_url(
+        "https://brab.bj/index.php/brab/article/view/1"
+    )
+
+    return {
+        "pdf_url": pdf_url,
+    }
 # =========================================================
 # ROUTE RACINE
 # =========================================================
