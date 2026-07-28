@@ -95,3 +95,23 @@ class OAIParser:
             )
 
         return records
+    def parse_resumption_token(
+        self,
+        soup: BeautifulSoup,
+    ) -> str | None:
+        """
+        Extrait le resumptionToken de la réponse OAI.
+        """
+
+        token = soup.find(
+            "resumptionToken"
+        )
+
+        if token is None:
+            return None
+
+        value = token.get_text(
+            strip=True,
+        )
+
+        return value or None
