@@ -40,10 +40,29 @@ class OAIClient:
 
         response.raise_for_status()
 
-        return BeautifulSoup(
+        soup = BeautifulSoup(
             response.content,
             "xml",
         )
+
+        error = soup.find("error")
+
+        if error is not None:
+
+            code = error.get(
+                "code",
+                "unknown",
+            )
+
+            message = error.get_text(
+                strip=True,
+            )
+
+            raise RuntimeError(
+                f"OAI Error [{code}] : {message}"
+            )
+
+        return soup
 
     def identify(self):
 
@@ -87,10 +106,6 @@ class OAIClient:
         self,
         token: str,
     ):
-        """
-        Continue une récupération grâce à un
-        resumptionToken.
-        """
 
         return self.request(
             verb="ListRecords",
