@@ -395,7 +395,52 @@ def test_knowledge_engine():
 
         }
 
+# =========================================================
+# TEST HARVESTER BRAB
+# =========================================================
 
+from app.knowledge_engine.harvesters import (
+    registry,
+)
+
+
+@app.get(
+    "/knowledge/brab-test"
+)
+def brab_test():
+
+    try:
+
+        harvester = registry.get(
+            "brab"
+        )
+
+        documents = harvester.harvest()
+
+        return {
+
+            "status":
+                "success",
+
+            "documents_found":
+                len(documents),
+
+            "documents":
+                documents
+
+        }
+
+    except Exception as e:
+
+        return {
+
+            "status":
+                "error",
+
+            "message":
+                str(e)
+
+        }
 # =========================================================
 # DEBUG RETOUR FAO ODS DOWNLOADER
 # =========================================================
