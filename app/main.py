@@ -6,6 +6,9 @@ from pathlib import Path
 from fastapi import FastAPI, Request, Response
 from supabase import create_client, Client
 
+from bs4 import BeautifulSoup
+import requests
+
 from app.knowledge_engine.utils.pdf_extractor import (
     PDFExtractor,
 )
@@ -225,6 +228,28 @@ def send_whatsapp_message(
         return False
 
 
+
+@app.get("/knowledge/brab-page-test")
+def brab_page_test():
+
+    response = requests.get(
+        "https://brab.bj/index.php/brab/article/view/1",
+        timeout=30,
+    )
+
+    soup = BeautifulSoup(
+        response.text,
+        "html.parser",
+    )
+
+    links = []
+
+    for a in soup.find_all("a", href=True):
+        links.append(a["href"])
+
+    return {
+        "links": links,
+    }
 
 @app.get("/knowledge/brab-pdf-test")
 def brab_pdf_test():
