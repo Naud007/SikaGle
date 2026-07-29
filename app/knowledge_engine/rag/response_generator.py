@@ -1,6 +1,9 @@
 from google import genai
 
 from app.core import settings
+from app.knowledge_engine.rag.prompt_builder import (
+    PromptBuilder,
+)
 
 
 class ResponseGenerator:
@@ -25,47 +28,28 @@ class ResponseGenerator:
             settings.GEMINI_GENERATION_MODEL
         )
 
+        self.prompt_builder = PromptBuilder()
+
     def generate(
         self,
         question: str,
         contexts: list[str],
     ) -> str:
 
-        context = "\n\n".join(contexts)
-
-        prompt = f"""
-Tu es SikaGlé, un assistant agricole spécialisé.
-
-Tu réponds uniquement en utilisant les informations présentes
-dans le contexte fourni.
-
-Si la réponse ne se trouve pas dans le contexte,
-dis clairement que tu ne disposes pas de suffisamment
-d'informations.
-
-Réponds en français avec un langage simple,
-clair et pédagogique.
-
-======================
-CONTEXTE
-======================
-
-{context}
-
-======================
-QUESTION
-======================
-
-{question}
-
-======================
-RÉPONSE
-======================
-"""
+        prompt = self.prompt_builder.build(
+            question=question,
+            contexts=contexts,
+        )
 
         response = self.client.models.generate_content(
             model=self.model,
             contents=prompt,
         )
 
-        return response.text
+        if response.text:
+
+            return response.text.strip()
+
+        return (
+            "Je n'ai pas pu générer une réponse."
+        )
