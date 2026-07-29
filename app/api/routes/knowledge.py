@@ -113,6 +113,72 @@ def debug_pdf(
         )
 
 
+@router.post("/debug/brab")
+def debug_brab():
+
+    try:
+
+        documents = service.discover(
+            "brab"
+        )
+
+        if not documents:
+
+            raise HTTPException(
+                status_code=404,
+                detail="Aucun document trouvé.",
+            )
+
+        document = documents[0]
+
+        pdf_files = service.download_document(
+            "brab",
+            document,
+        )
+
+        if not pdf_files:
+
+            raise HTTPException(
+                status_code=404,
+                detail="Aucun PDF téléchargé.",
+            )
+
+        report = service.debug_pdf(
+            pdf_files[0]
+        )
+
+        report.update(
+            {
+                "title": document.title,
+                "source": document.source,
+                "document_url": str(
+                    document.url
+                ),
+                "attachments": [
+                    {
+                        "filename": attachment.filename,
+                        "url": str(
+                            attachment.url
+                        ),
+                    }
+                    for attachment in document.attachments
+                ],
+            }
+        )
+
+        return report
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
 @router.post("/ask")
 def ask(
     request: QuestionRequest,
