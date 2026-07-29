@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.knowledge_engine.resolvers import OJSPDFResolver
 from app.services.knowledge_service import KnowledgeService
 
 router = APIRouter(
@@ -11,6 +12,7 @@ router = APIRouter(
 )
 
 service = KnowledgeService()
+resolver = OJSPDFResolver()
 
 
 class QuestionRequest(BaseModel):
@@ -147,6 +149,10 @@ def debug_brab():
             pdf_files[0]
         )
 
+        resolver_debug = resolver.inspect(
+            str(document.url)
+        )
+
         report.update(
             {
                 "title": document.title,
@@ -163,6 +169,7 @@ def debug_brab():
                     }
                     for attachment in document.attachments
                 ],
+                "resolver": resolver_debug,
             }
         )
 
