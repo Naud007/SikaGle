@@ -24,13 +24,12 @@ class OJSPDFResolver:
             }
         )
 
-    def resolve(
+    def inspect(
         self,
         article_url: str,
-    ) -> str | None:
+    ) -> dict:
         """
-        Recherche le lien PDF réel
-        depuis la page de l'article.
+        Retourne tous les liens présents sur la page.
         """
 
         response = self.session.get(
@@ -45,31 +44,60 @@ class OJSPDFResolver:
             "html.parser",
         )
 
-        # Recherche de tous les liens
+        links = []
+
         for link in soup.find_all(
             "a",
             href=True,
         ):
 
-            href = link["href"]
+            href = urljoin(
+                article_url,
+                link["href"],
+            )
 
             text = link.get_text(
                 " ",
                 strip=True,
-            ).lower()
+            )
 
-            href_lower = href.lower()
+            links.append(
+                {
+                    "text": text,
+                    "href": href,
+                }
+            )
 
-            # Cas classiques OJS
+        return {
+            "article_url": article_url,
+            "title": soup.title.text if soup.title else None,
+            "links": links,
+        }
+
+    def resolve(
+        self,
+        article_url: str,
+    ) -> str | None:
+        """
+        Recherche automatiquement le lien PDF.
+        """
+
+        debug = self.inspect(
+            article_url
+        )
+
+        for link in debug["links"]:
+
+            href = link["href"].lower()
+
+            text = link["text"].lower()
+
             if (
-                "/article/download/" in href_lower
-                or href_lower.endswith(".pdf")
+                "/article/download/" in href
+                or href.endswith(".pdf")
                 or "pdf" in text
             ):
 
-                return urljoin(
-                    article_url,
-                    href,
-                )
+                return link["href"]
 
         return None
