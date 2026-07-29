@@ -1,7 +1,7 @@
-import os
-
 from google import genai
 from google.genai import types
+
+from app.core import settings
 
 
 class GeminiEmbeddingService:
@@ -12,7 +12,7 @@ class GeminiEmbeddingService:
         output_dimensionality=1536
     ):
 
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = settings.GEMINI_API_KEY
 
         if not api_key:
             raise ValueError(
