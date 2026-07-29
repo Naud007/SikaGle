@@ -9,9 +9,6 @@ from app.schemas.document import DocumentMetadata
 
 
 class KnowledgeService:
-    """
-    Service d'orchestration du moteur de connaissances.
-    """
 
     def __init__(self):
 
@@ -29,23 +26,21 @@ class KnowledgeService:
         source: str,
     ) -> list[DocumentMetadata]:
 
-        connector = self.get_connector(source)
-
-        return connector.discover()
+        return self.get_connector(
+            source
+        ).discover()
 
     def discover_all(
         self,
         sources: list[str],
     ) -> list[DocumentMetadata]:
 
-        documents: list[DocumentMetadata] = []
+        documents = []
 
         for source in sources:
 
-            connector = self.get_connector(source)
-
             documents.extend(
-                connector.discover()
+                self.discover(source)
             )
 
         return documents
@@ -56,10 +51,10 @@ class KnowledgeService:
         attachment: DocumentAttachment,
     ) -> Path:
 
-        connector = self.get_connector(source)
-
-        return connector.download(
-            attachment,
+        return self.get_connector(
+            source
+        ).download(
+            attachment
         )
 
     def download_document(
@@ -68,16 +63,16 @@ class KnowledgeService:
         document: DocumentMetadata,
     ) -> list[Path]:
 
-        connector = self.get_connector(source)
-
-        return connector.download_document(
-            document,
+        return self.get_connector(
+            source
+        ).download_document(
+            document
         )
 
     def process_pdf(
         self,
         pdf_path: Path,
-    ) -> Path:
+    ) -> dict:
 
         return self.processor.process(
             pdf_path
