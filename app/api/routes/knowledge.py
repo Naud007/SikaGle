@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from fastapi import APIRouter, HTTPException
 
 from app.services.knowledge_service import KnowledgeService
