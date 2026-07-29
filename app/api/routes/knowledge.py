@@ -12,57 +12,37 @@ router = APIRouter(
 service = KnowledgeService()
 
 
-@router.get("/test-download")
-def test_download():
+@router.post("/ingest-test")
+def ingest_test():
     """
-    Télécharge un document BRAB de test.
+    Pipeline complet :
+    Découverte -> Téléchargement -> Extraction -> Chunking
     """
 
     try:
+
         document = service.discover("brab")[0]
 
-        saved_files = service.download_document(
+        pdf_files = service.download_document(
             "brab",
             document,
         )
 
-        return {
-            "title": document.title,
-            "source": document.source,
-            "article_url": document.article_url,
-            "attachment": (
-                document.attachments[0].model_dump()
-                if document.attachments
-                else None
-            ),
-            "saved_to": (
-                str(saved_files[0])
-                if saved_files
-                else None
-            ),
-        }
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
-
-
-@router.post("/process")
-def process_pdf(pdf_path: str):
-
-    try:
+        if not pdf_files:
+            raise Exception(
+                "Aucun PDF téléchargé."
+            )
 
         result = service.process_pdf(
-            Path(pdf_path)
+            pdf_files[0]
         )
 
         return {
             "status": "success",
-            "txt_file": str(
-                result["txt_path"]
-            ),
+            "title": document.title,
+            "source": document.source,
+            "pdf": str(pdf_files[0]),
+            "txt": str(result["txt_path"]),
             "characters": result["characters"],
             "chunks": result["chunks_count"],
             "preview": (
