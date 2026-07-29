@@ -1,6 +1,6 @@
 from google import genai
 
-from app.core.config import settings
+from app.core import settings
 
 
 class ResponseGenerator:
@@ -10,6 +10,11 @@ class ResponseGenerator:
     """
 
     def __init__(self):
+
+        if not settings.GEMINI_API_KEY:
+            raise ValueError(
+                "GEMINI_API_KEY n'est pas configurée."
+            )
 
         self.client = genai.Client(
             api_key=settings.GEMINI_API_KEY
@@ -45,7 +50,7 @@ QUESTION
 
 {question}
 
-======================
+========================
 RÉPONSE
 ======================
 """
