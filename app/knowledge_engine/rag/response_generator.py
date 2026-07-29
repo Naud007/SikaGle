@@ -5,8 +5,9 @@ from app.core import settings
 
 class ResponseGenerator:
     """
-    Génère une réponse en utilisant Gemini
-    à partir des passages retrouvés.
+    Génère une réponse avec Gemini
+    à partir des passages récupérés
+    dans la base vectorielle.
     """
 
     def __init__(self):
@@ -20,7 +21,9 @@ class ResponseGenerator:
             api_key=settings.GEMINI_API_KEY
         )
 
-        self.model = "gemini-2.5-flash"
+        self.model = (
+            settings.GEMINI_GENERATION_MODEL
+        )
 
     def generate(
         self,
@@ -33,10 +36,15 @@ class ResponseGenerator:
         prompt = f"""
 Tu es SikaGlé, un assistant agricole spécialisé.
 
-Réponds UNIQUEMENT à partir du contexte ci-dessous.
+Tu réponds uniquement en utilisant les informations présentes
+dans le contexte fourni.
 
-Si le contexte ne contient pas la réponse,
-dis clairement que l'information n'est pas disponible.
+Si la réponse ne se trouve pas dans le contexte,
+dis clairement que tu ne disposes pas de suffisamment
+d'informations.
+
+Réponds en français avec un langage simple,
+clair et pédagogique.
 
 ======================
 CONTEXTE
@@ -50,7 +58,7 @@ QUESTION
 
 {question}
 
-========================
+======================
 RÉPONSE
 ======================
 """
