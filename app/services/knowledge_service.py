@@ -82,13 +82,13 @@ class KnowledgeService:
             metadata=metadata,
         )
 
-    def search(
+    def ask(
         self,
         question: str,
         top_k: int = 5,
     ):
 
-        return self.rag.retrieve(
+        return self.rag.ask(
             question=question,
             top_k=top_k,
         )
