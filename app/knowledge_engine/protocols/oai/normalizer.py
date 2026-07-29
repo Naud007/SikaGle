@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from app.knowledge_engine.protocols.oai.record import OAIRecord
+from app.knowledge_engine.resolvers import OJSPDFResolver
 from app.schemas.attachment import DocumentAttachment
 from app.schemas.document import DocumentMetadata
 
@@ -11,6 +12,10 @@ class OAINormalizer:
     """
     Transforme un OAIRecord en DocumentMetadata.
     """
+
+    def __init__(self):
+
+        self.resolver = OJSPDFResolver()
 
     def normalize(
         self,
@@ -124,21 +129,27 @@ class OAINormalizer:
             and "/article/view/" in article_url
         ):
 
-            article_id = (
+            pdf_url = self.resolver.resolve(
                 article_url
-                .rstrip("/")
-                .split("/")[-1]
             )
 
-            attachments.append(
-                DocumentAttachment(
-                    url=f"{article_url.rstrip('/')}/1",
-                    filename=f"{article_id}.pdf",
-                    mime_type="application/pdf",
-                    file_type="pdf",
-                    description="Article scientifique"
+            if pdf_url:
+
+                article_id = (
+                    article_url
+                    .rstrip("/")
+                    .split("/")[-1]
                 )
-            )
+
+                attachments.append(
+                    DocumentAttachment(
+                        url=pdf_url,
+                        filename=f"{article_id}.pdf",
+                        mime_type="application/pdf",
+                        file_type="pdf",
+                        description="Article scientifique",
+                    )
+                )
 
         # ==================================================
         # DOCUMENT NORMALISÉ
