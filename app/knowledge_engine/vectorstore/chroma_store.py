@@ -2,6 +2,8 @@ from pathlib import Path
 
 import chromadb
 
+from app.core import settings
+
 
 class ChromaStore:
     """
@@ -10,7 +12,7 @@ class ChromaStore:
 
     def __init__(self):
 
-        db_path = Path("data/chroma")
+        db_path = Path(settings.CHROMA_PATH)
         db_path.mkdir(
             parents=True,
             exist_ok=True,
