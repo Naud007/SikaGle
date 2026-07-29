@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.services.knowledge_service import KnowledgeService
 
@@ -12,8 +12,18 @@ service = KnowledgeService()
 
 
 class QuestionRequest(BaseModel):
-    question: str
-    top_k: int = 5
+    question: str = Field(
+        ...,
+        description="Question de l'utilisateur",
+        min_length=3,
+    )
+
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        description="Nombre maximum de passages à récupérer",
+    )
 
 
 @router.post("/ingest-test")
@@ -21,7 +31,16 @@ def ingest_test():
 
     try:
 
-        document = service.discover("brab")[0]
+        documents = service.discover("brab")
+
+        if not documents:
+
+            raise HTTPException(
+                status_code=404,
+                detail="Aucun document BRAB trouvé.",
+            )
+
+        document = documents[0]
 
         pdf_files = service.download_document(
             "brab",
@@ -29,8 +48,10 @@ def ingest_test():
         )
 
         if not pdf_files:
-            raise Exception(
-                "Aucun PDF téléchargé."
+
+            raise HTTPException(
+                status_code=404,
+                detail="Aucun PDF téléchargé.",
             )
 
         result = service.index_pdf(
@@ -49,6 +70,9 @@ def ingest_test():
         )
 
         return result
+
+    except HTTPException:
+        raise
 
     except Exception as e:
 
@@ -69,6 +93,9 @@ def ask(
             question=request.question,
             top_k=request.top_k,
         )
+
+    except HTTPException:
+        raise
 
     except Exception as e:
 
