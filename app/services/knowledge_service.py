@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.knowledge_engine.connectors.registry import registry
 from app.knowledge_engine.indexing import KnowledgeIndexer
+from app.knowledge_engine.rag import RAGService
 from app.schemas.attachment import DocumentAttachment
 from app.schemas.document import DocumentMetadata
 
@@ -13,6 +14,7 @@ class KnowledgeService:
     def __init__(self):
 
         self.indexer = KnowledgeIndexer()
+        self.rag = RAGService()
 
     def get_connector(
         self,
@@ -78,4 +80,15 @@ class KnowledgeService:
         return self.indexer.index_pdf(
             pdf_path=pdf_path,
             metadata=metadata,
+        )
+
+    def search(
+        self,
+        question: str,
+        top_k: int = 5,
+    ):
+
+        return self.rag.retrieve(
+            question=question,
+            top_k=top_k,
         )
