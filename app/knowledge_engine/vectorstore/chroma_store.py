@@ -1,0 +1,65 @@
+from pathlib import Path
+
+import chromadb
+
+
+class ChromaStore:
+    """
+    Gestionnaire de la base vectorielle ChromaDB.
+    """
+
+    def __init__(self):
+
+        db_path = Path("data/chroma")
+        db_path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        self.client = chromadb.PersistentClient(
+            path=str(db_path)
+        )
+
+        self.collection = self.client.get_or_create_collection(
+            name="knowledge"
+        )
+
+    def add_document(
+        self,
+        doc_id: str,
+        chunks: list[str],
+        embeddings: list[list[float]],
+        metadata: dict,
+    ):
+
+        ids = [
+            f"{doc_id}_{i}"
+            for i in range(len(chunks))
+        ]
+
+        metadatas = [
+            metadata.copy()
+            for _ in chunks
+        ]
+
+        self.collection.add(
+            ids=ids,
+            documents=chunks,
+            embeddings=embeddings,
+            metadatas=metadatas,
+        )
+
+    def search(
+        self,
+        embedding: list[float],
+        n_results: int = 5,
+    ):
+
+        return self.collection.query(
+            query_embeddings=[embedding],
+            n_results=n_results,
+        )
+
+    def count(self):
+
+        return self.collection.count()
