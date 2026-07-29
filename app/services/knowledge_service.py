@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.knowledge_engine.connectors.registry import registry
-from app.knowledge_engine.processing import DocumentProcessor
+from app.knowledge_engine.indexing import KnowledgeIndexer
 from app.schemas.attachment import DocumentAttachment
 from app.schemas.document import DocumentMetadata
 
@@ -12,7 +12,7 @@ class KnowledgeService:
 
     def __init__(self):
 
-        self.processor = DocumentProcessor()
+        self.indexer = KnowledgeIndexer()
 
     def get_connector(
         self,
@@ -69,11 +69,13 @@ class KnowledgeService:
             document
         )
 
-    def process_pdf(
+    def index_pdf(
         self,
         pdf_path: Path,
+        metadata: dict | None = None,
     ) -> dict:
 
-        return self.processor.process(
-            pdf_path
+        return self.indexer.index_pdf(
+            pdf_path=pdf_path,
+            metadata=metadata,
         )
