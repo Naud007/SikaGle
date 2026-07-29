@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.knowledge_engine.connectors.registry import registry
+from app.knowledge_engine.debug import DebugService
 from app.knowledge_engine.indexing import KnowledgeIndexer
 from app.knowledge_engine.rag import RAGService
 from app.schemas.attachment import DocumentAttachment
@@ -16,7 +17,8 @@ class KnowledgeService:
     Il orchestre :
     - les connecteurs de documents ;
     - l'indexation ;
-    - le moteur RAG.
+    - le moteur RAG ;
+    - les outils de diagnostic.
     """
 
     def __init__(self):
@@ -24,6 +26,8 @@ class KnowledgeService:
         self.indexer = KnowledgeIndexer()
 
         self.rag = RAGService()
+
+        self.debug = DebugService()
 
     # ------------------------------------------------------------------
     # Connecteurs
@@ -82,6 +86,22 @@ class KnowledgeService:
             source
         ).download_document(
             document
+        )
+
+    # ------------------------------------------------------------------
+    # Debug
+    # ------------------------------------------------------------------
+
+    def debug_pdf(
+        self,
+        pdf_path: Path,
+    ) -> dict:
+        """
+        Analyse un document PDF sans l'indexer.
+        """
+
+        return self.debug.inspect_pdf(
+            pdf_path
         )
 
     # ------------------------------------------------------------------
