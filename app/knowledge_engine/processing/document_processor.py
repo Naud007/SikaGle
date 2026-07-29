@@ -1,11 +1,12 @@
 from pathlib import Path
 
+from app.knowledge_engine.chunking import TextChunker
 from app.knowledge_engine.extraction import PDFExtractor
 
 
 class DocumentProcessor:
     """
-    Pipeline de traitement d'un document PDF.
+    Pipeline complet de traitement d'un document.
     """
 
     def __init__(
@@ -22,19 +23,16 @@ class DocumentProcessor:
             exist_ok=True,
         )
 
+        self.chunker = TextChunker()
+
     def process(
         self,
         pdf_path: Path,
-    ) -> Path:
-        """
-        PDF
-            ↓
-        Extraction
-            ↓
-        Nettoyage
-            ↓
-        Sauvegarde TXT
-        """
+    ) -> dict:
+
+        # ============================
+        # EXTRACTION
+        # ============================
 
         text = PDFExtractor.extract(
             pdf_path
@@ -44,17 +42,30 @@ class DocumentProcessor:
             text
         )
 
-        output_path = (
+        txt_path = (
             self.output_dir
             / f"{pdf_path.stem}.txt"
         )
 
-        output_path.write_text(
+        txt_path.write_text(
             cleaned_text,
             encoding="utf-8",
         )
 
-        return output_path
+        # ============================
+        # CHUNKING
+        # ============================
+
+        chunks = self.chunker.chunk_text(
+            cleaned_text
+        )
+
+        return {
+            "txt_path": txt_path,
+            "chunks": chunks,
+            "chunks_count": len(chunks),
+            "characters": len(cleaned_text),
+        }
 
     @staticmethod
     def _clean_text(
@@ -70,6 +81,7 @@ class DocumentProcessor:
             )
 
             if line:
+
                 lines.append(
                     line
                 )
