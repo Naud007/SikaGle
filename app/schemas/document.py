@@ -1,28 +1,25 @@
 from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl
 
 from app.schemas.attachment import DocumentAttachment
 
 
 class DocumentMetadata(BaseModel):
     """
-    Modèle standardisé représentant un document
-    provenant d'une source de connaissance.
+    Modèle standardisé représentant un document provenant
+    d'une source de connaissance.
 
-    Ce modèle est générique afin de permettre
-    l'intégration progressive de connaissances liées à :
-
-    - agriculture
-    - élevage
-    - pêche
-    - santé animale
-    - météo
-    - environnement
-    - recherche scientifique
-    - etc.
+    Ce modèle est commun à tous les connecteurs
+    (BRAB, AGRIS, HAL, Zenodo, OpenAlex, etc.).
     """
+
+    # =========================================================
+    # IDENTIFIANT LOCAL (SQLite)
+    # =========================================================
+
+    id: Optional[int] = None
 
     # =========================================================
     # IDENTIFICATION DU DOCUMENT
@@ -34,6 +31,8 @@ class DocumentMetadata(BaseModel):
 
     url: HttpUrl
 
+    identifier: Optional[str] = None
+
     # =========================================================
     # INFORMATIONS GÉNÉRALES
     # =========================================================
@@ -43,6 +42,8 @@ class DocumentMetadata(BaseModel):
     language: Optional[str] = None
 
     document_type: Optional[str] = None
+
+    publisher: Optional[str] = None
 
     # =========================================================
     # CONTENU
@@ -60,9 +61,9 @@ class DocumentMetadata(BaseModel):
 
     culture: Optional[str] = None
 
-    keywords: Optional[list[str]] = None
+    keywords: list[str] = Field(default_factory=list)
 
-    mots_cles: Optional[list[str]] = None
+    mots_cles: list[str] = Field(default_factory=list)
 
     # =========================================================
     # LOCALISATION GÉOGRAPHIQUE
@@ -73,14 +74,12 @@ class DocumentMetadata(BaseModel):
     zone_geographique: Optional[str] = None
 
     # =========================================================
-    # AUTEURS / PUBLICATION
+    # AUTEURS
     # =========================================================
 
     author: Optional[str] = None
 
-    authors: Optional[list[str]] = None
-
-    publisher: Optional[str] = None
+    authors: list[str] = Field(default_factory=list)
 
     # =========================================================
     # INFORMATIONS SUR LE DATASET SOURCE
@@ -88,10 +87,10 @@ class DocumentMetadata(BaseModel):
 
     dataset_filename: Optional[str] = None
 
-    identifier: Optional[str] = None
-
     # =========================================================
     # FICHIERS ASSOCIÉS
     # =========================================================
 
-    attachments: list[DocumentAttachment] = []
+    attachments: list[DocumentAttachment] = Field(
+        default_factory=list
+    )
