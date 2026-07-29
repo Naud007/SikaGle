@@ -10,11 +10,24 @@ from app.schemas.document import DocumentMetadata
 
 
 class KnowledgeService:
+    """
+    Service principal du moteur de connaissances.
+
+    Il orchestre :
+    - les connecteurs de documents ;
+    - l'indexation ;
+    - le moteur RAG.
+    """
 
     def __init__(self):
 
         self.indexer = KnowledgeIndexer()
+
         self.rag = RAGService()
+
+    # ------------------------------------------------------------------
+    # Connecteurs
+    # ------------------------------------------------------------------
 
     def get_connector(
         self,
@@ -71,6 +84,10 @@ class KnowledgeService:
             document
         )
 
+    # ------------------------------------------------------------------
+    # Indexation
+    # ------------------------------------------------------------------
+
     def index_pdf(
         self,
         pdf_path: Path,
@@ -82,11 +99,15 @@ class KnowledgeService:
             metadata=metadata,
         )
 
+    # ------------------------------------------------------------------
+    # Questions / Réponses
+    # ------------------------------------------------------------------
+
     def ask(
         self,
         question: str,
         top_k: int = 5,
-    ):
+    ) -> dict:
 
         return self.rag.ask(
             question=question,
