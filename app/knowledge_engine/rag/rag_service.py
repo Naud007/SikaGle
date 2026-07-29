@@ -4,6 +4,9 @@ from app.knowledge_engine.embeddings.embedding_service import (
 from app.knowledge_engine.rag.response_generator import (
     ResponseGenerator,
 )
+from app.knowledge_engine.rag.source_formatter import (
+    SourceFormatter,
+)
 from app.knowledge_engine.vectorstore import (
     ChromaStore,
 )
@@ -11,17 +14,34 @@ from app.knowledge_engine.vectorstore import (
 
 class RAGService:
     """
-    Pipeline RAG complet :
-    Question → Recherche → Génération.
+    Pipeline RAG complet.
+
+    Question
+        ↓
+    Embedding
+        ↓
+    Recherche Chroma
+        ↓
+    Génération de réponse
+        ↓
+    Formatage des sources
     """
 
     def __init__(self):
 
-        self.embedding = GeminiEmbeddingService()
+        self.embedding_service = (
+            GeminiEmbeddingService()
+        )
 
         self.vectorstore = ChromaStore()
 
-        self.generator = ResponseGenerator()
+        self.response_generator = (
+            ResponseGenerator()
+        )
+
+        self.source_formatter = (
+            SourceFormatter()
+        )
 
     def ask(
         self,
@@ -30,7 +50,7 @@ class RAGService:
     ) -> dict:
 
         query_embedding = (
-            self.embedding.generate_query_embedding(
+            self.embedding_service.generate_query_embedding(
                 question
             )
         )
@@ -40,38 +60,43 @@ class RAGService:
             n_results=top_k,
         )
 
-        documents = []
+        documents = (
+            results.get("documents", [[]])[0]
+        )
 
-        if (
-            results.get("documents")
-            and len(results["documents"]) > 0
-        ):
-            documents = results["documents"][0]
-
-        metadatas = []
-
-        if (
-            results.get("metadatas")
-            and len(results["metadatas"]) > 0
-        ):
-            metadatas = results["metadatas"][0]
+        metadatas = (
+            results.get("metadatas", [[]])[0]
+        )
 
         if not documents:
 
             return {
+                "success": False,
+                "question": question,
                 "answer": (
                     "Je n'ai trouvé aucun document pertinent."
                 ),
                 "sources": [],
+                "chunks_used": 0,
             }
 
-        answer = self.generator.generate(
-            question=question,
-            contexts=documents,
+        answer = (
+            self.response_generator.generate(
+                question=question,
+                contexts=documents,
+            )
+        )
+
+        sources = (
+            self.source_formatter.format(
+                metadatas
+            )
         )
 
         return {
+            "success": True,
+            "question": question,
             "answer": answer,
-            "sources": metadatas,
+            "sources": sources,
             "chunks_used": len(documents),
         }
