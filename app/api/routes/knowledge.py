@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -23,6 +25,13 @@ class QuestionRequest(BaseModel):
         ge=1,
         le=10,
         description="Nombre maximum de passages à récupérer",
+    )
+
+
+class DebugRequest(BaseModel):
+    pdf_path: str = Field(
+        ...,
+        description="Chemin du fichier PDF à analyser",
     )
 
 
@@ -70,6 +79,28 @@ def ingest_test():
         )
 
         return result
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.post("/debug")
+def debug_pdf(
+    request: DebugRequest,
+):
+
+    try:
+
+        return service.debug_pdf(
+            Path(request.pdf_path)
+        )
 
     except HTTPException:
         raise
