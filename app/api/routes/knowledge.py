@@ -11,7 +11,7 @@ router = APIRouter(
 service = KnowledgeService()
 
 
-class SearchRequest(BaseModel):
+class QuestionRequest(BaseModel):
     question: str
     top_k: int = 5
 
@@ -48,11 +48,7 @@ def ingest_test():
             },
         )
 
-        return {
-            "status": "success",
-            "indexed_chunks": result["indexed"],
-            "collection_size": result["collection_size"],
-        }
+        return result
 
     except Exception as e:
 
@@ -62,19 +58,17 @@ def ingest_test():
         )
 
 
-@router.post("/search")
-def search(
-    request: SearchRequest,
+@router.post("/ask")
+def ask(
+    request: QuestionRequest,
 ):
 
     try:
 
-        results = service.search(
+        return service.ask(
             question=request.question,
             top_k=request.top_k,
         )
-
-        return results
 
     except Exception as e:
 
