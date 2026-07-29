@@ -5,11 +5,14 @@ from app.core import settings
 
 
 class GeminiEmbeddingService:
+    """
+    Service de génération d'embeddings avec Gemini.
+    """
 
     def __init__(
         self,
-        model="gemini-embedding-001",
-        output_dimensionality=1536
+        model=None,
+        output_dimensionality=None,
     ):
 
         api_key = settings.GEMINI_API_KEY
@@ -23,15 +26,19 @@ class GeminiEmbeddingService:
             api_key=api_key
         )
 
-        self.model = model
+        self.model = (
+            model
+            or settings.GEMINI_EMBEDDING_MODEL
+        )
 
         self.output_dimensionality = (
             output_dimensionality
+            or settings.EMBEDDING_DIMENSION
         )
 
     def generate_document_embedding(
         self,
-        text: str
+        text: str,
     ):
 
         if not text or not text.strip():
@@ -57,7 +64,7 @@ class GeminiEmbeddingService:
 
     def generate_query_embedding(
         self,
-        text: str
+        text: str,
     ):
 
         if not text or not text.strip():
