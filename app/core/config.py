@@ -44,7 +44,7 @@ class Settings:
         )
 
         # ==========================
-        # Chroma
+        # ChromaDB
         # ==========================
 
         self.CHROMA_PATH = os.getenv(
