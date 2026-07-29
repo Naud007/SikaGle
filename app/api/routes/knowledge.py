@@ -37,7 +37,13 @@ def ingest_test():
             metadata={
                 "title": document.title,
                 "source": document.source,
-                "article_url": document.article_url,
+                "url": str(document.url),
+                "author": document.author,
+                "published_at": (
+                    str(document.published_at)
+                    if document.published_at
+                    else None
+                ),
             },
         )
 
@@ -45,6 +51,7 @@ def ingest_test():
             "status": "success",
             "title": document.title,
             "source": document.source,
+            "url": str(document.url),
             "indexed_chunks": result["indexed"],
             "collection_size": result["collection_size"],
             "characters": result["characters"],
