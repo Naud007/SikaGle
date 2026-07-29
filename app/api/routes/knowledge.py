@@ -14,7 +14,8 @@ service = KnowledgeService()
 def ingest_test():
     """
     Pipeline complet :
-    Découverte -> Téléchargement -> Extraction -> Chunking
+    Découverte → Téléchargement → Extraction →
+    Chunking → Embedding → ChromaDB
     """
 
     try:
@@ -31,23 +32,23 @@ def ingest_test():
                 "Aucun PDF téléchargé."
             )
 
-        result = service.process_pdf(
-            pdf_files[0]
+        result = service.index_pdf(
+            pdf_files[0],
+            metadata={
+                "title": document.title,
+                "source": document.source,
+                "article_url": document.article_url,
+            },
         )
 
         return {
             "status": "success",
             "title": document.title,
             "source": document.source,
-            "pdf": str(pdf_files[0]),
-            "txt": str(result["txt_path"]),
+            "indexed_chunks": result["indexed"],
+            "collection_size": result["collection_size"],
             "characters": result["characters"],
-            "chunks": result["chunks_count"],
-            "preview": (
-                result["chunks"][0][:500]
-                if result["chunks"]
-                else ""
-            ),
+            "txt": str(result["txt_path"]),
         }
 
     except Exception as e:
