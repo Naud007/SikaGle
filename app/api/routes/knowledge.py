@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from app.services.knowledge_service import KnowledgeService
 
@@ -10,13 +11,13 @@ router = APIRouter(
 service = KnowledgeService()
 
 
+class SearchRequest(BaseModel):
+    question: str
+    top_k: int = 5
+
+
 @router.post("/ingest-test")
 def ingest_test():
-    """
-    Pipeline complet :
-    Découverte → Téléchargement → Extraction →
-    Chunking → Embedding → ChromaDB
-    """
 
     try:
 
@@ -49,14 +50,31 @@ def ingest_test():
 
         return {
             "status": "success",
-            "title": document.title,
-            "source": document.source,
-            "url": str(document.url),
             "indexed_chunks": result["indexed"],
             "collection_size": result["collection_size"],
-            "characters": result["characters"],
-            "txt": str(result["txt_path"]),
         }
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+@router.post("/search")
+def search(
+    request: SearchRequest,
+):
+
+    try:
+
+        results = service.search(
+            question=request.question,
+            top_k=request.top_k,
+        )
+
+        return results
 
     except Exception as e:
 
