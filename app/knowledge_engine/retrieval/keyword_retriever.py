@@ -1,15 +1,14 @@
 from pathlib import Path
 
+from app.knowledge_engine.retrieval.search_query import (
+    SearchQuery,
+)
 from app.knowledge_engine.retrieval.search_result import (
     SearchResult,
 )
 
 
 class KeywordRetriever:
-    """
-    Recherche simple par mots-clés
-    dans les fichiers texte.
-    """
 
     def __init__(
         self,
@@ -23,15 +22,14 @@ class KeywordRetriever:
 
     def search(
         self,
-        query: str,
-        top_k: int = 5,
+        query: SearchQuery,
     ) -> list[SearchResult]:
 
         keywords = [
 
             word.lower()
 
-            for word in query.split()
+            for word in query.question.split()
 
             if len(word) >= 3
         ]
@@ -42,8 +40,8 @@ class KeywordRetriever:
 
             return results
 
-        for txt_file in sorted(
-            self.text_directory.glob("*.txt")
+        for txt_file in self.text_directory.glob(
+            "*.txt"
         ):
 
             text = txt_file.read_text(
@@ -51,13 +49,11 @@ class KeywordRetriever:
                 errors="ignore",
             )
 
-            lower_text = text.lower()
+            lower = text.lower()
 
             score = sum(
 
-                lower_text.count(
-                    keyword
-                )
+                lower.count(keyword)
 
                 for keyword in keywords
             )
@@ -65,16 +61,11 @@ class KeywordRetriever:
             if score == 0:
                 continue
 
-            excerpt = self._excerpt(
-                text,
-                keywords,
-            )
-
             results.append(
 
                 SearchResult(
 
-                    document=excerpt,
+                    document=text[:700],
 
                     metadata={
                         "document": txt_file.stem,
@@ -87,43 +78,8 @@ class KeywordRetriever:
             )
 
         results.sort(
-
             key=lambda r: r.score,
-
             reverse=True,
         )
 
-        return results[:top_k]
-
-    @staticmethod
-    def _excerpt(
-        text: str,
-        keywords: list[str],
-        size: int = 700,
-    ) -> str:
-
-        lower = text.lower()
-
-        for keyword in keywords:
-
-            index = lower.find(
-                keyword
-            )
-
-            if index != -1:
-
-                start = max(
-                    0,
-                    index - 250,
-                )
-
-                end = min(
-                    len(text),
-                    start + size,
-                )
-
-                return text[
-                    start:end
-                ]
-
-        return text[:size]
+        return results[: query.top_k]
