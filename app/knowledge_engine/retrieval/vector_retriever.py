@@ -1,20 +1,23 @@
 from app.knowledge_engine.embeddings.embedding_service import (
     GeminiEmbeddingService,
 )
+from app.knowledge_engine.repositories import (
+    KnowledgeRepository,
+)
 from app.knowledge_engine.retrieval.search_query import (
     SearchQuery,
 )
 from app.knowledge_engine.retrieval.search_result import (
     SearchResult,
 )
-from app.knowledge_engine.vectorstore import (
-    ChromaStore,
-)
 
 
 class VectorRetriever:
     """
-    Effectue une recherche vectorielle dans ChromaDB.
+    Effectue une recherche vectorielle dans la base documentaire.
+
+    Le retriever ne dépend plus directement de ChromaDB.
+    Toute la persistance est déléguée au KnowledgeRepository.
     """
 
     def __init__(self):
@@ -23,8 +26,8 @@ class VectorRetriever:
             GeminiEmbeddingService()
         )
 
-        self.vectorstore = (
-            ChromaStore()
+        self.repository = (
+            KnowledgeRepository()
         )
 
     def search(
@@ -33,7 +36,7 @@ class VectorRetriever:
     ) -> list[SearchResult]:
         """
         Recherche les documents les plus proches
-        de la question dans l'espace vectoriel.
+        de la question.
         """
 
         embedding = (
@@ -42,9 +45,9 @@ class VectorRetriever:
             )
         )
 
-        results = self.vectorstore.search(
+        results = self.repository.search(
             embedding=embedding,
-            n_results=query.top_k,
+            top_k=query.top_k,
         )
 
         documents = results.get(
@@ -80,12 +83,6 @@ class VectorRetriever:
                     metadatas[index]
                 )
 
-            #
-            # Chroma renvoie une distance.
-            # Plus la distance est faible,
-            # plus le document est pertinent.
-            #
-
             distance = 0.0
 
             if index < len(
@@ -97,8 +94,8 @@ class VectorRetriever:
                 )
 
             #
-            # Transformation de la distance
-            # en score.
+            # Conversion de la distance Chroma
+            # en score de similarité.
             #
 
             vector_score = max(
