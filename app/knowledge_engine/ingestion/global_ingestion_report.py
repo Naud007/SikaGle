@@ -89,6 +89,17 @@ class GlobalIngestionReport:
         )
 
     @property
+    def total_duplicates(
+        self,
+    ) -> int:
+        """
+        Les documents ignorés correspondent
+        principalement aux doublons déjà indexés.
+        """
+
+        return self.total_skipped
+
+    @property
     def duration_seconds(
         self,
     ) -> float:
@@ -96,6 +107,83 @@ class GlobalIngestionReport:
         return sum(
             job.duration_seconds
             for job in self.jobs
+        )
+
+    @property
+    def success_rate(
+        self,
+    ) -> float:
+
+        total = self.total_documents
+
+        if total == 0:
+            return 100.0
+
+        success = (
+            total
+            - self.total_failed
+        )
+
+        return round(
+            success * 100 / total,
+            2,
+        )
+
+    @property
+    def average_documents_per_source(
+        self,
+    ) -> float:
+
+        if self.total_sources == 0:
+            return 0.0
+
+        return round(
+            self.total_documents
+            / self.total_sources,
+            2,
+        )
+
+    @property
+    def average_duration_per_source(
+        self,
+    ) -> float:
+
+        if self.total_sources == 0:
+            return 0.0
+
+        return round(
+            self.duration_seconds
+            / self.total_sources,
+            2,
+        )
+
+    @property
+    def documents_per_second(
+        self,
+    ) -> float:
+
+        if self.duration_seconds == 0:
+            return 0.0
+
+        return round(
+            self.total_documents
+            / self.duration_seconds,
+            2,
+        )
+
+    @property
+    def downloads_saved(
+        self,
+    ) -> int:
+        """
+        Documents non téléchargés grâce
+        au cache local.
+        """
+
+        return max(
+            self.total_documents
+            - self.total_downloaded,
+            0,
         )
 
     def to_dict(
@@ -110,15 +198,34 @@ class GlobalIngestionReport:
 
             "downloaded": self.total_downloaded,
 
+            "downloads_saved": self.downloads_saved,
+
             "validated": self.total_validated,
 
             "indexed": self.total_indexed,
+
+            "duplicates": self.total_duplicates,
 
             "skipped": self.total_skipped,
 
             "failed": self.total_failed,
 
-            "duration_seconds": self.duration_seconds,
+            "success_rate": self.success_rate,
+
+            "average_documents_per_source":
+                self.average_documents_per_source,
+
+            "average_duration_per_source":
+                self.average_duration_per_source,
+
+            "documents_per_second":
+                self.documents_per_second,
+
+            "duration_seconds":
+                round(
+                    self.duration_seconds,
+                    2,
+                ),
 
             "jobs": [
                 job.to_dict()
