@@ -1,6 +1,8 @@
 from time import perf_counter
 
-from app.knowledge_engine.connectors.registry import registry
+from app.knowledge_engine.connectors.registry import (
+    registry,
+)
 from app.knowledge_engine.filesystem.path_manager import (
     PathManager,
 )
@@ -43,7 +45,9 @@ class SourceIngestor:
 
         documents = connector.discover()
 
-        report.documents_found = len(documents)
+        report.documents_found = len(
+            documents
+        )
 
         for document in documents:
 
@@ -66,39 +70,62 @@ class SourceIngestor:
                     filename=attachment.filename,
                 )
 
-                self.downloader.download_file(
-                    url=str(attachment.url),
-                    destination=pdf_path,
-                )
+                # =====================================
+                # Évite le re-téléchargement
+                # =====================================
 
-                report.downloaded += 1
+                if not pdf_path.exists():
+
+                    self.downloader.download_file(
+                        url=str(
+                            attachment.url
+                        ),
+                        destination=pdf_path,
+                    )
+
+                    report.downloaded += 1
+
+                else:
+
+                    report.add_warning(
+                        f"{attachment.filename} déjà présent sur le disque."
+                    )
 
                 result = self.indexer.index_pdf(
                     pdf_path=pdf_path,
                     metadata=document.model_dump(),
                 )
 
-                if result["indexed"]:
-
-                    report.indexed += 1
-
+                if result.get(
+                    "validated",
+                    False,
+                ):
                     report.validated += 1
 
-                else:
+                if result.get(
+                    "indexed",
+                    False,
+                ):
+                    report.indexed += 1
 
+                else:
                     report.skipped += 1
 
-                    for error in result.get(
-                        "errors",
-                        [],
-                    ):
-                        report.add_error(error)
+                for error in result.get(
+                    "errors",
+                    [],
+                ):
+                    report.add_error(
+                        error
+                    )
 
                 for warning in result.get(
                     "warnings",
                     [],
                 ):
-                    report.add_warning(warning)
+                    report.add_warning(
+                        warning
+                    )
 
             except Exception as exc:
 
