@@ -38,6 +38,35 @@ class FAOConnector(BaseConnector):
         .    split("/")[-1]
         )
 
+    def _get_bundles(
+        self,
+        uuid: str,
+    ) -> list[dict]:
+        """
+        Récupère les bundles associés à un document FAO.
+        """
+
+        bundles_url = (
+            f"{self.api_url}"
+            f"/core/items/{uuid}/bundles"
+        )
+
+        response = requests.get(
+            bundles_url,
+            headers=self.headers,
+            timeout=60,
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        return (
+            data
+            .get("_embedded", {})
+            .get("bundles", [])
+        )
+
     def discover(self):
 
         self.log(
@@ -170,32 +199,8 @@ class FAOConnector(BaseConnector):
         item_data = response.json()
 
         # Chercher les bitstreams liés à l'item
-        bitstreams_url = (
-            f"{self.api_url}"
-            f"/core/items/{uuid}"
-            f"/bundles"
-        )
-
-        bundles_response = requests.get(
-            bitstreams_url,
-            headers=self.headers,
-            timeout=60
-        )
-
-        bundles_response.raise_for_status()
-
-        bundles_data = bundles_response.json()
-
-        bundles = (
-            bundles_data
-            .get(
-                "_embedded",
-                {}
-            )
-            .get(
-                "bundles",
-                []
-            )
+        bundles = self._get_bundles(
+            uuid
         )
 
         pdf_url = None
