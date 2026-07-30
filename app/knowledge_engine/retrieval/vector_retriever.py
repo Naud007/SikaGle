@@ -14,7 +14,7 @@ from app.knowledge_engine.vectorstore import (
 
 class VectorRetriever:
     """
-    Recherche vectorielle dans ChromaDB.
+    Effectue une recherche vectorielle dans ChromaDB.
     """
 
     def __init__(self):
@@ -31,6 +31,10 @@ class VectorRetriever:
         self,
         query: SearchQuery,
     ) -> list[SearchResult]:
+        """
+        Recherche les documents les plus proches
+        de la question dans l'espace vectoriel.
+        """
 
         embedding = (
             self.embedding_service.generate_query_embedding(
@@ -58,19 +62,49 @@ class VectorRetriever:
             [[]],
         )[0]
 
-        search_results = []
+        search_results: list[
+            SearchResult
+        ] = []
 
-        for i, document in enumerate(documents):
+        for index, document in enumerate(
+            documents
+        ):
 
             metadata = {}
 
-            if i < len(metadatas):
-                metadata = metadatas[i]
+            if index < len(
+                metadatas
+            ):
 
-            score = 0.0
+                metadata = (
+                    metadatas[index]
+                )
 
-            if i < len(distances):
-                score = distances[i]
+            #
+            # Chroma renvoie une distance.
+            # Plus la distance est faible,
+            # plus le document est pertinent.
+            #
+
+            distance = 0.0
+
+            if index < len(
+                distances
+            ):
+
+                distance = float(
+                    distances[index]
+                )
+
+            #
+            # Transformation de la distance
+            # en score.
+            #
+
+            vector_score = max(
+                0.0,
+                1.0 - distance,
+            )
 
             search_results.append(
 
@@ -80,10 +114,13 @@ class VectorRetriever:
 
                     metadata=metadata,
 
-                    score=score,
+                    vector_score=vector_score,
+
+                    score=vector_score,
 
                     source="vector",
                 )
+
             )
 
         return search_results
