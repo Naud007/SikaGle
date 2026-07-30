@@ -34,11 +34,46 @@ class KnowledgeIndexer:
 
         metadata = metadata or {}
 
+        # =====================================
+        # TRAITEMENT
+        # =====================================
+
         result = self.processor.process(
             pdf_path
         )
 
+        validation = result[
+            "validation"
+        ]
+
+        # =====================================
+        # VALIDATION
+        # =====================================
+
+        if not validation.valid:
+
+            return {
+
+                "indexed": False,
+
+                "errors": validation.errors,
+
+                "warnings": validation.warnings,
+
+                "characters": result[
+                    "characters"
+                ],
+
+                "chunks": result[
+                    "chunks_count"
+                ],
+            }
+
         chunks = result["chunks"]
+
+        # =====================================
+        # EMBEDDINGS
+        # =====================================
 
         embeddings = []
 
@@ -50,17 +85,42 @@ class KnowledgeIndexer:
                 )
             )
 
+        # =====================================
+        # VECTOR STORE
+        # =====================================
+
         self.vectorstore.add_document(
+
             doc_id=pdf_path.stem,
+
             chunks=chunks,
+
             embeddings=embeddings,
+
             metadata=metadata,
         )
 
+        # =====================================
+        # RAPPORT
+        # =====================================
+
         return {
-            "txt_path": result["txt_path"],
-            "characters": result["characters"],
-            "chunks": result["chunks_count"],
-            "indexed": len(chunks),
+
+            "indexed": True,
+
+            "txt_path": result[
+                "txt_path"
+            ],
+
+            "characters": result[
+                "characters"
+            ],
+
+            "chunks": result[
+                "chunks_count"
+            ],
+
+            "warnings": validation.warnings,
+
             "collection_size": self.vectorstore.count(),
         }
