@@ -4,6 +4,9 @@ from app.knowledge_engine.retrieval.keyword_retriever import (
 from app.knowledge_engine.retrieval.search_engine import (
     SearchEngine,
 )
+from app.knowledge_engine.retrieval.search_query import (
+    SearchQuery,
+)
 from app.knowledge_engine.retrieval.search_result import (
     SearchResult,
 )
@@ -13,9 +16,6 @@ from app.knowledge_engine.retrieval.vector_retriever import (
 
 
 class HybridRetriever:
-    """
-    Combine les recherches vectorielle et lexicale.
-    """
 
     def __init__(self):
 
@@ -27,22 +27,19 @@ class HybridRetriever:
 
     def search(
         self,
-        query: str,
-        top_k: int = 5,
+        query: SearchQuery,
     ) -> list[SearchResult]:
 
         vector_results = self.vector.search(
-            query=query,
-            top_k=top_k,
+            query
         )
 
         keyword_results = self.keyword.search(
-            query=query,
-            top_k=top_k,
+            query
         )
 
         return self.engine.merge(
-            vector_results=vector_results,
-            keyword_results=keyword_results,
-            top_k=top_k,
+            vector_results,
+            keyword_results,
+            top_k=query.top_k,
         )
