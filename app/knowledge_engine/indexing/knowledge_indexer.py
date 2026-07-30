@@ -35,6 +35,37 @@ class KnowledgeIndexer:
         metadata = metadata or {}
 
         # =====================================
+        # DOUBLON
+        # =====================================
+
+        if self.vectorstore.exists(
+            pdf_path.stem
+        ):
+
+            return {
+
+                "validated": True,
+
+                "indexed": False,
+
+                "duplicate": True,
+
+                "errors": [],
+
+                "warnings": [
+                    "Document déjà indexé."
+                ],
+
+                "txt_path": None,
+
+                "characters": 0,
+
+                "chunks": 0,
+
+                "collection_size": self.vectorstore.count(),
+            }
+
+        # =====================================
         # TRAITEMENT
         # =====================================
 
@@ -58,6 +89,8 @@ class KnowledgeIndexer:
 
                 "indexed": False,
 
+                "duplicate": False,
+
                 "errors": validation.errors,
 
                 "warnings": validation.warnings,
@@ -73,6 +106,8 @@ class KnowledgeIndexer:
                 "chunks": result[
                     "chunks_count"
                 ],
+
+                "collection_size": self.vectorstore.count(),
             }
 
         chunks = result["chunks"]
@@ -115,6 +150,8 @@ class KnowledgeIndexer:
             "validated": True,
 
             "indexed": True,
+
+            "duplicate": False,
 
             "errors": [],
 
