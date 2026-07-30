@@ -39,7 +39,7 @@ class HybridRetriever:
         )
 
         return self.engine.merge(
-            vector_results,
-            keyword_results,
-            top_k=query.top_k,
+            vector_results=vector_results,
+            keyword_results=keyword_results,
+            query=query,
         )
