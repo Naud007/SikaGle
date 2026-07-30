@@ -140,7 +140,33 @@ class FAOConnector(BaseConnector):
 
         return None
 
-    
+
+    def _download_pdf(
+        self,
+        pdf_url: str,
+        destination: Path,
+    ) -> None:
+        """
+        Télécharge un PDF FAO et l'enregistre sur le disque.
+        """
+
+        response = requests.get(
+            pdf_url,
+            headers=self.headers,
+            timeout=120,
+        )
+
+        response.raise_for_status()
+
+        with open(
+            destination,
+            "wb",
+        ) as file:
+
+            file.write(
+                response.content
+            )
+        
     def discover(self):
 
         self.log(
@@ -312,22 +338,10 @@ class FAOConnector(BaseConnector):
             / f"{safe_name}.pdf"
         )
 
-        pdf_response = requests.get(
+       self._download_pdf(
             pdf_url,
-            headers=self.headers,
-            timeout=120
-        )
-
-        pdf_response.raise_for_status()
-
-        with open(
             filename,
-            "wb"
-        ) as file:
-
-            file.write(
-                pdf_response.content
-            )
+        )
 
         self.log(
             f"✅ PDF téléchargé : "
