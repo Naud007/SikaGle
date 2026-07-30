@@ -13,6 +13,7 @@ class ChromaStore:
     def __init__(self):
 
         db_path = Path(settings.CHROMA_PATH)
+
         db_path.mkdir(
             parents=True,
             exist_ok=True,
@@ -26,6 +27,28 @@ class ChromaStore:
             name="knowledge"
         )
 
+    def exists(
+        self,
+        doc_id: str,
+    ) -> bool:
+        """
+        Vérifie si un document est déjà indexé.
+        """
+
+        try:
+
+            result = self.collection.get(
+                ids=[f"{doc_id}_0"]
+            )
+
+            return (
+                len(result["ids"]) > 0
+            )
+
+        except Exception:
+
+            return False
+
     def add_document(
         self,
         doc_id: str,
@@ -36,7 +59,9 @@ class ChromaStore:
 
         ids = [
             f"{doc_id}_{i}"
-            for i in range(len(chunks))
+            for i in range(
+                len(chunks)
+            )
         ]
 
         metadatas = [
@@ -62,6 +87,8 @@ class ChromaStore:
             n_results=n_results,
         )
 
-    def count(self):
+    def count(
+        self,
+    ):
 
         return self.collection.count()
