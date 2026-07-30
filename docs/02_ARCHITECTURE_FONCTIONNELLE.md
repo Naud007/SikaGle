@@ -1,5 +1,3 @@
-02_ARCHITECTURE_FONCTIONNELLE.md
-
 Ce document ne parle presque pas de Python.
 
 Il répond à une seule question :
@@ -9,6 +7,7 @@ Comment fonctionne SikaGlé ?
 Je le structurerais ainsi.
 
 1. Vue générale
+2. 
                     SikaGlé
 
                          │
@@ -20,6 +19,11 @@ Je le structurerais ainsi.
   Assistant IA     Intelligence      Plateforme
 
    agricole          agricole         numérique
+
+
+
+
+
 2. Les 5 personas
 
 Nous utiliserons désormais officiellement ces cinq personas.
