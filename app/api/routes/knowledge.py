@@ -37,50 +37,37 @@ class DebugRequest(BaseModel):
     )
 
 
-@router.post("/ingest-test")
-def ingest_test():
+# ==========================================================
+# INGESTION
+# ==========================================================
+
+@router.get("/sources")
+def available_sources():
+
+    return {
+        "sources": service.available_sources()
+    }
+
+
+@router.post("/ingest/{source}")
+def ingest_source(
+    source: str,
+):
 
     try:
 
-        documents = service.discover("brab")
-
-        if not documents:
+        if source not in service.available_sources():
 
             raise HTTPException(
                 status_code=404,
-                detail="Aucun document BRAB trouvé.",
+                detail=f"Source '{source}' inconnue.",
             )
 
-        document = documents[0]
-
-        pdf_files = service.download_document(
-            "brab",
-            document,
+        job = service.ingest_source(
+            source
         )
 
-        if not pdf_files:
-
-            raise HTTPException(
-                status_code=404,
-                detail="Aucun PDF téléchargé.",
-            )
-
-        result = service.index_pdf(
-            pdf_files[0],
-            metadata={
-                "title": document.title,
-                "source": document.source,
-                "url": str(document.url),
-                "author": document.author,
-                "published_at": (
-                    str(document.published_at)
-                    if document.published_at
-                    else None
-                ),
-            },
-        )
-
-        return result
+        return job.to_dict()
 
     except HTTPException:
         raise
@@ -92,6 +79,27 @@ def ingest_test():
             detail=str(e),
         )
 
+
+@router.post("/ingest/all")
+def ingest_all():
+
+    try:
+
+        report = service.ingest_all()
+
+        return report.to_dict()
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
+
+# ==========================================================
+# DEBUG
+# ==========================================================
 
 @router.post("/debug")
 def debug_pdf(
@@ -185,6 +193,10 @@ def debug_brab():
             detail=str(e),
         )
 
+
+# ==========================================================
+# QUESTIONS / RAG
+# ==========================================================
 
 @router.post("/ask")
 def ask(
