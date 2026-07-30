@@ -1,326 +1,474 @@
-PRODUCT REQUIREMENTS DOCUMENT (PRD)
-SikaGlé
+# 01_PRD.md
 
-Version : 1.0
+# SikaGlé
 
-Statut : Vision Produit
+## Product Requirements Document (PRD)
 
-1. Présentation
-Nom
+**Version :** 1.0
 
-SikaGlé
+**Statut :** Officiel
 
-Mission
+**Dernière mise à jour :** Juillet 2026
 
-Permettre à tout acteur du monde agricole d'obtenir rapidement des conseils agricoles fiables, contextualisés et accessibles dans sa langue, grâce à l'intelligence artificielle.
+---
 
-2. Vision
+# 1. Présentation du produit
 
-SikaGlé ambitionne de devenir le premier assistant agricole intelligent d'Afrique de l'Ouest.
+## Nom
 
-Il devra être capable de :
+**SikaGlé**
 
-comprendre les langues locales ;
-raisonner comme un conseiller agricole ;
-s'appuyer sur des sources scientifiques fiables ;
-produire des statistiques agricoles anonymisées ;
-assister aussi bien les producteurs que les institutions.
-3. Les utilisateurs
-Persona 1 — Coffi
-Profil
-60 ans
-Cultivateur
-Zogbodomey
-Téléphone Android d'entrée de gamme
-Utilise WhatsApp
-Ne sait ni lire ni écrire
-Ses besoins
-parler
-écouter
-comprendre
-Utilisation
+## Type
 
-🎤
+Plateforme d'intelligence artificielle spécialisée dans le conseil agricole.
 
-"SikaGlé..."
+## Description
 
-Réponse audio en fon.
+SikaGlé est un assistant agricole intelligent capable de comprendre les demandes des utilisateurs par texte, voix ou image, d'analyser leur contexte, de consulter une base de connaissances scientifiques et de fournir des recommandations adaptées, fiables et compréhensibles.
 
-Persona 2 — Aïcha
-Profil
-27 ans
-Jeune maraîchère
-Sait lire
-Utilise WhatsApp
-Écrit facilement
+Le produit est conçu pour être accessible aussi bien aux producteurs agricoles qu'aux jeunes entrepreneurs, aux techniciens agricoles et aux institutions.
 
-Elle écrit :
+---
 
-Mes tomates ont des taches noires.
+# 2. Objectif du produit
 
-SikaGlé répond en texte.
+L'objectif principal de SikaGlé est de rendre les connaissances agricoles accessibles à tous, indépendamment :
 
-Elle peut demander :
+- du niveau d'instruction ;
+- de la langue parlée ;
+- de la localisation géographique ;
+- de l'accès à un conseiller agricole.
 
-Explique davantage.
+Le système doit permettre d'obtenir rapidement un conseil fiable, contextualisé et compréhensible.
 
-Persona 3 — Rodrigue
-Profil
-Ingénieur agronome
+---
 
-Il demande :
+# 3. Les utilisateurs cibles
 
-Donne-moi les publications les plus récentes sur la chenille légionnaire.
+Le produit est conçu pour cinq catégories principales d'utilisateurs.
 
-Il veut :
+## Persona 1 — Coffi
 
-références
-sources
-détails
-Persona 4 — Institution
+Profil :
 
-Par exemple :
+- Producteur agricole
+- 60 ans
+- Utilise WhatsApp
+- Ne sait ni lire ni écrire
 
-Le MAEP.
+Entrées préférées :
 
-Il veut :
+- messages vocaux
 
-tableaux de bord
-tendances
-statistiques
-alertes
-4. Le problème
+Sorties préférées :
 
-Aujourd'hui :
+- réponses vocales
 
-Les producteurs n'ont pas toujours accès à un conseiller agricole.
+Objectif :
 
-Ils consultent :
+Recevoir rapidement un conseil pratique dans sa langue.
 
-trop tard ;
-difficilement ;
-ou se fient à des conseils non vérifiés.
-5. La solution
+---
 
-SikaGlé devient un conseiller agricole disponible 24h/24.
+## Persona 2 — Aïcha
 
-Il comprend :
+Profil :
 
-la voix
-le texte
-les photos
-
-Il répond :
-
-dans la langue du producteur ;
-avec des sources fiables ;
-avec des conseils adaptés au contexte.
-6. Les fonctionnalités principales
-Compréhension
+- Jeune agricultrice
+- Sait lire et écrire
+- Utilise principalement les messages texte
 
 Entrées :
 
-texte
-voix
-photo
-Raisonnement
+- texte
 
-Détection :
+Sorties :
 
-culture
-symptômes
-maladies possibles
-ravageurs
-contexte
-Recherche documentaire
+- texte
+- images
+- tableaux
 
-Recherche dans :
+Objectif :
 
-INRAB
-BRAB
-AfricaRice
-IITA
-etc.
-Météo
+Recevoir des recommandations détaillées et faciles à consulter.
 
-Conseils tenant compte :
+---
 
-pluie
-vent
-température
-humidité
-Réponse
+## Persona 3 — Rodrigue
 
-Formats :
+Profil :
 
-texte
-audio
+- Agronome
+- Conseiller agricole
+- Chercheur
 
-Langues :
+Objectif :
 
-Français
-Fon
-Yoruba
-Bariba
-Dendi
-Adja
-7. Cas d'utilisation
-Cas 1
+Consulter rapidement des publications scientifiques, recommandations techniques et références documentaires.
 
-Coffi.
+---
 
-Message vocal.
+## Persona 4 — Institutions
 
-↓
+Exemples :
 
-Diagnostic.
+- MAEP
+- INRAB
+- FAO
+- AfricaRice
+- IITA
+- ONG
 
-↓
+Objectif :
 
-Réponse audio.
+Accéder à des tableaux de bord, statistiques, indicateurs et analyses.
 
-Cas 2
+---
 
-Jeune agriculteur.
+## Persona 5 — Jeunes entrepreneurs agricoles
 
-Message texte.
+Profil :
 
-↓
+- Exploitants modernes
+- Coopératives
+- Entrepreneurs agricoles
 
-Réponse texte.
+Objectif :
 
-↓
+Optimiser la gestion de leur exploitation grâce à des outils intelligents.
 
-Références.
+---
 
-Cas 3
+# 4. Les problèmes à résoudre
 
-Photo.
+Aujourd'hui les producteurs rencontrent plusieurs difficultés :
 
-↓
+- manque d'accès aux conseillers agricoles ;
+- difficulté à identifier rapidement les maladies ;
+- manque d'informations fiables ;
+- faible accès aux publications scientifiques ;
+- difficultés liées au changement climatique ;
+- difficultés à choisir les traitements adaptés.
 
-Analyse.
+SikaGlé doit réduire ces difficultés.
 
-↓
+---
 
-Question complémentaire.
+# 5. Les objectifs fonctionnels
 
-↓
+Le système doit être capable de :
 
-Diagnostic.
+- comprendre une demande écrite ;
+- comprendre un message vocal ;
+- analyser une image agricole ;
+- reconnaître une culture ;
+- identifier des symptômes ;
+- proposer plusieurs hypothèses ;
+- rechercher dans une base documentaire ;
+- citer ses sources ;
+- tenir compte du contexte ;
+- produire une réponse adaptée.
 
-Cas 4
+---
 
-Institution.
+# 6. Les modes d'entrée
 
-↓
+Le système devra accepter plusieurs types d'entrées.
 
-Dashboard.
-
-↓
-
-Statistiques.
-
-8. Intelligence Agricole
-
-Chaque interaction produit une observation anonyme.
-
-Par exemple :
-
-{
-  "culture": "manioc",
-  "commune": "Zogbodomey",
-  "symptoms": [
-    "feuilles jaunes"
-  ],
-  "language": "fon"
-}
-
-Jamais :
-
-numéro de téléphone ;
-nom ;
-message brut sans nécessité.
-9. Les règles de SikaGlé
-
-Toujours :
-
-✔ expliquer
-
-✔ rassurer
-
-✔ citer ses sources
-
-✔ proposer une action
-
-✔ demander des précisions si nécessaire
-
-Jamais :
-
-❌ inventer
-
-❌ donner un traitement dangereux
-
-❌ affirmer sans preuve
-
-10. Les principes de conception
-
-Nous adopterons une approche "Human First".
-
-Cela signifie :
-
-Le meilleur algorithme n'est pas celui qui est le plus complexe.
-
-Le meilleur algorithme est celui qui aide réellement le producteur.
-
-11. Les indicateurs de succès
-Utilisation
-Nombre d'agriculteurs actifs.
-Nombre de conversations par jour.
-Nombre de communes couvertes.
-Qualité
-Temps moyen de réponse.
-Taux de compréhension des demandes.
-Satisfaction des utilisateurs.
-Impact
-Nombre de problèmes résolus.
-Temps gagné pour les producteurs.
-Nombre d'alertes précoces générées.
-Plateforme
-Nombre de coopératives utilisant SikaGlé.
-Nombre d'institutions clientes.
-Nombre de rapports générés.
-12. Notre devise
-
-Je pense qu'un grand produit a toujours une phrase qui guide toutes les décisions.
-
-Je proposerais :
-
-"Chaque agriculteur mérite un conseiller agricole fiable, dans sa langue, au moment où il en a besoin."
-
-Ou encore, une version plus ambitieuse :
-
-"Mettre l'intelligence artificielle au service de chaque agriculteur africain."
-
-Une dernière proposition
-
-Je pense qu'il manque un cinquième persona, et il sera très important.
-
-👩‍🌾 Persona 5 — Les jeunes entrepreneurs agricoles
+## Texte
 
 Exemple :
 
-24 à 40 ans ;
-utilisent WhatsApp, Facebook, TikTok ;
-savent lire et écrire ;
-gèrent parfois plusieurs hectares ou une exploitation moderne.
+> Mes feuilles de manioc deviennent jaunes.
 
-Leurs besoins vont au-delà du diagnostic :
+---
 
-"Quel est le meilleur moment pour semer avec la météo de cette semaine ?"
-"Quel est le prix actuel du maïs à Bohicon ?"
-"Fais-moi un calendrier de fertilisation."
-"Aide-moi à préparer un dossier de financement."
-"Calcule la quantité d'engrais nécessaire pour 3,5 hectares."
+## Audio
 
-Ce sont eux qui adopteront rapidement les fonctionnalités avancées et pourront devenir les premiers abonnés à une offre Premium.
+Exemple :
+
+Un message vocal WhatsApp en fon.
+
+---
+
+## Image
+
+Exemple :
+
+Photographie d'une feuille malade.
+
+---
+
+## Informations contextuelles
+
+Lorsque disponibles :
+
+- localisation ;
+- météo ;
+- saison ;
+- historique ;
+- culture connue.
+
+---
+
+# 7. Les modes de sortie
+
+Le système devra pouvoir produire :
+
+- texte ;
+- audio ;
+- images annotées ;
+- rapports PDF ;
+- tableaux.
+
+---
+
+# 8. Les principales fonctionnalités
+
+## Compréhension
+
+Extraction automatique de :
+
+- culture ;
+- symptômes ;
+- ravageurs ;
+- maladies possibles ;
+- traitements déjà appliqués ;
+- stade de développement.
+
+---
+
+## Raisonnement
+
+Le moteur doit être capable de :
+
+- faire plusieurs hypothèses ;
+- déterminer les informations manquantes ;
+- poser des questions complémentaires ;
+- éviter les conclusions hâtives.
+
+---
+
+## Recherche documentaire
+
+Recherche dans :
+
+- publications scientifiques ;
+- guides techniques ;
+- fiches agricoles ;
+- documents institutionnels.
+
+---
+
+## Génération de réponses
+
+Les réponses devront être :
+
+- compréhensibles ;
+- contextualisées ;
+- structurées ;
+- accompagnées de références lorsque possible.
+
+---
+
+## Réponses multilingues
+
+Le système devra progressivement supporter :
+
+- Français ;
+- Fon ;
+- Yoruba ;
+- Adja ;
+- Bariba ;
+- Dendi.
+
+---
+
+# 9. Cas d'utilisation
+
+## Cas 1
+
+Un producteur envoie un message vocal.
+
+Le système :
+
+- comprend la langue ;
+- extrait les symptômes ;
+- consulte les connaissances ;
+- répond par audio.
+
+---
+
+## Cas 2
+
+Une agricultrice écrit une question.
+
+Le système répond en texte avec des explications détaillées.
+
+---
+
+## Cas 3
+
+Un utilisateur envoie une photo.
+
+Le système :
+
+- analyse l'image ;
+- demande éventuellement des précisions ;
+- fournit un diagnostic.
+
+---
+
+## Cas 4
+
+Un chercheur recherche une publication.
+
+Le système renvoie :
+
+- les documents pertinents ;
+- les références ;
+- les extraits utiles.
+
+---
+
+## Cas 5
+
+Une institution consulte un tableau de bord.
+
+Le système affiche :
+
+- statistiques ;
+- cartes ;
+- tendances ;
+- alertes.
+
+---
+
+# 10. Contraintes du produit
+
+Le système devra :
+
+- fonctionner sur WhatsApp ;
+- rester simple à utiliser ;
+- répondre rapidement ;
+- être robuste face aux erreurs des utilisateurs ;
+- fonctionner même avec des messages imprécis.
+
+---
+
+# 11. Exigences non fonctionnelles
+
+## Performance
+
+Temps de réponse cible :
+
+moins de 10 secondes.
+
+---
+
+## Disponibilité
+
+Objectif :
+
+99 % de disponibilité.
+
+---
+
+## Fiabilité
+
+Les réponses doivent être justifiées lorsque cela est possible.
+
+---
+
+## Sécurité
+
+Les données personnelles doivent être protégées.
+
+Les observations utilisées pour les analyses devront être anonymisées.
+
+---
+
+## Évolutivité
+
+L'architecture devra permettre l'ajout futur de :
+
+- nouvelles langues ;
+- nouveaux pays ;
+- nouvelles cultures ;
+- nouveaux modèles d'IA ;
+- nouveaux canaux de communication.
+
+---
+
+# 12. Fonctionnalités futures
+
+Les versions suivantes intégreront notamment :
+
+- mémoire utilisateur ;
+- météo avancée ;
+- calendrier agricole ;
+- vision par ordinateur ;
+- suivi d'exploitation ;
+- marketplace ;
+- tableaux de bord institutionnels ;
+- API publique ;
+- intelligence prédictive.
+
+---
+
+# 13. Critères de succès
+
+Le projet sera considéré comme réussi si les utilisateurs peuvent :
+
+- obtenir une réponse pertinente rapidement ;
+- comprendre facilement les recommandations ;
+- utiliser SikaGlé sans formation préalable.
+
+Des indicateurs permettront de mesurer :
+
+- le nombre d'utilisateurs actifs ;
+- le taux de satisfaction ;
+- le temps moyen de réponse ;
+- le taux de compréhension des requêtes ;
+- la qualité des recommandations.
+
+---
+
+# 14. Hors périmètre (Version 1)
+
+Les fonctionnalités suivantes ne font pas partie de la première version :
+
+- Marketplace agricole
+- Crédit agricole
+- Assurance
+- Gestion complète d'exploitation
+- Commerce électronique
+- Réseau social
+- Application mobile native
+- Tableau de bord institutionnel avancé
+
+Ces fonctionnalités seront développées dans les versions ultérieures.
+
+---
+
+# 15. Définition du succès
+
+La première version de SikaGlé sera considérée comme réussie lorsqu'un producteur pourra :
+
+1. Envoyer un message vocal ou écrit.
+2. Être compris par le système.
+3. Recevoir une réponse claire dans sa langue.
+4. Obtenir des conseils fiables basés sur des sources scientifiques.
+5. Utiliser le service sans assistance technique.
+
+---
+
+# Conclusion
+
+Le Product Requirements Document constitue la référence fonctionnelle de SikaGlé.
+
+Toutes les nouvelles fonctionnalités devront répondre à un besoin identifié dans ce document.
+
+Toute évolution du produit devra préserver la mission première :
+
+**mettre l'intelligence artificielle au service des producteurs agricoles tout en restant accessible, fiable et utile.**
