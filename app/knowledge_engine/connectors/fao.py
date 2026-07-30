@@ -24,6 +24,20 @@ class FAOConnector(BaseConnector):
             )
         }
 
+    def _extract_uuid(
+        self,
+        document: DocumentMetadata,
+    ) -> str:
+        """
+        Extrait l'UUID FAO depuis l'URL publique du document.
+        """
+
+        return (
+            str(document.url)
+        .    rstrip("/")
+        .    split("/")[-1]
+        )
+
     def discover(self):
 
         self.log(
@@ -136,13 +150,9 @@ class FAOConnector(BaseConnector):
         )
 
         # Extraire l'UUID depuis l'URL publique
-        uuid = str(
-            document.url
-        ).rstrip(
-            "/"
-        ).split(
-            "/"
-        )[-1]
+        uuid = self._extract_uuid(
+            document
+        )
 
         item_api_url = (
             f"{self.api_url}"
