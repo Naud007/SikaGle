@@ -67,6 +67,32 @@ class FAOConnector(BaseConnector):
             .get("bundles", [])
         )
 
+    def _get_bitstreams(
+        self,
+        bundle_uuid: str,
+    ) -> list[dict]:
+        """
+        Récupère les bitstreams d'un bundle FAO.
+        """
+
+        response = requests.get(
+            f"{self.api_url}"
+            f"/core/bundles/{bundle_uuid}/bitstreams",
+            headers=self.headers,
+            timeout=60,
+        )
+
+        if response.status_code != 200:
+            return []
+
+        data = response.json()
+
+        return (
+            data
+            .get("_embedded", {})
+            .get("bitstreams", [])
+        )
+    
     def discover(self):
 
         self.log(
@@ -214,34 +240,8 @@ class FAOConnector(BaseConnector):
             if not bundle_uuid:
                 continue
 
-            bitstreams_response = requests.get(
-                f"{self.api_url}"
-                f"/core/bundles/"
-                f"{bundle_uuid}/bitstreams",
-                headers=self.headers,
-                timeout=60
-            )
-
-            if (
-                bitstreams_response.status_code
-                != 200
-            ):
-                continue
-
-            bitstreams_data = (
-                bitstreams_response.json()
-            )
-
-            bitstreams = (
-                bitstreams_data
-                .get(
-                    "_embedded",
-                    {}
-                )
-                .get(
-                    "bitstreams",
-                    []
-                )
+            bitstreams = self._get_bitstreams(
+                bundle_uuid
             )
 
             for bitstream in bitstreams:
