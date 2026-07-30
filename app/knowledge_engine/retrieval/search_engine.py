@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from app.knowledge_engine.retrieval.search_query import (
     SearchQuery,
 )
@@ -8,8 +10,14 @@ from app.knowledge_engine.retrieval.search_result import (
 
 class SearchEngine:
     """
-    Moteur de fusion, filtrage et classement
-    des résultats de recherche.
+    Moteur de recherche documentaire.
+
+    Responsabilités :
+        - fusion des résultats
+        - suppression des doublons
+        - application des filtres
+        - re-ranking
+        - classement final
     """
 
     def merge(
@@ -27,7 +35,9 @@ class SearchEngine:
 
         for result in vector_results:
 
-            merged[self._key(result)] = result
+            merged[
+                self._key(result)
+            ] = result
 
         #
         # Résultats keyword
@@ -39,21 +49,35 @@ class SearchEngine:
 
             if key in merged:
 
-                merged[key].score += result.score
+                merged[
+                    key
+                ].keyword_score = (
+                    result.keyword_score
+                )
 
             else:
 
                 merged[key] = result
 
-        results = list(merged.values())
+        results = list(
+            merged.values()
+        )
 
         #
-        # Application des filtres
+        # Filtres
         #
 
         results = self.apply_filters(
             results,
             query,
+        )
+
+        #
+        # Re-ranking
+        #
+
+        results = self.rerank(
+            results
         )
 
         #
@@ -65,7 +89,9 @@ class SearchEngine:
             reverse=True,
         )
 
-        return results[: query.top_k]
+        return results[
+            : query.top_k
+        ]
 
     def apply_filters(
         self,
@@ -77,7 +103,9 @@ class SearchEngine:
 
         for result in results:
 
-            metadata = result.metadata or {}
+            metadata = (
+                result.metadata or {}
+            )
 
             #
             # Source
@@ -86,13 +114,18 @@ class SearchEngine:
             if query.source:
 
                 source = str(
+
                     metadata.get(
                         "source",
                         "",
                     )
+
                 )
 
-                if source.lower() != query.source.lower():
+                if (
+                    source.lower()
+                    != query.source.lower()
+                ):
 
                     continue
 
@@ -103,13 +136,18 @@ class SearchEngine:
             if query.language:
 
                 language = str(
+
                     metadata.get(
                         "language",
                         "",
                     )
+
                 )
 
-                if language.lower() != query.language.lower():
+                if (
+                    language.lower()
+                    != query.language.lower()
+                ):
 
                     continue
 
@@ -120,10 +158,12 @@ class SearchEngine:
             if query.publication_type:
 
                 publication_type = str(
+
                     metadata.get(
                         "publication_type",
                         "",
                     )
+
                 )
 
                 if (
@@ -137,34 +177,170 @@ class SearchEngine:
             # Année
             #
 
-            if query.publication_year is not None:
-
-                year = metadata.get(
-                    "publication_year"
-                )
+            if (
+                query.publication_year
+                is not None
+            ):
 
                 try:
 
-                    year = int(year)
+                    year = int(
+
+                        metadata.get(
+                            "publication_year"
+                        )
+
+                    )
 
                 except Exception:
 
                     continue
 
-                if year != query.publication_year:
+                if (
+                    year
+                    != query.publication_year
+                ):
 
                     continue
 
-            filtered.append(result)
+            filtered.append(
+                result
+            )
 
         return filtered
+
+    def rerank(
+        self,
+        results: list[SearchResult],
+    ) -> list[SearchResult]:
+        """
+        Recalcule le score global de chaque résultat.
+        """
+
+        for result in results:
+
+            result.score = (
+                self.compute_score(
+                    result
+                )
+            )
+
+        return results
+
+    def compute_score(
+        self,
+        result: SearchResult,
+    ) -> float:
+        """
+        Calcule le score final d'un document.
+
+        Ce score pourra évoluer dans les prochains
+        sprints sans modifier les retrievers.
+        """
+
+        metadata = (
+            result.metadata or {}
+        )
+
+        score = 0.0
+
+        #
+        # Similarité vectorielle
+        #
+
+        score += (
+            result.vector_score * 10
+        )
+
+        #
+        # Recherche lexicale
+        #
+
+        score += (
+            result.keyword_score * 2
+        )
+
+        #
+        # Bonus langue
+        #
+
+        language = str(
+
+            metadata.get(
+                "language",
+                "",
+            )
+
+        ).lower()
+
+        if language == "fr":
+
+            score += 1
+
+        #
+        # Bonus récence
+        #
+
+        try:
+
+            year = int(
+
+                metadata.get(
+                    "publication_year"
+                )
+
+            )
+
+            current_year = (
+                datetime.now().year
+            )
+
+            age = (
+                current_year - year
+            )
+
+            if age <= 2:
+
+                score += 3
+
+            elif age <= 5:
+
+                score += 2
+
+            elif age <= 10:
+
+                score += 1
+
+        except Exception:
+
+            pass
+
+        result.ranking_details = {
+
+            "vector_score": result.vector_score,
+
+            "keyword_score": result.keyword_score,
+
+            "language_bonus": (
+                1
+                if language == "fr"
+                else 0
+            ),
+
+            "final_score": score,
+
+        }
+
+        return score
 
     @staticmethod
     def _key(
         result: SearchResult,
     ) -> str:
 
-        metadata = result.metadata or {}
+        metadata = (
+            result.metadata or {}
+        )
 
         return str(
 
@@ -177,6 +353,9 @@ class SearchEngine:
                     "document",
 
                     result.document[:80],
+
                 ),
+
             )
+
         )
