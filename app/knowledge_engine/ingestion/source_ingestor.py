@@ -1,16 +1,17 @@
 from time import perf_counter
 
-from app.knowledge_engine.connectors.registry import (
-    registry,
-)
-from app.knowledge_engine.downloader import (
-    Downloader,
+from app.knowledge_engine.connectors.registry import registry
+from app.knowledge_engine.filesystem.path_manager import (
+    PathManager,
 )
 from app.knowledge_engine.indexing import (
     KnowledgeIndexer,
 )
 from app.knowledge_engine.ingestion.ingestion_report import (
     IngestionReport,
+)
+from app.knowledge_engine.utils.downloader import (
+    Downloader,
 )
 
 
@@ -24,6 +25,8 @@ class SourceIngestor:
         self.downloader = Downloader()
 
         self.indexer = KnowledgeIndexer()
+
+        self.paths = PathManager()
 
     def ingest(
         self,
@@ -40,27 +43,39 @@ class SourceIngestor:
 
         documents = connector.discover()
 
-        report.documents_found = len(
-            documents
-        )
+        report.documents_found = len(documents)
 
         for document in documents:
 
             try:
 
-                pdf_path = (
-                    self.downloader.download(
-                        document.url
+                if not document.attachments:
+
+                    report.skipped += 1
+
+                    report.add_warning(
+                        f"{document.title} : aucun PDF disponible."
                     )
+
+                    continue
+
+                attachment = document.attachments[0]
+
+                pdf_path = self.paths.pdf_path(
+                    source=document.source,
+                    filename=attachment.filename,
+                )
+
+                self.downloader.download_file(
+                    url=str(attachment.url),
+                    destination=pdf_path,
                 )
 
                 report.downloaded += 1
 
-                result = (
-                    self.indexer.index_pdf(
-                        pdf_path=pdf_path,
-                        metadata=document.model_dump(),
-                    )
+                result = self.indexer.index_pdf(
+                    pdf_path=pdf_path,
+                    metadata=document.model_dump(),
                 )
 
                 if result["indexed"]:
@@ -77,24 +92,20 @@ class SourceIngestor:
                         "errors",
                         [],
                     ):
+                        report.add_error(error)
 
-                        report.add_error(
-                            error
-                        )
-
-                    for warning in result.get(
-                        "warnings",
-                        [],
-                    ):
-
-                        report.add_warning(
-                            warning
-                        )
+                for warning in result.get(
+                    "warnings",
+                    [],
+                ):
+                    report.add_warning(warning)
 
             except Exception as exc:
 
+                report.failed += 1
+
                 report.add_error(
-                    str(exc)
+                    f"{document.title} : {exc}"
                 )
 
         report.duration_seconds = (
