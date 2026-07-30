@@ -1,3 +1,6 @@
+from app.knowledge_engine.ingestion.global_ingestion_report import (
+    GlobalIngestionReport,
+)
 from app.knowledge_engine.ingestion.ingestion_manager import (
     IngestionManager,
 )
@@ -12,6 +15,7 @@ from app.knowledge_engine.ingestion.source_ingestor import (
 )
 
 __all__ = [
+    "GlobalIngestionReport",
     "IngestionManager",
     "IngestionJob",
     "IngestionReport",
