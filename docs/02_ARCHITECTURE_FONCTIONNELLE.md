@@ -7,7 +7,9 @@ Comment fonctionne SikaGlé ?
 Je le structurerais ainsi.
 
 1. Vue générale
-2. 
+
+
+
                     SikaGlé
 
                          │
