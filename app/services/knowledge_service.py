@@ -5,6 +5,7 @@ from pathlib import Path
 from app.knowledge_engine.connectors.registry import registry
 from app.knowledge_engine.debug import DebugService
 from app.knowledge_engine.indexing import KnowledgeIndexer
+from app.knowledge_engine.ingestion import IngestionManager
 from app.knowledge_engine.rag import RAGService
 from app.schemas.attachment import DocumentAttachment
 from app.schemas.document import DocumentMetadata
@@ -15,7 +16,8 @@ class KnowledgeService:
     Service principal du moteur de connaissances.
 
     Il orchestre :
-    - les connecteurs de documents ;
+    - les connecteurs ;
+    - l'ingestion ;
     - l'indexation ;
     - le moteur RAG ;
     - les outils de diagnostic.
@@ -24,6 +26,8 @@ class KnowledgeService:
     def __init__(self):
 
         self.indexer = KnowledgeIndexer()
+
+        self.ingestion = IngestionManager()
 
         self.rag = RAGService()
 
@@ -39,6 +43,12 @@ class KnowledgeService:
     ):
 
         return registry.get(source)
+
+    def available_sources(
+        self,
+    ) -> list[str]:
+
+        return registry.names()
 
     def discover(
         self,
@@ -89,6 +99,25 @@ class KnowledgeService:
         )
 
     # ------------------------------------------------------------------
+    # Ingestion
+    # ------------------------------------------------------------------
+
+    def ingest_source(
+        self,
+        source: str,
+    ):
+
+        return self.ingestion.ingest_source(
+            source
+        )
+
+    def ingest_all(
+        self,
+    ):
+
+        return self.ingestion.ingest_all()
+
+    # ------------------------------------------------------------------
     # Debug
     # ------------------------------------------------------------------
 
@@ -96,9 +125,6 @@ class KnowledgeService:
         self,
         pdf_path: Path,
     ) -> dict:
-        """
-        Analyse un document PDF sans l'indexer.
-        """
 
         return self.debug.inspect_pdf(
             pdf_path
