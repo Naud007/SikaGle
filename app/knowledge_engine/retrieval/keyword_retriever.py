@@ -9,6 +9,13 @@ from app.knowledge_engine.retrieval.search_result import (
 
 
 class KeywordRetriever:
+    """
+    Recherche lexicale simple basée sur les fichiers texte extraits
+    des documents PDF.
+
+    Cette implémentation est volontairement simple et servira de base
+    avant l'introduction d'un véritable moteur BM25.
+    """
 
     def __init__(
         self,
@@ -24,41 +31,44 @@ class KeywordRetriever:
         self,
         query: SearchQuery,
     ) -> list[SearchResult]:
-
-        keywords = [
-
-            word.lower()
-
-            for word in query.question.split()
-
-            if len(word) >= 3
-        ]
-
-        results = []
+        """
+        Recherche les documents contenant les mots de la question.
+        """
 
         if not self.text_directory.exists():
 
-            return results
+            return []
+
+        keywords = self._extract_keywords(
+            query.question
+        )
+
+        results: list[
+            SearchResult
+        ] = []
 
         for txt_file in self.text_directory.glob(
             "*.txt"
         ):
 
-            text = txt_file.read_text(
-                encoding="utf-8",
-                errors="ignore",
+            try:
+
+                text = txt_file.read_text(
+                    encoding="utf-8",
+                    errors="ignore",
+                )
+
+            except Exception:
+
+                continue
+
+            score = self._keyword_score(
+                text,
+                keywords,
             )
 
-            lower = text.lower()
+            if score <= 0:
 
-            score = sum(
-
-                lower.count(keyword)
-
-                for keyword in keywords
-            )
-
-            if score == 0:
                 continue
 
             results.append(
@@ -68,18 +78,71 @@ class KeywordRetriever:
                     document=text[:700],
 
                     metadata={
+
                         "document": txt_file.stem,
+
                     },
 
-                    score=float(score),
+                    keyword_score=float(
+                        score
+                    ),
+
+                    score=float(
+                        score
+                    ),
 
                     source="keyword",
                 )
+
             )
 
         results.sort(
-            key=lambda r: r.score,
+
+            key=lambda r: r.keyword_score,
+
             reverse=True,
+
         )
 
-        return results[: query.top_k]
+        return results[
+            : query.top_k
+        ]
+
+    def _extract_keywords(
+        self,
+        question: str,
+    ) -> list[str]:
+        """
+        Extrait les mots-clés de la question.
+        """
+
+        return [
+
+            word.lower()
+
+            for word in question.split()
+
+            if len(word) >= 3
+
+        ]
+
+    def _keyword_score(
+        self,
+        text: str,
+        keywords: list[str],
+    ) -> int:
+        """
+        Calcule un score lexical simple.
+        """
+
+        lower = text.lower()
+
+        score = 0
+
+        for keyword in keywords:
+
+            score += lower.count(
+                keyword
+            )
+
+        return score
