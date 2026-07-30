@@ -1,13 +1,25 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Optional
 
 
 @dataclass
 class BasePublication:
     """
-    Modèle générique représentant une publication découverte
-    par un connecteur du Knowledge Engine.
+    Modèle métier de base représentant une publication
+    scientifique découverte par un connecteur.
     """
+
+    # ==========================================
+    # IDENTITÉ
+    # ==========================================
+
+    id: str
+
+    source: str
+
+    # ==========================================
+    # MÉTADONNÉES
+    # ==========================================
 
     title: str
 
@@ -21,6 +33,28 @@ class BasePublication:
 
     language: Optional[str] = None
 
+    # ==========================================
+    # LIENS
+    # ==========================================
+
     pdf_url: Optional[str] = None
 
     detail_url: Optional[str] = None
+
+    # ==========================================
+    # UTILITAIRES
+    # ==========================================
+
+    def filename(self) -> str:
+        """
+        Nom du fichier PDF sur le disque.
+        """
+
+        return f"{self.id}.pdf"
+
+    def to_dict(self) -> dict:
+        """
+        Convertit la publication en dictionnaire.
+        """
+
+        return asdict(self)
