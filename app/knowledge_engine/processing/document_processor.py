@@ -2,11 +2,20 @@ from pathlib import Path
 
 from app.knowledge_engine.chunking import TextChunker
 from app.knowledge_engine.extraction import PDFExtractor
+from app.knowledge_engine.validation import (
+    DocumentValidator,
+)
 
 
 class DocumentProcessor:
     """
     Pipeline complet de traitement d'un document.
+
+    Étapes :
+    - Extraction du texte
+    - Nettoyage
+    - Découpage en chunks
+    - Validation
     """
 
     def __init__(
@@ -24,6 +33,8 @@ class DocumentProcessor:
         )
 
         self.chunker = TextChunker()
+
+        self.validator = DocumentValidator()
 
     def process(
         self,
@@ -60,11 +71,32 @@ class DocumentProcessor:
             cleaned_text
         )
 
+        # ============================
+        # VALIDATION
+        # ============================
+
+        validation = self.validator.validate(
+            text=cleaned_text,
+            chunks=chunks,
+        )
+
         return {
+
             "txt_path": txt_path,
+
+            "text": cleaned_text,
+
+            "characters": len(
+                cleaned_text
+            ),
+
             "chunks": chunks,
-            "chunks_count": len(chunks),
-            "characters": len(cleaned_text),
+
+            "chunks_count": len(
+                chunks
+            ),
+
+            "validation": validation,
         }
 
     @staticmethod
