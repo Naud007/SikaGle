@@ -1,4 +1,11 @@
+import json
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+
+from app.knowledge_engine.filesystem.path_manager import (
+    PathManager,
+)
 
 
 @dataclass
@@ -31,25 +38,87 @@ class IngestionReport:
         self,
         message: str,
     ) -> None:
+
         self.failed += 1
+
         self.errors.append(message)
 
     def add_warning(
         self,
         message: str,
     ) -> None:
+
         self.warnings.append(message)
 
-    def to_dict(self) -> dict:
+    def to_dict(
+        self,
+    ) -> dict:
+
         return {
+
             "source": self.source,
+
             "documents_found": self.documents_found,
+
             "downloaded": self.downloaded,
+
             "validated": self.validated,
+
             "indexed": self.indexed,
+
             "skipped": self.skipped,
+
             "failed": self.failed,
-            "duration_seconds": self.duration_seconds,
+
+            "duration_seconds": round(
+                self.duration_seconds,
+                2,
+            ),
+
             "errors": self.errors,
+
             "warnings": self.warnings,
         }
+
+    def save(
+        self,
+    ) -> Path:
+        """
+        Sauvegarde le rapport d'ingestion au format JSON.
+        """
+
+        paths = PathManager()
+
+        log_directory = (
+            paths.logs_directory()
+            / "ingestion"
+        )
+
+        log_directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        timestamp = datetime.now().strftime(
+            "%Y-%m-%d_%H-%M-%S"
+        )
+
+        log_file = (
+            log_directory
+            / f"{timestamp}_{self.source}.json"
+        )
+
+        with open(
+            log_file,
+            "w",
+            encoding="utf-8",
+        ) as f:
+
+            json.dump(
+                self.to_dict(),
+                f,
+                ensure_ascii=False,
+                indent=4,
+            )
+
+        return log_file
