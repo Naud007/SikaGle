@@ -6,21 +6,11 @@ from app.knowledge_engine.rag.source_formatter import (
 )
 from app.knowledge_engine.retrieval import (
     HybridRetriever,
+    SearchQuery,
 )
 
 
 class RAGService:
-    """
-    Pipeline RAG complet.
-
-        Question
-            ↓
-    HybridRetriever
-            ↓
-    Génération de réponse
-            ↓
-    Formatage des sources
-    """
 
     def __init__(self):
 
@@ -40,11 +30,29 @@ class RAGService:
         self,
         question: str,
         top_k: int = 5,
+        source: str | None = None,
+        language: str | None = None,
+        publication_type: str | None = None,
+        publication_year: int | None = None,
     ) -> dict:
 
-        results = self.retriever.search(
-            query=question,
+        search_query = SearchQuery(
+
+            question=question,
+
             top_k=top_k,
+
+            source=source,
+
+            language=language,
+
+            publication_type=publication_type,
+
+            publication_year=publication_year,
+        )
+
+        results = self.retriever.search(
+            search_query
         )
 
         if not results:
@@ -55,9 +63,7 @@ class RAGService:
 
                 "question": question,
 
-                "answer": (
-                    "Je n'ai trouvé aucun document pertinent."
-                ),
+                "answer": "Je n'ai trouvé aucun document pertinent.",
 
                 "sources": [],
 
@@ -65,32 +71,22 @@ class RAGService:
             }
 
         contexts = [
-
-            result.document
-
-            for result in results
+            r.document
+            for r in results
         ]
 
         metadatas = [
-
-            result.metadata
-
-            for result in results
+            r.metadata
+            for r in results
         ]
 
-        answer = (
-            self.response_generator.generate(
-
-                question=question,
-
-                contexts=contexts,
-            )
+        answer = self.response_generator.generate(
+            question=question,
+            contexts=contexts,
         )
 
-        sources = (
-            self.source_formatter.format(
-                metadatas
-            )
+        sources = self.source_formatter.format(
+            metadatas
         )
 
         return {
@@ -103,7 +99,5 @@ class RAGService:
 
             "sources": sources,
 
-            "chunks_used": len(
-                contexts
-            ),
+            "chunks_used": len(contexts),
         }
