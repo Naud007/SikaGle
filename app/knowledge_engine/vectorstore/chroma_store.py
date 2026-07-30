@@ -10,6 +10,8 @@ class ChromaStore:
     Gestionnaire de la base vectorielle ChromaDB.
     """
 
+    COLLECTION_NAME = "knowledge"
+
     def __init__(self):
 
         db_path = Path(settings.CHROMA_PATH)
@@ -23,8 +25,10 @@ class ChromaStore:
             path=str(db_path)
         )
 
-        self.collection = self.client.get_or_create_collection(
-            name="knowledge"
+        self.collection = (
+            self.client.get_or_create_collection(
+                name=self.COLLECTION_NAME
+            )
         )
 
     def exists(
@@ -41,9 +45,7 @@ class ChromaStore:
                 ids=[f"{doc_id}_0"]
             )
 
-            return (
-                len(result["ids"]) > 0
-            )
+            return len(result["ids"]) > 0
 
         except Exception:
 
@@ -55,23 +57,46 @@ class ChromaStore:
         chunks: list[str],
         embeddings: list[list[float]],
         metadata: dict,
-    ):
+    ) -> None:
+        """
+        Indexe un document dans ChromaDB.
+        """
 
-        ids = [
-            f"{doc_id}_{i}"
-            for i in range(
-                len(chunks)
+        ids = []
+
+        documents = []
+
+        metadatas = []
+
+        total_chunks = len(chunks)
+
+        for index, chunk in enumerate(chunks):
+
+            ids.append(
+                f"{doc_id}_{index}"
             )
-        ]
 
-        metadatas = [
-            metadata.copy()
-            for _ in chunks
-        ]
+            documents.append(chunk)
+
+            chunk_metadata = metadata.copy()
+
+            #
+            # Métadonnées techniques
+            #
+
+            chunk_metadata["document"] = doc_id
+
+            chunk_metadata["chunk_index"] = index
+
+            chunk_metadata["chunk_count"] = total_chunks
+
+            metadatas.append(
+                chunk_metadata
+            )
 
         self.collection.add(
             ids=ids,
-            documents=chunks,
+            documents=documents,
             embeddings=embeddings,
             metadatas=metadatas,
         )
@@ -89,6 +114,34 @@ class ChromaStore:
 
     def count(
         self,
-    ):
+    ) -> int:
 
         return self.collection.count()
+
+    def delete_document(
+        self,
+        doc_id: str,
+    ) -> None:
+        """
+        Supprime tous les chunks d'un document.
+        """
+
+        self.collection.delete(
+            where={
+                "document": doc_id,
+            }
+        )
+
+    def get_document(
+        self,
+        doc_id: str,
+    ):
+        """
+        Retourne tous les chunks d'un document.
+        """
+
+        return self.collection.get(
+            where={
+                "document": doc_id,
+            }
+        )
