@@ -4,15 +4,22 @@ from dataclasses import dataclass, field
 @dataclass
 class SearchResult:
     """
-    Résultat d'une recherche documentaire.
+    Représente un résultat de recherche documentaire.
+
+    Les différents scores sont conservés séparément afin de permettre
+    un re-ranking intelligent.
     """
+
+    #
+    # Contenu
+    #
 
     document: str
 
     metadata: dict
 
     #
-    # Scores bruts
+    # Scores individuels
     #
 
     vector_score: float = 0.0
@@ -20,19 +27,19 @@ class SearchResult:
     keyword_score: float = 0.0
 
     #
-    # Score final
+    # Score final utilisé pour le classement
     #
 
     score: float = 0.0
 
     #
-    # Origine
+    # Origine du résultat
     #
 
     source: str = "vector"
 
     #
-    # Explications du score
+    # Informations de classement (debug)
     #
 
     ranking_details: dict = field(
