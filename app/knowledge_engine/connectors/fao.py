@@ -92,6 +92,54 @@ class FAOConnector(BaseConnector):
             .get("_embedded", {})
             .get("bitstreams", [])
         )
+
+    def _find_pdf_url(
+        self,
+        bundles: list[dict],
+    ) -> str | None:
+        """
+        Recherche l'URL du premier PDF disponible
+        dans les bundles du document.
+        """
+
+        for bundle in bundles:
+
+            bundle_uuid = bundle.get("uuid")
+
+            if not bundle_uuid:
+                continue
+
+            bitstreams = self._get_bitstreams(
+                bundle_uuid
+            )
+
+            for bitstream in bitstreams:
+
+                name = (
+                    bitstream
+                    .get("name", "")
+                    .lower()
+                )
+
+                if ".pdf" not in name:
+                    continue
+
+                bitstream_uuid = bitstream.get(
+                    "uuid"
+                )
+
+                if not bitstream_uuid:
+                    continue
+
+                return (
+                    f"{self.api_url}"
+                    f"/core/bitstreams/"
+                    f"{bitstream_uuid}"
+                    f"/content"
+                )
+
+        return None
+
     
     def discover(self):
 
@@ -229,56 +277,9 @@ class FAOConnector(BaseConnector):
             uuid
         )
 
-        pdf_url = None
-
-        for bundle in bundles:
-
-            bundle_uuid = bundle.get(
-                "uuid"
-            )
-
-            if not bundle_uuid:
-                continue
-
-            bitstreams = self._get_bitstreams(
-                bundle_uuid
-            )
-
-            for bitstream in bitstreams:
-
-                bitstream_name = (
-                    bitstream
-                    .get(
-                        "name",
-                        ""
-                    )
-                    .lower()
-                )
-
-                if ".pdf" not in bitstream_name:
-                    continue
-
-                bitstream_uuid = (
-                    bitstream
-                    .get(
-                        "uuid"
-                    )
-                )
-
-                if not bitstream_uuid:
-                    continue
-
-                pdf_url = (
-                    f"{self.api_url}"
-                    f"/core/bitstreams/"
-                    f"{bitstream_uuid}"
-                    f"/content"
-                )
-
-                break
-
-            if pdf_url:
-                break
+        pdf_url = self._find_pdf_url(
+            bundles
+        )
 
         if not pdf_url:
 
