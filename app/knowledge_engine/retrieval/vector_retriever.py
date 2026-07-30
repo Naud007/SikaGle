@@ -1,6 +1,9 @@
 from app.knowledge_engine.embeddings.embedding_service import (
     GeminiEmbeddingService,
 )
+from app.knowledge_engine.retrieval.search_query import (
+    SearchQuery,
+)
 from app.knowledge_engine.retrieval.search_result import (
     SearchResult,
 )
@@ -26,63 +29,48 @@ class VectorRetriever:
 
     def search(
         self,
-        query: str,
-        top_k: int = 5,
+        query: SearchQuery,
     ) -> list[SearchResult]:
 
         embedding = (
             self.embedding_service.generate_query_embedding(
-                query
+                query.question
             )
         )
 
         results = self.vectorstore.search(
             embedding=embedding,
-            n_results=top_k,
+            n_results=query.top_k,
         )
 
-        documents = (
-            results.get(
-                "documents",
-                [[]],
-            )[0]
-        )
+        documents = results.get(
+            "documents",
+            [[]],
+        )[0]
 
-        metadatas = (
-            results.get(
-                "metadatas",
-                [[]],
-            )[0]
-        )
+        metadatas = results.get(
+            "metadatas",
+            [[]],
+        )[0]
 
-        distances = (
-            results.get(
-                "distances",
-                [[]],
-            )[0]
-        )
+        distances = results.get(
+            "distances",
+            [[]],
+        )[0]
 
         search_results = []
 
-        for i, document in enumerate(
-            documents
-        ):
-
-            score = 0.0
-
-            if i < len(
-                distances
-            ):
-                score = distances[i]
+        for i, document in enumerate(documents):
 
             metadata = {}
 
-            if i < len(
-                metadatas
-            ):
-                metadata = (
-                    metadatas[i]
-                )
+            if i < len(metadatas):
+                metadata = metadatas[i]
+
+            score = 0.0
+
+            if i < len(distances):
+                score = distances[i]
 
             search_results.append(
 
