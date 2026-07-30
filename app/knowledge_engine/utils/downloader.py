@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import requests
@@ -8,7 +9,21 @@ import requests
 class Downloader:
     """
     Télécharge un fichier depuis une URL.
+
+    En cas d'échec réseau temporaire, plusieurs tentatives
+    sont effectuées avant d'abandonner.
     """
+
+    def __init__(
+        self,
+        retries: int = 3,
+        timeout: int = 60,
+        backoff_factor: int = 2,
+    ):
+
+        self.retries = retries
+        self.timeout = timeout
+        self.backoff_factor = backoff_factor
 
     def inspect_url(
         self,
@@ -21,7 +36,7 @@ class Downloader:
         response = requests.get(
             url,
             stream=True,
-            timeout=60,
+            timeout=self.timeout,
             allow_redirects=True,
         )
 
@@ -29,8 +44,11 @@ class Downloader:
 
         try:
             first_bytes = next(
-                response.iter_content(chunk_size=16)
+                response.iter_content(
+                    chunk_size=16
+                )
             )
+
         except StopIteration:
             pass
 
@@ -38,9 +56,15 @@ class Downloader:
             "requested_url": url,
             "final_url": response.url,
             "status_code": response.status_code,
-            "content_type": response.headers.get("Content-Type"),
-            "content_length": response.headers.get("Content-Length"),
-            "pdf_signature": first_bytes.startswith(b"%PDF"),
+            "content_type": response.headers.get(
+                "Content-Type"
+            ),
+            "content_length": response.headers.get(
+                "Content-Length"
+            ),
+            "pdf_signature": first_bytes.startswith(
+                b"%PDF"
+            ),
             "first_bytes_hex": first_bytes.hex(),
         }
 
@@ -55,22 +79,53 @@ class Downloader:
             exist_ok=True,
         )
 
-        response = requests.get(
-            url,
-            stream=True,
-            timeout=60,
-            allow_redirects=True,
-        )
+        last_exception = None
 
-        response.raise_for_status()
+        for attempt in range(
+            1,
+            self.retries + 1,
+        ):
 
-        with destination.open("wb") as file:
+            try:
 
-            for chunk in response.iter_content(
-                chunk_size=8192,
-            ):
+                response = requests.get(
+                    url,
+                    stream=True,
+                    timeout=self.timeout,
+                    allow_redirects=True,
+                )
 
-                if chunk:
-                    file.write(chunk)
+                response.raise_for_status()
 
-        return destination
+                with destination.open(
+                    "wb"
+                ) as file:
+
+                    for chunk in response.iter_content(
+                        chunk_size=8192,
+                    ):
+
+                        if chunk:
+                            file.write(
+                                chunk
+                            )
+
+                return destination
+
+            except requests.RequestException as exc:
+
+                last_exception = exc
+
+                if destination.exists():
+                    destination.unlink()
+
+                if attempt < self.retries:
+
+                    wait = (
+                        self.backoff_factor
+                        ** (attempt - 1)
+                    )
+
+                    time.sleep(wait)
+
+        raise last_exception
