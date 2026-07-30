@@ -54,11 +54,17 @@ class KnowledgeIndexer:
 
             return {
 
+                "validated": False,
+
                 "indexed": False,
 
                 "errors": validation.errors,
 
                 "warnings": validation.warnings,
+
+                "txt_path": result[
+                    "txt_path"
+                ],
 
                 "characters": result[
                     "characters"
@@ -106,7 +112,13 @@ class KnowledgeIndexer:
 
         return {
 
+            "validated": True,
+
             "indexed": True,
+
+            "errors": [],
+
+            "warnings": validation.warnings,
 
             "txt_path": result[
                 "txt_path"
@@ -119,8 +131,6 @@ class KnowledgeIndexer:
             "chunks": result[
                 "chunks_count"
             ],
-
-            "warnings": validation.warnings,
 
             "collection_size": self.vectorstore.count(),
         }
