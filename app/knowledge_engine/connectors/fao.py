@@ -334,8 +334,13 @@ class FAOConnector(BaseConnector):
         safe_name = safe_name[:150]
 
         filename = (
-            self.storage_dir
+            self.DOWNLOAD_ROOT
+            / self.name
             / f"{safe_name}.pdf"
+        )
+        filename.parent.mkdir(
+            parents=True,
+            exist_ok=True,
         )
 
        self._download_pdf(
