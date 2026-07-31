@@ -1,6 +1,5 @@
 import requests
 from pathlib import Path
-from urllib.parse import urljoin
 
 from app.knowledge_engine.connectors.base import BaseConnector
 from app.knowledge_engine.connectors.registry import registry
