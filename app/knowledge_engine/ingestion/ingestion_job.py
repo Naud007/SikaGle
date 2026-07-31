@@ -33,7 +33,10 @@ class IngestionJob:
 
         self.status = "COMPLETED"
 
-    def fail(self) -> None:
+    def fail(
+        self,
+        reason: str | None = None,
+    ) -> None:
         """
         Marque le job comme échoué.
         """
