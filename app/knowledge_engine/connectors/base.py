@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -10,7 +11,13 @@ from app.schemas.document import DocumentMetadata
 
 class BaseConnector(ABC):
     """
-    Classe de base de tous les connecteurs.
+    Classe de base de tous les connecteurs du Knowledge Engine.
+
+    Elle fournit les fonctionnalités communes :
+
+    - découverte des documents (discover)
+    - téléchargement des pièces jointes
+    - journalisation
     """
 
     DOWNLOAD_ROOT = Path("data") / "documents"
@@ -20,7 +27,12 @@ class BaseConnector(ABC):
         name: str,
     ):
         self.name = name
+
         self.downloader = Downloader()
+
+        self.logger = logging.getLogger(
+            f"knowledge_engine.connector.{name}"
+        )
 
     @abstractmethod
     def discover(
@@ -30,6 +42,16 @@ class BaseConnector(ABC):
         Découvre les documents disponibles.
         """
         raise NotImplementedError()
+
+    def log(
+        self,
+        message: str,
+    ) -> None:
+        """
+        Journalise un message provenant du connecteur.
+        """
+
+        self.logger.info(message)
 
     def download(
         self,
@@ -41,7 +63,7 @@ class BaseConnector(ABC):
 
         filename = (
             attachment.filename
-            or "document"
+            or "document.pdf"
         )
 
         destination = (
@@ -51,7 +73,9 @@ class BaseConnector(ABC):
         )
 
         return self.downloader.download_file(
-            url=str(attachment.url),
+            url=str(
+                attachment.url
+            ),
             destination=destination,
         )
 
@@ -60,15 +84,17 @@ class BaseConnector(ABC):
         document: DocumentMetadata,
     ) -> list[Path]:
         """
-        Télécharge toutes les pièces jointes d'un document.
+        Télécharge toutes les pièces jointes
+        d'un document.
         """
 
         if not document.attachments:
             return []
 
-        paths = []
+        paths: list[Path] = []
 
         for attachment in document.attachments:
+
             paths.append(
                 self.download(
                     attachment,
