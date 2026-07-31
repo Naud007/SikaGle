@@ -34,8 +34,8 @@ class FAOConnector(BaseConnector):
 
         return (
             str(document.url)
-        .    rstrip("/")
-        .    split("/")[-1]
+            .rstrip("/")
+            .split("/")[-1]
         )
 
     def _get_bundles(
