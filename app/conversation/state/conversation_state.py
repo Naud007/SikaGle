@@ -1,1 +1,20 @@
+from enum import Enum
 
+
+class ConversationState(str, Enum):
+
+    START = "START"
+
+    IDENTIFY_CROP = "IDENTIFY_CROP"
+
+    COLLECT_SYMPTOMS = "COLLECT_SYMPTOMS"
+
+    ASK_MORE_INFORMATION = "ASK_MORE_INFORMATION"
+
+    SEARCH = "SEARCH"
+
+    REASONING = "REASONING"
+
+    RESPONSE = "RESPONSE"
+
+    END = "END"
