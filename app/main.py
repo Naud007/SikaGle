@@ -1,4 +1,4 @@
-from app.core.config.validator import ConfigurationValidator
+from app.core.settings.validator import ConfigurationValidator
 
 ConfigurationValidator.validate()
 
