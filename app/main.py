@@ -1,3 +1,4 @@
+from app.core.health import health_service
 from app.core.settings.validator import ConfigurationValidator
 
 ConfigurationValidator.validate()
@@ -262,29 +263,19 @@ def get_metrics():
 @app.get("/live")
 def live():
 
-    return {
-        "status": "alive"
-    }
+    return health_service.live()
 
 
 @app.get("/ready")
 def ready():
 
-    return {
-        "status": "ready"
-    }
+    return health_service.ready()
 
 
 @app.get("/health")
 def health():
 
-    return {
-
-        "status": "healthy",
-
-        "metrics": metrics.snapshot()
-
-    }
+    return health_service.health()
 
 # =========================================================
 # STATUT BASE DE DONNÉES
