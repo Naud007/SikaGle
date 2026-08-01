@@ -1,3 +1,7 @@
+from app.core.config.validator import ConfigurationValidator
+
+ConfigurationValidator.validate()
+
 from datetime import date, datetime
 import os
 from pathlib import Path
