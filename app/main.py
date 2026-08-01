@@ -241,7 +241,7 @@ app.include_router(
 
 @app.get("/")
 def root():
-
+    metrics.increment_requests()
     return {
 
         "status":
