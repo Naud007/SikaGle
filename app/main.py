@@ -251,10 +251,40 @@ def root():
             "API SikaGlé fonctionnelle"
 
     }
+
+
 @app.get("/metrics")
 def get_metrics():
 
     return metrics.snapshot()
+
+
+@app.get("/live")
+def live():
+
+    return {
+        "status": "alive"
+    }
+
+
+@app.get("/ready")
+def ready():
+
+    return {
+        "status": "ready"
+    }
+
+
+@app.get("/health")
+def health():
+
+    return {
+
+        "status": "healthy",
+
+        "metrics": metrics.snapshot()
+
+    }
 
 # =========================================================
 # STATUT BASE DE DONNÉES
