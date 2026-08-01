@@ -8,6 +8,8 @@ from pathlib import Path
 
 from app.core.config.logger import logger
 
+from app.core.monitoring import metrics
+
 from app.api.routes.knowledge import router as knowledge_router
 
 from fastapi import FastAPI, Request, Response
