@@ -6,6 +6,8 @@ from datetime import date, datetime
 import os
 from pathlib import Path
 
+from app.core.config.logger import logger
+
 from app.api.routes.knowledge import router as knowledge_router
 
 from fastapi import FastAPI, Request, Response
@@ -51,7 +53,10 @@ app = FastAPI(
     title="SikaGlé API",
     version="1.0.0"
 )
-
+logger.info("=" * 60)
+logger.info("🌱 Démarrage de SikaGlé")
+logger.info("Version : 1.0.0")
+logger.info("=" * 60)
 
 # =========================================================
 # CONFIGURATION DES QUOTAS
@@ -108,16 +113,11 @@ if SUPABASE_URL and SUPABASE_KEY:
             SUPABASE_KEY
         )
 
-        print(
-            "✅ Connexion Supabase initialisée."
-        )
+        logger.info("✅ Connexion Supabase initialisée.")
 
     except Exception as e:
 
-        print(
-            "❌ Erreur initialisation Supabase:",
-            e
-        )
+        logger.exception("Erreur lors de l'initialisation de Supabase")
 
 
 # =========================================================
@@ -139,9 +139,8 @@ def send_whatsapp_message(
         or not WHATSAPP_PHONE_ID
     ):
 
-        print(
-            "❌ Variables WHATSAPP_TOKEN "
-            "ou WHATSAPP_PHONE_ID manquantes."
+        logger.warning(
+            "Variables WHATSAPP_TOKEN ou WHATSAPP_PHONE_ID manquantes."
         )
 
         return False
