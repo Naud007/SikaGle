@@ -1,5 +1,5 @@
 from app.core.health import health_service
-from app.core.settings.validator import ConfigurationValidator
+from app.core.settings.validators import ConfigurationValidator
 
 ConfigurationValidator.validate()
 
