@@ -251,7 +251,10 @@ def root():
             "API SikaGlé fonctionnelle"
 
     }
+@app.get("/metrics")
+def get_metrics():
 
+    return metrics.snapshot()
 
 # =========================================================
 # STATUT BASE DE DONNÉES
