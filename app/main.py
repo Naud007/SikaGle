@@ -5,6 +5,11 @@ ConfigurationValidator.validate()
 
 from datetime import date, datetime
 import os
+
+from app.api.middlewares import (
+    SecurityHeadersMiddleware,
+)
+
 from pathlib import Path
 
 from app.core.config.logger import logger
