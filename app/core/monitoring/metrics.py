@@ -69,6 +69,13 @@ class Metrics:
             "llm_requests": self.llm_requests
 
         }
+            
+        
+        def increment_alerts(self):
+
+            with self.lock:
+
+                self.total_errors += 1
 
 
 metrics = Metrics()
