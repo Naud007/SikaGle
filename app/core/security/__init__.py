@@ -9,6 +9,7 @@ from .secret_validator import (
     SecretValidationError,
     SecretValidator,
 )
+from .input_validator import InputValidator
 from .security_settings import SecuritySettings
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "SecretValidator",
     "SecretValidationError",
     "RateLimiter",
+    "InputValidator",
 ]
