@@ -11,6 +11,7 @@ from .secret_validator import (
 )
 from .input_validator import InputValidator
 from .security_settings import SecuritySettings
+from .security_report import SecurityReport
 
 __all__ = [
     "SecuritySettings",
@@ -18,4 +19,5 @@ __all__ = [
     "SecretValidationError",
     "RateLimiter",
     "InputValidator",
+    "SecurityReport",
 ]
