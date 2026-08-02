@@ -66,6 +66,11 @@ app = FastAPI(
     title="SikaGlé API",
     version="1.0.0"
 )
+
+app.add_middleware(
+    SecurityHeadersMiddleware,
+)
+
 logger.info("=" * 60)
 logger.info("🌱 Démarrage de SikaGlé")
 logger.info("Version : 1.0.0")
