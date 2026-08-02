@@ -4,14 +4,16 @@ SikaGlé
 Module de sécurité.
 """
 
-from .security_settings import SecuritySettings
+from .rate_limiter import RateLimiter
 from .secret_validator import (
-    SecretValidator,
     SecretValidationError,
+    SecretValidator,
 )
+from .security_settings import SecuritySettings
 
 __all__ = [
     "SecuritySettings",
     "SecretValidator",
     "SecretValidationError",
+    "RateLimiter",
 ]
