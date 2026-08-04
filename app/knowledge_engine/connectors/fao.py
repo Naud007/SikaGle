@@ -342,7 +342,7 @@ class FAOConnector(BaseConnector):
             exist_ok=True,
         )
 
-       self._download_pdf(
+        self._download_pdf(
             pdf_url,
             filename,
         )

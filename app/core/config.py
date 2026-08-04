@@ -5,7 +5,7 @@ Configuration centrale de l'application.
 Toutes les configurations du projet passent par cette classe.
 """
 
-from app.core.config.environment import EnvironmentLoader
+from app.core.settings import EnvironmentLoader
 
 
 class Settings:

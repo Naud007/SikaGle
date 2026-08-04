@@ -2,7 +2,6 @@
 Validation de la configuration de SikaGlé.
 """
 
-from app.core.config import settings
 
 
 class ConfigurationError(Exception):
@@ -13,7 +12,7 @@ class ConfigurationError(Exception):
 class ConfigurationValidator:
 
     @staticmethod
-    def validate():
+    def validate(settings):
 
         required_settings = {
             "GEMINI_API_KEY": settings.GEMINI_API_KEY,

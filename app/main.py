@@ -1,7 +1,10 @@
 from app.core.health import health_service
 from app.core.settings.validators import ConfigurationValidator
-
-ConfigurationValidator.validate()
+from app.core.config import settings
+ConfigurationValidator.validate(settings)
+from app.services.agricultural_assistant_service import (
+    AgriculturalAssistantService,
+)
 
 from datetime import date, datetime
 import os
@@ -12,7 +15,7 @@ from app.api.middlewares import (
 
 from pathlib import Path
 
-from app.core.config.logger import logger
+from app.core.logging import logger
 
 from app.core.monitoring import metrics
 
@@ -143,6 +146,11 @@ app.include_router(
     knowledge_router,
 )
 
+# =========================================================
+# ASSISTANT AGRICOLE
+# =========================================================
+
+assistant = AgriculturalAssistantService()
 
 # =========================================================
 # ROUTE RACINE
@@ -1866,8 +1874,7 @@ def verify_webhook(
     challenge = request.query_params.get(
         "hub.challenge"
     )
-
-
+    
     if (
         mode == "subscribe"
         and token == VERIFY_TOKEN
@@ -2406,6 +2413,45 @@ async def receive_webhook(
 
                 )
 
+                # =================================================
+                # SIKAGLÉ
+                # =================================================
+
+                try:
+
+                    answer = assistant.process(
+
+                        user_id=str(user_id),
+
+                        message=content,
+
+                    )
+
+                except Exception as e:
+
+                    print(
+                        f"Erreur Assistant : {e}"
+                    )
+
+                    answer = (
+
+                        "Je rencontre actuellement une difficulté technique. "
+                        "Veuillez réessayer dans quelques instants."
+
+                    )
+
+                # =================================================
+                # ENVOI WHATSAPP
+                # =================================================
+
+                send_whatsapp_message(
+
+                    sender_phone,
+
+                    answer,
+
+                )
+
 
     except Exception as e:
 
@@ -2422,3 +2468,4 @@ async def receive_webhook(
             "success"
 
     }
+
