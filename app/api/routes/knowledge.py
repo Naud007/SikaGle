@@ -37,6 +37,17 @@ class DebugRequest(BaseModel):
     )
 
 
+@router.get("/chroma-debug")
+def chroma_debug():
+
+    repo = service.rag.retriever.vector.repository
+
+    return {
+        "count": repo.count(),
+        "path": str(repo.vectorstore.client),
+        "collection": repo.vectorstore.COLLECTION_NAME,
+    }
+
 @router.get("/count")
 def count_documents():
 
