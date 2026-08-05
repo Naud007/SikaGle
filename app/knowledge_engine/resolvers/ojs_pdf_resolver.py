@@ -87,6 +87,8 @@ class OJSPDFResolver:
         )
 
         for link in debug["links"]:
+            
+            print("LINK:", link["text"], "=>", link["href"])
 
             href = link["href"].lower()
 
