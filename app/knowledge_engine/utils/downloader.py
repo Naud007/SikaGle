@@ -96,6 +96,9 @@ class Downloader:
                 )
 
                 response.raise_for_status()
+                
+                print("CONTENT-TYPE :", response.headers.get("Content-Type"))
+                print("FINAL URL :", response.url)
 
                 with destination.open(
                     "wb"
@@ -109,7 +112,7 @@ class Downloader:
                             file.write(
                                 chunk
                             )
-
+                print("FILE SIZE :", destination.stat().st_size, "octets")
                 return destination
 
             except requests.RequestException as exc:
