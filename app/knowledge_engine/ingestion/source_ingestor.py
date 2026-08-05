@@ -64,6 +64,7 @@ class SourceIngestor:
                     continue
 
                 attachment = document.attachments[0]
+                print("PDF URL =", attachment.url)
 
                 pdf_path = self.paths.pdf_path(
                     source=document.source,
