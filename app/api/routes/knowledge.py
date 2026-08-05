@@ -37,6 +37,12 @@ class DebugRequest(BaseModel):
     )
 
 
+@router.get("/count")
+def count_documents():
+
+    return {
+        "documents": service.rag.retriever.repository.count()
+    }
 # ==========================================================
 # INGESTION
 # ==========================================================
