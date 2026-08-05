@@ -55,6 +55,22 @@ def available_sources():
     }
 
 
+@router.post("/ingest/all")
+def ingest_all():
+
+    try:
+
+        report = service.ingest_all()
+
+        return report.to_dict()
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e),
+        )
+
 @router.post("/ingest/{source}")
 def ingest_source(
     source: str,
@@ -86,21 +102,6 @@ def ingest_source(
         )
 
 
-@router.post("/ingest/all")
-def ingest_all():
-
-    try:
-
-        report = service.ingest_all()
-
-        return report.to_dict()
-
-    except Exception as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(e),
-        )
 
 
 # ==========================================================
