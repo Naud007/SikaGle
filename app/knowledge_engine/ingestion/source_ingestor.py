@@ -95,6 +95,7 @@ class SourceIngestor:
                     pdf_path=pdf_path,
                     metadata=document.model_dump(),
                 )
+                print("INDEX RESULT =", result)
 
                 if result.get(
                     "validated",
