@@ -41,7 +41,7 @@ class DebugRequest(BaseModel):
 def count_documents():
 
     return {
-        "documents": service.rag.retriever.repository.count()
+        "documents": service.rag.retriever.vector.repository.count()
     }
 # ==========================================================
 # INGESTION
