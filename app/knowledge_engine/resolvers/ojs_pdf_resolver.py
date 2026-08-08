@@ -49,7 +49,31 @@ class OJSPDFResolver:
             response.text,
             "html.parser",
         )
+        if "/article/view/368" in article_url:
 
+            print(
+                "BRAB 368 GALLEY REFERENCES :"
+            )
+
+            for tag in soup.find_all(
+                href=True
+            ):
+
+                href = tag.get("href")
+
+                if (
+                    href
+                    and (
+                        "368" in href
+                        or "26" in href
+                        or "download" in href.lower()
+                    )
+                ):
+
+                    print(
+                        "GALLEY LINK =",
+                        href,
+                    )
         # ==================================================
         # LIENS DE TÉLÉCHARGEMENT OJS
         # ==================================================
