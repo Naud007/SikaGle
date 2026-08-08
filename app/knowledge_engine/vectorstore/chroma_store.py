@@ -78,7 +78,11 @@ class ChromaStore:
 
             documents.append(chunk)
 
-            chunk_metadata = metadata.copy()
+            chunk_metadata = {
+                key: value
+                for key, value in metadata.items()
+                if value is not None
+            }
 
             #
             # Métadonnées techniques
