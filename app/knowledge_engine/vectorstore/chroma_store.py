@@ -78,15 +78,33 @@ class ChromaStore:
 
             documents.append(chunk)
 
-            chunk_metadata = {
-                key: value
-                for key, value in metadata.items()
-                if value is not None
-            }
+            # ==========================================
+            # NORMALISATION DES MÉTADONNÉES CHROMA
+            # ==========================================
 
-            #
-            # Métadonnées techniques
-            #
+            chunk_metadata = {}
+
+            for key, value in metadata.items():
+
+                if value is None:
+                    continue
+
+                if isinstance(
+                    value,
+                    (str, int, float, bool),
+                ):
+
+                    chunk_metadata[key] = value
+
+                else:
+
+                    chunk_metadata[key] = str(
+                        value
+                    )
+
+            # ==========================================
+            # MÉTADONNÉES TECHNIQUES
+            # ==========================================
 
             chunk_metadata["document"] = doc_id
 
