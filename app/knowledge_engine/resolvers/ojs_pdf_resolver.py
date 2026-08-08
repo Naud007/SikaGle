@@ -8,8 +8,19 @@ from bs4 import BeautifulSoup
 
 class OJSPDFResolver:
     """
-    Résout automatiquement le véritable lien de téléchargement
-    d'un document OJS.
+    Résout le véritable lien de téléchargement d'un document OJS.
+
+    Fonctionnement BRAB :
+
+        /article/view/{article_id}
+                ↓
+        a.obj_galley_link
+                ↓
+        /article/view/{article_id}/{galley_id}
+                ↓
+        a.download
+                ↓
+        /article/download/{article_id}/{galley_id}/{file_id}
     """
 
     def __init__(self):
@@ -29,8 +40,8 @@ class OJSPDFResolver:
         article_url: str,
     ) -> dict:
         """
-        Inspecte la page OJS et retourne
-        tous les liens présents.
+        Inspecte une page OJS et retourne
+        les informations utiles sur ses galleys.
         """
 
         response = self.session.get(
@@ -40,69 +51,19 @@ class OJSPDFResolver:
 
         response.raise_for_status()
 
-        print(
-            "HTML CONTAINS DOWNLOAD =",
-            "/article/download/" in response.text,
-        )
-
         soup = BeautifulSoup(
             response.text,
             "html.parser",
         )
-        if "/article/view/368" in article_url:
-
-            print(
-                "BRAB 368 GALLEY REFERENCES :"
-            )
-
-            for tag in soup.find_all(
-                href=True
-            ):
-
-                href = tag.get("href")
-
-                if (
-                    href
-                    and (
-                        "368" in href
-                        or "26" in href
-                        or "download" in href.lower()
-                    )
-                ):
-
-                    print(
-                        "GALLEY LINK =",
-                        href,
-                    )
-        # ==================================================
-        # LIENS DE TÉLÉCHARGEMENT OJS
-        # ==================================================
-
-        download_links = soup.select(
-            "a.download[href]"
-        )
-
-        for download_link in download_links:
-
-            href = urljoin(
-                article_url,
-                download_link["href"],
-            )
-
-            print(
-                "DOWNLOAD LINK =",
-                href,
-            )
 
         # ==================================================
-        # TOUS LES LIENS
+        # GALLERY LINKS
         # ==================================================
 
-        links = []
+        galley_links = []
 
-        for link in soup.find_all(
-            "a",
-            href=True,
+        for link in soup.select(
+            "a.obj_galley_link[href]"
         ):
 
             href = urljoin(
@@ -115,11 +76,52 @@ class OJSPDFResolver:
                 strip=True,
             )
 
-            links.append(
+            galley_links.append(
                 {
                     "text": text,
                     "href": href,
                 }
+            )
+
+            print(
+                "GALLEY LINK =",
+                text,
+                "=>",
+                href,
+            )
+
+        # ==================================================
+        # DOWNLOAD LINKS DIRECTS
+        # ==================================================
+
+        download_links = []
+
+        for link in soup.select(
+            "a.download[href]"
+        ):
+
+            href = urljoin(
+                article_url,
+                link["href"],
+            )
+
+            text = link.get_text(
+                " ",
+                strip=True,
+            )
+
+            download_links.append(
+                {
+                    "text": text,
+                    "href": href,
+                }
+            )
+
+            print(
+                "DOWNLOAD LINK =",
+                text,
+                "=>",
+                href,
             )
 
         return {
@@ -129,7 +131,8 @@ class OJSPDFResolver:
                 if soup.title
                 else None
             ),
-            "links": links,
+            "galley_links": galley_links,
+            "download_links": download_links,
         }
 
     def resolve(
@@ -137,9 +140,14 @@ class OJSPDFResolver:
         article_url: str,
     ) -> str | None:
         """
-        Recherche le véritable lien de téléchargement
+        Résout le véritable lien de téléchargement
         d'un document OJS.
         """
+
+        # ==================================================
+        # ÉTAPE 1
+        # Ouvrir la page principale de l'article
+        # ==================================================
 
         response = self.session.get(
             article_url,
@@ -154,54 +162,102 @@ class OJSPDFResolver:
         )
 
         # ==================================================
-        # PRIORITÉ 1
-        # Lien OJS officiel de téléchargement
+        # ÉTAPE 2
+        # Chercher les galleys OJS
         # ==================================================
 
-        download_links = soup.select(
-            "a.download[href]"
+        galley_links = soup.select(
+            "a.obj_galley_link[href]"
         )
 
-        for download_link in download_links:
+        if not galley_links:
 
-            href = urljoin(
+            print(
+                "NO GALLEY LINK FOUND =",
                 article_url,
-                download_link["href"],
+            )
+
+            return None
+
+        print(
+            "GALLEYS FOUND =",
+            len(galley_links),
+        )
+
+        # ==================================================
+        # ÉTAPE 3
+        # Parcourir les galleys
+        # ==================================================
+
+        for galley_link in galley_links:
+
+            galley_url = urljoin(
+                article_url,
+                galley_link["href"],
+            )
+
+            galley_text = galley_link.get_text(
+                " ",
+                strip=True,
             )
 
             print(
-                "RESOLVED DOWNLOAD =",
-                href,
+                "CHECK GALLEY =",
+                galley_text,
+                "=>",
+                galley_url,
             )
 
-            return href
+            try:
 
-        # ==================================================
-        # PRIORITÉ 2
-        # Sécurité : chercher un lien /article/download/
-        # ==================================================
+                galley_response = self.session.get(
+                    galley_url,
+                    timeout=60,
+                )
 
-        for link in soup.find_all(
-            "a",
-            href=True,
-        ):
+                galley_response.raise_for_status()
 
-            href = urljoin(
-                article_url,
-                link["href"],
+            except requests.RequestException as exc:
+
+                print(
+                    "GALLEY ERROR =",
+                    galley_url,
+                    "=>",
+                    exc,
+                )
+
+                continue
+
+            galley_soup = BeautifulSoup(
+                galley_response.text,
+                "html.parser",
             )
 
-            if "/article/download/" in href.lower():
+            # ==================================================
+            # ÉTAPE 4
+            # Chercher le vrai bouton Télécharger
+            # ==================================================
+
+            download_links = galley_soup.select(
+                "a.download[href]"
+            )
+
+            for download_link in download_links:
+
+                download_url = urljoin(
+                    galley_url,
+                    download_link["href"],
+                )
 
                 print(
                     "RESOLVED DOWNLOAD =",
-                    href,
+                    download_url,
                 )
 
-                return href
+                return download_url
 
         # ==================================================
-        # AUCUN DOCUMENT DE TÉLÉCHARGEMENT
+        # AUCUN FICHIER TROUVÉ
         # ==================================================
 
         print(
