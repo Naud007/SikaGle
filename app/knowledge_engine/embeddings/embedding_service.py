@@ -1,3 +1,5 @@
+from time import sleep, monotonic
+
 from google import genai
 from google.genai import types
 
@@ -8,6 +10,9 @@ class GeminiEmbeddingService:
     """
     Service de génération d'embeddings avec Gemini.
     """
+
+    MAX_BATCH_SIZE = 100
+    MIN_REQUEST_INTERVAL = 1.1
 
     def __init__(
         self,
@@ -36,6 +41,32 @@ class GeminiEmbeddingService:
             or settings.EMBEDDING_DIMENSION
         )
 
+        self._last_request_time = 0.0
+
+    # =========================================================
+    # LIMITATION DU RYTHME DES REQUÊTES
+    # =========================================================
+
+    def _wait_before_request(self):
+        """
+        Limite le rythme des appels Gemini.
+        """
+
+        elapsed = (
+            monotonic()
+            - self._last_request_time
+        )
+
+        remaining = (
+            self.MIN_REQUEST_INTERVAL
+            - elapsed
+        )
+
+        if remaining > 0:
+            sleep(remaining)
+
+        self._last_request_time = monotonic()
+
     # =========================================================
     # EMBEDDING DOCUMENT UNIQUE
     # =========================================================
@@ -50,6 +81,8 @@ class GeminiEmbeddingService:
             raise ValueError(
                 "Le texte à encoder est vide."
             )
+
+        self._wait_before_request()
 
         result = (
             self.client.models.embed_content(
@@ -76,17 +109,28 @@ class GeminiEmbeddingService:
         return result.embeddings[0].values
 
     # =========================================================
-    # EMBEDDING DOCUMENTS EN BATCH
+    # EMBEDDINGS DOCUMENTS EN BATCH
     # =========================================================
 
     def generate_document_embeddings(
         self,
         texts: list[str],
     ) -> list[list[float]]:
+        """
+        Génère les embeddings de plusieurs textes.
+
+        Gemini accepte au maximum 100 textes
+        par requête. Les textes sont donc découpés
+        automatiquement en batches de 100 maximum.
+        """
 
         if not texts:
 
-            return []
+            raise ValueError(
+                "La liste des textes à encoder est vide."
+            )
+
+        cleaned_texts = []
 
         for text in texts:
 
@@ -96,51 +140,100 @@ class GeminiEmbeddingService:
                     "Un des textes à encoder est vide."
                 )
 
-        result = (
-            self.client.models.embed_content(
-
-                model=self.model,
-
-                contents=texts,
-
-                config=types.EmbedContentConfig(
-
-                    task_type="RETRIEVAL_DOCUMENT",
-
-                    output_dimensionality=(
-                        self.output_dimensionality
-                    ),
-
-                ),
-            )
-        )
-
-        if not result.embeddings:
-
-            raise ValueError(
-                "Aucun embedding document généré."
+            cleaned_texts.append(
+                text.strip()
             )
 
         embeddings = []
 
-        for embedding in result.embeddings:
+        for start in range(
+            0,
+            len(cleaned_texts),
+            self.MAX_BATCH_SIZE,
+        ):
 
-            if not embedding.values:
+            batch = cleaned_texts[
+                start:
+                start + self.MAX_BATCH_SIZE
+            ]
 
-                raise ValueError(
-                    "Un embedding document est vide."
+            self._wait_before_request()
+
+            try:
+
+                result = (
+                    self.client.models.embed_content(
+                        model=self.model,
+                        contents=batch,
+                        config=types.EmbedContentConfig(
+                            task_type="RETRIEVAL_DOCUMENT",
+                            output_dimensionality=(
+                                self.output_dimensionality
+                            ),
+                        ),
+                    )
                 )
 
-            embeddings.append(
-                embedding.values
-            )
+            except Exception as exc:
 
-        if len(embeddings) != len(texts):
+                error_message = str(exc)
+
+                if (
+                    "429" in error_message
+                    or "RESOURCE_EXHAUSTED"
+                    in error_message
+                ):
+
+                    sleep(60)
+
+                    self._wait_before_request()
+
+                    result = (
+                        self.client.models.embed_content(
+                            model=self.model,
+                            contents=batch,
+                            config=(
+                                types.EmbedContentConfig(
+                                    task_type=(
+                                        "RETRIEVAL_DOCUMENT"
+                                    ),
+                                    output_dimensionality=(
+                                        self.output_dimensionality
+                                    ),
+                                )
+                            ),
+                        )
+                    )
+
+                else:
+
+                    raise
+
+            if not result.embeddings:
+
+                raise ValueError(
+                    "Aucun embedding document généré."
+                )
+
+            for embedding in result.embeddings:
+
+                if not embedding.values:
+
+                    raise ValueError(
+                        "Un embedding vide a été généré."
+                    )
+
+                embeddings.append(
+                    embedding.values
+                )
+
+        if len(embeddings) != len(
+            cleaned_texts
+        ):
 
             raise ValueError(
-                "Le nombre d'embeddings reçus "
-                "ne correspond pas au nombre "
-                "de textes envoyés."
+                "Le nombre d'embeddings générés "
+                "ne correspond pas au nombre de textes."
             )
 
         return embeddings
@@ -159,6 +252,8 @@ class GeminiEmbeddingService:
             raise ValueError(
                 "La requête à encoder est vide."
             )
+
+        self._wait_before_request()
 
         result = (
             self.client.models.embed_content(
@@ -183,6 +278,54 @@ class GeminiEmbeddingService:
             )
 
         return result.embeddings[0].values
+
+
+# =========================================================
+# TEST EMBEDDING
+# =========================================================
+
+def test_embedding():
+
+    try:
+
+        embedding_service = (
+            GeminiEmbeddingService()
+        )
+
+        vector = (
+            embedding_service
+            .generate_document_embedding(
+                "Comment cultiver "
+                "le maïs au Bénin ?"
+            )
+        )
+
+        return {
+
+            "status": "success",
+
+            "model":
+                embedding_service.model,
+
+            "dimension":
+                len(vector),
+
+            "expected_dimension":
+                embedding_service
+                .output_dimensionality,
+
+            "preview":
+                vector[:5],
+        }
+
+    except Exception as e:
+
+        return {
+
+            "status": "error",
+
+            "message": str(e),
+        }
 
 
 # =========================================================
