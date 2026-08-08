@@ -38,6 +38,8 @@ class OJSPDFResolver:
         )
 
         response.raise_for_status()
+        
+        print("HTML CONTAINS DOWNLOAD =", "/article/download/" in response.text)
 
         soup = BeautifulSoup(
             response.text,
