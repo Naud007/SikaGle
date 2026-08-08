@@ -8,8 +8,8 @@ from bs4 import BeautifulSoup
 
 class OJSPDFResolver:
     """
-    Résout automatiquement le véritable lien PDF
-    d'un article OJS.
+    Résout automatiquement le véritable lien de téléchargement
+    d'un document OJS.
     """
 
     def __init__(self):
@@ -29,7 +29,8 @@ class OJSPDFResolver:
         article_url: str,
     ) -> dict:
         """
-        Retourne tous les liens présents sur la page.
+        Inspecte la page OJS et retourne
+        tous les liens présents.
         """
 
         response = self.session.get(
@@ -38,13 +39,40 @@ class OJSPDFResolver:
         )
 
         response.raise_for_status()
-        
-        print("HTML CONTAINS DOWNLOAD =", "/article/download/" in response.text)
+
+        print(
+            "HTML CONTAINS DOWNLOAD =",
+            "/article/download/" in response.text,
+        )
 
         soup = BeautifulSoup(
             response.text,
             "html.parser",
         )
+
+        # ==================================================
+        # LIENS DE TÉLÉCHARGEMENT OJS
+        # ==================================================
+
+        download_links = soup.select(
+            "a.download[href]"
+        )
+
+        for download_link in download_links:
+
+            href = urljoin(
+                article_url,
+                download_link["href"],
+            )
+
+            print(
+                "DOWNLOAD LINK =",
+                href,
+            )
+
+        # ==================================================
+        # TOUS LES LIENS
+        # ==================================================
 
         links = []
 
@@ -72,7 +100,11 @@ class OJSPDFResolver:
 
         return {
             "article_url": article_url,
-            "title": soup.title.text if soup.title else None,
+            "title": (
+                soup.title.text
+                if soup.title
+                else None
+            ),
             "links": links,
         }
 
@@ -81,27 +113,76 @@ class OJSPDFResolver:
         article_url: str,
     ) -> str | None:
         """
-        Recherche automatiquement le lien PDF.
+        Recherche le véritable lien de téléchargement
+        d'un document OJS.
         """
 
-        debug = self.inspect(
-            article_url
+        response = self.session.get(
+            article_url,
+            timeout=60,
         )
 
-        for link in debug["links"]:
-            
-            print("LINK:", link["text"], "=>", link["href"])
+        response.raise_for_status()
 
-            href = link["href"].lower()
+        soup = BeautifulSoup(
+            response.text,
+            "html.parser",
+        )
 
-            text = link["text"].lower()
+        # ==================================================
+        # PRIORITÉ 1
+        # Lien OJS officiel de téléchargement
+        # ==================================================
 
-            if (
-                "/article/download/" in href
-                or href.endswith(".pdf")
-                or "pdf" in text
-            ):
+        download_links = soup.select(
+            "a.download[href]"
+        )
 
-                return link["href"]
+        for download_link in download_links:
+
+            href = urljoin(
+                article_url,
+                download_link["href"],
+            )
+
+            print(
+                "RESOLVED DOWNLOAD =",
+                href,
+            )
+
+            return href
+
+        # ==================================================
+        # PRIORITÉ 2
+        # Sécurité : chercher un lien /article/download/
+        # ==================================================
+
+        for link in soup.find_all(
+            "a",
+            href=True,
+        ):
+
+            href = urljoin(
+                article_url,
+                link["href"],
+            )
+
+            if "/article/download/" in href.lower():
+
+                print(
+                    "RESOLVED DOWNLOAD =",
+                    href,
+                )
+
+                return href
+
+        # ==================================================
+        # AUCUN DOCUMENT DE TÉLÉCHARGEMENT
+        # ==================================================
+
+        print(
+            "NO DOWNLOAD LINK FOUND =",
+            article_url,
+        )
 
         return None
