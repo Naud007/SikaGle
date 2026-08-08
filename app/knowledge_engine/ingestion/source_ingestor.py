@@ -1,4 +1,4 @@
-from time import perf_counter
+from time import perf_counter, sleep
 
 from app.knowledge_engine.connectors.registry import (
     registry,
@@ -64,7 +64,11 @@ class SourceIngestor:
                     continue
 
                 attachment = document.attachments[0]
-                print("PDF URL =", attachment.url)
+
+                print(
+                    "PDF URL =",
+                    attachment.url,
+                )
 
                 pdf_path = self.paths.pdf_path(
                     source=document.source,
@@ -92,31 +96,48 @@ class SourceIngestor:
                         f"{attachment.filename} déjà présent sur le disque."
                     )
 
+                # =====================================
+                # INDEXATION
+                # =====================================
+
+                force_reindex = (
+                    source.lower() == "brab"
+                )
+
                 result = self.indexer.index_pdf(
                     pdf_path=pdf_path,
                     metadata=document.model_dump(),
+                    force=force_reindex,
                 )
-                print("INDEX RESULT =", result)
+
+                print(
+                    "INDEX RESULT =",
+                    result,
+                )
 
                 if result.get(
                     "validated",
                     False,
                 ):
+
                     report.validated += 1
 
                 if result.get(
                     "indexed",
                     False,
                 ):
+
                     report.indexed += 1
 
                 else:
+
                     report.skipped += 1
 
                 for error in result.get(
                     "errors",
                     [],
                 ):
+
                     report.add_error(
                         error
                     )
@@ -125,9 +146,18 @@ class SourceIngestor:
                     "warnings",
                     [],
                 ):
+
                     report.add_warning(
                         warning
                     )
+
+                # =====================================
+                # LIMITE GEMINI
+                # =====================================
+
+                if source.lower() == "brab":
+
+                    sleep(1)
 
             except Exception as exc:
 
