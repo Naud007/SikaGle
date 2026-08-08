@@ -30,6 +30,7 @@ class KnowledgeIndexer:
         self,
         pdf_path: Path,
         metadata: dict | None = None,
+        force: bool = False,
     ) -> dict:
 
         metadata = metadata or {}
@@ -38,32 +39,38 @@ class KnowledgeIndexer:
         # DOUBLON
         # =====================================
 
-        if self.vectorstore.exists(
-            pdf_path.stem
+        if (
+            self.vectorstore.exists(
+                pdf_path.stem
+            )
+            and not force
         ):
 
             return {
-
                 "validated": True,
-
                 "indexed": False,
-
                 "duplicate": True,
-
                 "errors": [],
-
                 "warnings": [
                     "Document déjà indexé."
                 ],
-
                 "txt_path": None,
-
                 "characters": 0,
-
                 "chunks": 0,
-
-                "collection_size": self.vectorstore.count(),
+                "collection_size": (
+                    self.vectorstore.count()
+                ),
             }
+
+        # =====================================
+        # RÉINDEXATION FORCÉE
+        # =====================================
+
+        if force:
+
+            self.vectorstore.delete_document(
+                pdf_path.stem
+            )
 
         # =====================================
         # TRAITEMENT
@@ -73,9 +80,7 @@ class KnowledgeIndexer:
             pdf_path
         )
 
-        validation = result[
-            "validation"
-        ]
+        validation = result["validation"]
 
         # =====================================
         # VALIDATION
@@ -84,30 +89,17 @@ class KnowledgeIndexer:
         if not validation.valid:
 
             return {
-
                 "validated": False,
-
                 "indexed": False,
-
                 "duplicate": False,
-
                 "errors": validation.errors,
-
                 "warnings": validation.warnings,
-
-                "txt_path": result[
-                    "txt_path"
-                ],
-
-                "characters": result[
-                    "characters"
-                ],
-
-                "chunks": result[
-                    "chunks_count"
-                ],
-
-                "collection_size": self.vectorstore.count(),
+                "txt_path": result["txt_path"],
+                "characters": result["characters"],
+                "chunks": result["chunks_count"],
+                "collection_size": (
+                    self.vectorstore.count()
+                ),
             }
 
         chunks = result["chunks"]
@@ -128,13 +120,9 @@ class KnowledgeIndexer:
         # =====================================
 
         self.vectorstore.add_document(
-
             doc_id=pdf_path.stem,
-
             chunks=chunks,
-
             embeddings=embeddings,
-
             metadata=metadata,
         )
 
@@ -143,28 +131,15 @@ class KnowledgeIndexer:
         # =====================================
 
         return {
-
             "validated": True,
-
             "indexed": True,
-
             "duplicate": False,
-
             "errors": [],
-
             "warnings": validation.warnings,
-
-            "txt_path": result[
-                "txt_path"
-            ],
-
-            "characters": result[
-                "characters"
-            ],
-
-            "chunks": result[
-                "chunks_count"
-            ],
-
-            "collection_size": self.vectorstore.count(),
+            "txt_path": result["txt_path"],
+            "characters": result["characters"],
+            "chunks": result["chunks_count"],
+            "collection_size": (
+                self.vectorstore.count()
+            ),
         }
