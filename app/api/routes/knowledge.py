@@ -1,10 +1,11 @@
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.knowledge_engine.resolvers import OJSPDFResolver
 from app.services.knowledge_service import KnowledgeService
+
 
 router = APIRouter(
     prefix="/knowledge",
@@ -12,10 +13,12 @@ router = APIRouter(
 )
 
 service = KnowledgeService()
+
 resolver = OJSPDFResolver()
 
 
 class QuestionRequest(BaseModel):
+
     question: str = Field(
         ...,
         description="Question de l'utilisateur",
@@ -31,6 +34,7 @@ class QuestionRequest(BaseModel):
 
 
 class DebugRequest(BaseModel):
+
     pdf_path: str = Field(
         ...,
         description="Chemin du fichier PDF à analyser",
@@ -40,20 +44,40 @@ class DebugRequest(BaseModel):
 @router.get("/chroma-debug")
 def chroma_debug():
 
-    repo = service.rag.retriever.vector.repository
+    repo = (
+        service
+        .rag
+        .retriever
+        .vector
+        .repository
+    )
 
     return {
         "count": repo.count(),
-        "path": str(repo.vectorstore.client),
-        "collection": repo.vectorstore.COLLECTION_NAME,
+        "path": str(
+            repo.vectorstore.client
+        ),
+        "collection": (
+            repo.vectorstore.COLLECTION_NAME
+        ),
     }
+
 
 @router.get("/count")
 def count_documents():
 
     return {
-        "documents": service.rag.retriever.vector.repository.count()
+        "documents": (
+            service
+            .rag
+            .retriever
+            .vector
+            .repository
+            .count()
+        )
     }
+
+
 # ==========================================================
 # INGESTION
 # ==========================================================
@@ -82,27 +106,53 @@ def ingest_all():
             detail=str(e),
         )
 
+
 @router.post("/ingest/{source}")
 def ingest_source(
     source: str,
+    limit: int = Query(
+        default=5,
+        ge=1,
+        le=20,
+        description=(
+            "Nombre de documents à traiter "
+            "dans ce batch."
+        ),
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description=(
+            "Position du premier document "
+            "à traiter."
+        ),
+    ),
 ):
 
     try:
 
-        if source not in service.available_sources():
+        if (
+            source
+            not in service.available_sources()
+        ):
 
             raise HTTPException(
                 status_code=404,
-                detail=f"Source '{source}' inconnue.",
+                detail=(
+                    f"Source '{source}' inconnue."
+                ),
             )
 
         job = service.ingest_source(
-            source
+            source=source,
+            limit=limit,
+            offset=offset,
         )
 
         return job.to_dict()
 
     except HTTPException:
+
         raise
 
     except Exception as e:
@@ -111,8 +161,6 @@ def ingest_source(
             status_code=500,
             detail=str(e),
         )
-
-
 
 
 # ==========================================================
@@ -131,6 +179,7 @@ def debug_pdf(
         )
 
     except HTTPException:
+
         raise
 
     except Exception as e:
@@ -154,7 +203,9 @@ def debug_brab():
 
             raise HTTPException(
                 status_code=404,
-                detail="Aucun document trouvé.",
+                detail=(
+                    "Aucun document trouvé."
+                ),
             )
 
         document = documents[0]
@@ -168,7 +219,9 @@ def debug_brab():
 
             raise HTTPException(
                 status_code=404,
-                detail="Aucun PDF téléchargé.",
+                detail=(
+                    "Aucun PDF téléchargé."
+                ),
             )
 
         report = service.debug_pdf(
@@ -188,12 +241,15 @@ def debug_brab():
                 ),
                 "attachments": [
                     {
-                        "filename": attachment.filename,
+                        "filename": (
+                            attachment.filename
+                        ),
                         "url": str(
                             attachment.url
                         ),
                     }
-                    for attachment in document.attachments
+                    for attachment
+                    in document.attachments
                 ],
                 "resolver": resolver_debug,
             }
@@ -202,6 +258,7 @@ def debug_brab():
         return report
 
     except HTTPException:
+
         raise
 
     except Exception as e:
@@ -229,6 +286,7 @@ def ask(
         )
 
     except HTTPException:
+
         raise
 
     except Exception as e:

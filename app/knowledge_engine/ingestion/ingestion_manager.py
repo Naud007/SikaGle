@@ -24,6 +24,8 @@ class IngestionManager:
     def ingest_source(
         self,
         source: str,
+        limit: int = 5,
+        offset: int = 0,
     ) -> IngestionJob:
 
         job = IngestionJob(
@@ -33,7 +35,9 @@ class IngestionManager:
         try:
 
             report = self.ingestor.ingest(
-                source
+                source=source,
+                limit=limit,
+                offset=offset,
             )
 
             job.report = report
@@ -42,7 +46,9 @@ class IngestionManager:
 
         except Exception as exc:
 
-            job.fail(str(exc))
+            job.fail(
+                str(exc)
+            )
 
         return job
 
@@ -58,6 +64,8 @@ class IngestionManager:
                 source
             )
 
-            report.jobs.append(job)
+            report.jobs.append(
+                job
+            )
 
         return report

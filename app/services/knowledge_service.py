@@ -105,10 +105,14 @@ class KnowledgeService:
     def ingest_source(
         self,
         source: str,
+        limit: int = 5,
+        offset: int = 0,
     ):
 
         return self.ingestion.ingest_source(
-            source
+            source=source,
+            limit=limit,
+            offset=offset,
         )
 
     def ingest_all(

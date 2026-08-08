@@ -33,7 +33,21 @@ class SourceIngestor:
     def ingest(
         self,
         source: str,
+        limit: int = 5,
+        offset: int = 0,
     ) -> IngestionReport:
+
+        if limit <= 0:
+
+            raise ValueError(
+                "limit doit être supérieur à 0."
+            )
+
+        if offset < 0:
+
+            raise ValueError(
+                "offset ne peut pas être négatif."
+            )
 
         report = IngestionReport(
             source=source,
@@ -43,10 +57,41 @@ class SourceIngestor:
 
         connector = registry.get(source)
 
-        documents = connector.discover()
+        all_documents = connector.discover()
+
+        total_documents = len(
+            all_documents
+        )
+
+        documents = all_documents[
+            offset:
+            offset + limit
+        ]
 
         report.documents_found = len(
             documents
+        )
+
+        print(
+            f"[INGESTION] Source : {source}"
+        )
+
+        print(
+            f"[INGESTION] Total disponible : "
+            f"{total_documents}"
+        )
+
+        print(
+            f"[INGESTION] Offset : {offset}"
+        )
+
+        print(
+            f"[INGESTION] Limite : {limit}"
+        )
+
+        print(
+            f"[INGESTION] Batch : "
+            f"{len(documents)}"
         )
 
         for document in documents:
@@ -63,21 +108,21 @@ class SourceIngestor:
 
                     continue
 
-                attachment = document.attachments[0]
+                attachment = (
+                    document.attachments[0]
+                )
 
                 print(
                     "PDF URL =",
                     attachment.url,
                 )
 
-                pdf_path = self.paths.pdf_path(
-                    source=document.source,
-                    filename=attachment.filename,
+                pdf_path = (
+                    self.paths.pdf_path(
+                        source=document.source,
+                        filename=attachment.filename,
+                    )
                 )
-
-                # =====================================
-                # Évite le re-téléchargement
-                # =====================================
 
                 if not pdf_path.exists():
 
@@ -96,18 +141,16 @@ class SourceIngestor:
                         f"{attachment.filename} déjà présent sur le disque."
                     )
 
-                # =====================================
-                # INDEXATION
-                # =====================================
-
                 force_reindex = (
                     source.lower() == "brab"
                 )
 
-                result = self.indexer.index_pdf(
-                    pdf_path=pdf_path,
-                    metadata=document.model_dump(),
-                    force=force_reindex,
+                result = (
+                    self.indexer.index_pdf(
+                        pdf_path=pdf_path,
+                        metadata=document.model_dump(),
+                        force=force_reindex,
+                    )
                 )
 
                 print(
@@ -150,10 +193,6 @@ class SourceIngestor:
                     report.add_warning(
                         warning
                     )
-
-                # =====================================
-                # LIMITE GEMINI
-                # =====================================
 
                 if source.lower() == "brab":
 
