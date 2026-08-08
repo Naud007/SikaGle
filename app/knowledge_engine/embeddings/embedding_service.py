@@ -36,6 +36,10 @@ class GeminiEmbeddingService:
             or settings.EMBEDDING_DIMENSION
         )
 
+    # =========================================================
+    # EMBEDDING DOCUMENT UNIQUE
+    # =========================================================
+
     def generate_document_embedding(
         self,
         text: str,
@@ -60,7 +64,90 @@ class GeminiEmbeddingService:
             )
         )
 
+        if (
+            not result.embeddings
+            or not result.embeddings[0].values
+        ):
+
+            raise ValueError(
+                "Aucun embedding document généré."
+            )
+
         return result.embeddings[0].values
+
+    # =========================================================
+    # EMBEDDING DOCUMENTS EN BATCH
+    # =========================================================
+
+    def generate_document_embeddings(
+        self,
+        texts: list[str],
+    ) -> list[list[float]]:
+
+        if not texts:
+
+            return []
+
+        for text in texts:
+
+            if not text or not text.strip():
+
+                raise ValueError(
+                    "Un des textes à encoder est vide."
+                )
+
+        result = (
+            self.client.models.embed_content(
+
+                model=self.model,
+
+                contents=texts,
+
+                config=types.EmbedContentConfig(
+
+                    task_type="RETRIEVAL_DOCUMENT",
+
+                    output_dimensionality=(
+                        self.output_dimensionality
+                    ),
+
+                ),
+            )
+        )
+
+        if not result.embeddings:
+
+            raise ValueError(
+                "Aucun embedding document généré."
+            )
+
+        embeddings = []
+
+        for embedding in result.embeddings:
+
+            if not embedding.values:
+
+                raise ValueError(
+                    "Un embedding document est vide."
+                )
+
+            embeddings.append(
+                embedding.values
+            )
+
+        if len(embeddings) != len(texts):
+
+            raise ValueError(
+                "Le nombre d'embeddings reçus "
+                "ne correspond pas au nombre "
+                "de textes envoyés."
+            )
+
+        return embeddings
+
+    # =========================================================
+    # EMBEDDING REQUÊTE
+    # =========================================================
 
     def generate_query_embedding(
         self,
@@ -86,4 +173,20 @@ class GeminiEmbeddingService:
             )
         )
 
+        if (
+            not result.embeddings
+            or not result.embeddings[0].values
+        ):
+
+            raise ValueError(
+                "Aucun embedding de requête généré."
+            )
+
         return result.embeddings[0].values
+
+
+# =========================================================
+# COMPATIBILITÉ ANCIENNE VERSION
+# =========================================================
+
+GeminiEmbedding = GeminiEmbeddingService
