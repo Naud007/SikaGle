@@ -116,15 +116,12 @@ class KnowledgeIndexer:
         # EMBEDDINGS
         # =====================================
 
-        embeddings = []
-
-        for chunk in chunks:
-
-            embeddings.append(
-                self.embedding_service.generate_document_embedding(
-                    chunk
-                )
+        embeddings = (
+            self.embedding_service
+            .generate_document_embeddings(
+                chunks
             )
+        )
 
         # =====================================
         # VECTOR STORE
