@@ -24,6 +24,11 @@ class OAINormalizer:
     ) -> DocumentMetadata:
 
         metadata = record.metadata
+        
+        print(
+            "OAI IDENTIFIERS =",
+            record.raw_identifiers,
+        )
 
         def first(name: str) -> str | None:
 
