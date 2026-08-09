@@ -10,7 +10,7 @@ class ChromaStore:
     Gestionnaire de la base vectorielle ChromaDB.
     """
 
-    COLLECTION_NAME = "knowledge"
+    COLLECTION_NAME = "knowledge_local"
 
     def __init__(self):
 

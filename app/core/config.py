@@ -52,14 +52,18 @@ class Settings:
             "gemini-2.5-flash",
         )
 
-        self.GEMINI_EMBEDDING_MODEL = EnvironmentLoader.get(
-            "GEMINI_EMBEDDING_MODEL",
-            "gemini-embedding-001",
+        # =====================================================
+        # EMBEDDINGS LOCAUX
+        # =====================================================
+
+        self.EMBEDDING_MODEL = EnvironmentLoader.get(
+            "EMBEDDING_MODEL",
+            "intfloat/multilingual-e5-small",
         )
 
         self.EMBEDDING_DIMENSION = EnvironmentLoader.get_int(
             "EMBEDDING_DIMENSION",
-            1536,
+            384,
         )
 
         # =====================================================
@@ -69,6 +73,11 @@ class Settings:
         self.CHROMA_PATH = EnvironmentLoader.get(
             "CHROMA_PATH",
             "data/chroma",
+        )
+
+        self.CHROMA_COLLECTION_NAME = EnvironmentLoader.get(
+            "CHROMA_COLLECTION_NAME",
+            "knowledge_local",
         )
 
         # =====================================================

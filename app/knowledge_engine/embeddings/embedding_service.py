@@ -1,71 +1,37 @@
-from time import sleep, monotonic
-
-from google import genai
-from google.genai import types
+from fastembed import TextEmbedding
 
 from app.core import settings
 
 
-class GeminiEmbeddingService:
+class LocalEmbeddingService:
     """
-    Service de génération d'embeddings avec Gemini.
-    """
+    Service local de génération d'embeddings.
 
-    MAX_BATCH_SIZE = 100
-    MIN_REQUEST_INTERVAL = 1.1
+    Utilise FastEmbed + ONNX Runtime.
+    Modèle multilingue :
+    intfloat/multilingual-e5-small
+
+    Dimension :
+    384
+    """
 
     def __init__(
         self,
         model=None,
-        output_dimensionality=None,
     ):
 
-        api_key = settings.GEMINI_API_KEY
-
-        if not api_key:
-            raise ValueError(
-                "GEMINI_API_KEY n'est pas configurée."
-            )
-
-        self.client = genai.Client(
-            api_key=api_key
-        )
-
-        self.model = (
+        self.model_name = (
             model
-            or settings.GEMINI_EMBEDDING_MODEL
+            or settings.EMBEDDING_MODEL
         )
 
         self.output_dimensionality = (
-            output_dimensionality
-            or settings.EMBEDDING_DIMENSION
+            settings.EMBEDDING_DIMENSION
         )
 
-        self._last_request_time = 0.0
-
-    # =========================================================
-    # LIMITATION DU RYTHME DES REQUÊTES
-    # =========================================================
-
-    def _wait_before_request(self):
-        """
-        Limite le rythme des appels Gemini.
-        """
-
-        elapsed = (
-            monotonic()
-            - self._last_request_time
+        self.client = TextEmbedding(
+            model_name=self.model_name
         )
-
-        remaining = (
-            self.MIN_REQUEST_INTERVAL
-            - elapsed
-        )
-
-        if remaining > 0:
-            sleep(remaining)
-
-        self._last_request_time = monotonic()
 
     # =========================================================
     # EMBEDDING DOCUMENT UNIQUE
@@ -82,34 +48,36 @@ class GeminiEmbeddingService:
                 "Le texte à encoder est vide."
             )
 
-        self._wait_before_request()
-
-        result = (
-            self.client.models.embed_content(
-                model=self.model,
-                contents=text,
-                config=types.EmbedContentConfig(
-                    task_type="RETRIEVAL_DOCUMENT",
-                    output_dimensionality=(
-                        self.output_dimensionality
-                    ),
-                ),
+        embeddings = list(
+            self.client.passage_embed(
+                [text.strip()]
             )
         )
 
-        if (
-            not result.embeddings
-            or not result.embeddings[0].values
-        ):
+        if not embeddings:
 
             raise ValueError(
                 "Aucun embedding document généré."
             )
 
-        return result.embeddings[0].values
+        vector = embeddings[0]
+
+        values = vector.tolist()
+
+        if len(values) != (
+            self.output_dimensionality
+        ):
+
+            raise ValueError(
+                "Dimension d'embedding inattendue : "
+                f"{len(values)} au lieu de "
+                f"{self.output_dimensionality}."
+            )
+
+        return values
 
     # =========================================================
-    # EMBEDDINGS DOCUMENTS EN BATCH
+    # EMBEDDINGS DOCUMENTS
     # =========================================================
 
     def generate_document_embeddings(
@@ -117,17 +85,17 @@ class GeminiEmbeddingService:
         texts: list[str],
     ) -> list[list[float]]:
         """
-        Génère les embeddings de plusieurs textes.
+        Génère les embeddings de plusieurs documents
+        localement.
 
-        Gemini accepte au maximum 100 textes
-        par requête. Les textes sont donc découpés
-        automatiquement en batches de 100 maximum.
+        Aucun appel Gemini n'est effectué.
         """
 
         if not texts:
 
             raise ValueError(
-                "La liste des textes à encoder est vide."
+                "La liste des textes à encoder "
+                "est vide."
             )
 
         cleaned_texts = []
@@ -137,95 +105,19 @@ class GeminiEmbeddingService:
             if not text or not text.strip():
 
                 raise ValueError(
-                    "Un des textes à encoder est vide."
+                    "Un des textes à encoder "
+                    "est vide."
                 )
 
             cleaned_texts.append(
                 text.strip()
             )
 
-        embeddings = []
-
-        for start in range(
-            0,
-            len(cleaned_texts),
-            self.MAX_BATCH_SIZE,
-        ):
-
-            batch = cleaned_texts[
-                start:
-                start + self.MAX_BATCH_SIZE
-            ]
-
-            self._wait_before_request()
-
-            try:
-
-                result = (
-                    self.client.models.embed_content(
-                        model=self.model,
-                        contents=batch,
-                        config=types.EmbedContentConfig(
-                            task_type="RETRIEVAL_DOCUMENT",
-                            output_dimensionality=(
-                                self.output_dimensionality
-                            ),
-                        ),
-                    )
-                )
-
-            except Exception as exc:
-
-                error_message = str(exc)
-
-                if (
-                    "429" in error_message
-                    or "RESOURCE_EXHAUSTED"
-                    in error_message
-                ):
-
-                    sleep(60)
-
-                    self._wait_before_request()
-
-                    result = (
-                        self.client.models.embed_content(
-                            model=self.model,
-                            contents=batch,
-                            config=(
-                                types.EmbedContentConfig(
-                                    task_type=(
-                                        "RETRIEVAL_DOCUMENT"
-                                    ),
-                                    output_dimensionality=(
-                                        self.output_dimensionality
-                                    ),
-                                )
-                            ),
-                        )
-                    )
-
-                else:
-
-                    raise
-
-            if not result.embeddings:
-
-                raise ValueError(
-                    "Aucun embedding document généré."
-                )
-
-            for embedding in result.embeddings:
-
-                if not embedding.values:
-
-                    raise ValueError(
-                        "Un embedding vide a été généré."
-                    )
-
-                embeddings.append(
-                    embedding.values
-                )
+        embeddings = list(
+            self.client.passage_embed(
+                cleaned_texts
+            )
+        )
 
         if len(embeddings) != len(
             cleaned_texts
@@ -233,10 +125,30 @@ class GeminiEmbeddingService:
 
             raise ValueError(
                 "Le nombre d'embeddings générés "
-                "ne correspond pas au nombre de textes."
+                "ne correspond pas au nombre "
+                "de textes."
             )
 
-        return embeddings
+        result = []
+
+        for embedding in embeddings:
+
+            values = embedding.tolist()
+
+            if len(values) != (
+                self.output_dimensionality
+            ):
+
+                raise ValueError(
+                    "Dimension d'embedding "
+                    "inattendue : "
+                    f"{len(values)} au lieu de "
+                    f"{self.output_dimensionality}."
+                )
+
+            result.append(values)
+
+        return result
 
     # =========================================================
     # EMBEDDING REQUÊTE
@@ -253,31 +165,35 @@ class GeminiEmbeddingService:
                 "La requête à encoder est vide."
             )
 
-        self._wait_before_request()
-
-        result = (
-            self.client.models.embed_content(
-                model=self.model,
-                contents=text,
-                config=types.EmbedContentConfig(
-                    task_type="RETRIEVAL_QUERY",
-                    output_dimensionality=(
-                        self.output_dimensionality
-                    ),
-                ),
+        embeddings = list(
+            self.client.query_embed(
+                [text.strip()]
             )
         )
 
-        if (
-            not result.embeddings
-            or not result.embeddings[0].values
+        if not embeddings:
+
+            raise ValueError(
+                "Aucun embedding de requête "
+                "généré."
+            )
+
+        vector = embeddings[0]
+
+        values = vector.tolist()
+
+        if len(values) != (
+            self.output_dimensionality
         ):
 
             raise ValueError(
-                "Aucun embedding de requête généré."
+                "Dimension d'embedding "
+                "inattendue : "
+                f"{len(values)} au lieu de "
+                f"{self.output_dimensionality}."
             )
 
-        return result.embeddings[0].values
+        return values
 
 
 # =========================================================
@@ -289,7 +205,7 @@ def test_embedding():
     try:
 
         embedding_service = (
-            GeminiEmbeddingService()
+            LocalEmbeddingService()
         )
 
         vector = (
@@ -305,7 +221,7 @@ def test_embedding():
             "status": "success",
 
             "model":
-                embedding_service.model,
+                embedding_service.model_name,
 
             "dimension":
                 len(vector),
@@ -329,7 +245,13 @@ def test_embedding():
 
 
 # =========================================================
-# COMPATIBILITÉ ANCIENNE VERSION
+# COMPATIBILITÉ AVEC LE RESTE DU PROJET
 # =========================================================
 
-GeminiEmbedding = GeminiEmbeddingService
+GeminiEmbeddingService = (
+    LocalEmbeddingService
+)
+
+GeminiEmbedding = (
+    LocalEmbeddingService
+)
