@@ -58,7 +58,7 @@ class Settings:
 
         self.EMBEDDING_MODEL = EnvironmentLoader.get(
             "EMBEDDING_MODEL",
-            "intfloat/multilingual-e5-small",
+            "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         )
 
         self.EMBEDDING_DIMENSION = EnvironmentLoader.get_int(
