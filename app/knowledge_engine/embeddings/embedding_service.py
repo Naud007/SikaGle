@@ -9,10 +9,13 @@ from app.core import settings
 class GeminiEmbeddingService:
     """
     Service de génération d'embeddings avec Gemini.
+
+    Respecte le quota gratuit Gemini :
+    maximum volontaire de 80 contenus par minute.
     """
 
-    MAX_BATCH_SIZE = 100
-    MIN_REQUEST_INTERVAL = 1.1
+    MAX_BATCH_SIZE = 50
+    MAX_ITEMS_PER_MINUTE = 80
 
     def __init__(
         self,
@@ -41,28 +44,71 @@ class GeminiEmbeddingService:
             or settings.EMBEDDING_DIMENSION
         )
 
-        self._last_request_time = 0.0
+        self._window_started = monotonic()
+        self._items_in_window = 0
 
     # =========================================================
-    # LIMITATION DU RYTHME
+    # GESTION DU QUOTA
     # =========================================================
 
-    def _wait_before_request(self):
+    def _wait_for_quota(
+        self,
+        item_count: int,
+    ) -> None:
+        """
+        Garantit que nous ne dépassons pas
+        volontairement 80 contenus par minute.
+        """
+
+        if item_count > self.MAX_ITEMS_PER_MINUTE:
+
+            raise ValueError(
+                "Le nombre de contenus demandé "
+                "dépasse la limite interne."
+            )
+
+        now = monotonic()
 
         elapsed = (
-            monotonic()
-            - self._last_request_time
+            now
+            - self._window_started
         )
 
-        remaining = (
-            self.MIN_REQUEST_INTERVAL
-            - elapsed
-        )
+        # Nouvelle fenêtre après une minute
+        if elapsed >= 60:
 
-        if remaining > 0:
-            sleep(remaining)
+            self._window_started = now
+            self._items_in_window = 0
 
-        self._last_request_time = monotonic()
+        # Vérifie si le prochain lot dépasse
+        # notre limite interne
+        if (
+            self._items_in_window
+            + item_count
+            > self.MAX_ITEMS_PER_MINUTE
+        ):
+
+            remaining = (
+                60
+                - (
+                    monotonic()
+                    - self._window_started
+                )
+            )
+
+            if remaining > 0:
+
+                sleep(
+                    remaining + 1
+                )
+
+            self._window_started = (
+                monotonic()
+            )
+
+            self._items_in_window = 0
+
+        self._items_in_window += item_count
 
     # =========================================================
     # EMBEDDING DOCUMENT UNIQUE
@@ -79,7 +125,7 @@ class GeminiEmbeddingService:
                 "Le texte à encoder est vide."
             )
 
-        self._wait_before_request()
+        self._wait_for_quota(1)
 
         result = (
             self.client.models.embed_content(
@@ -113,6 +159,16 @@ class GeminiEmbeddingService:
         self,
         texts: list[str],
     ) -> list[list[float]]:
+        """
+        Génère les embeddings de plusieurs textes
+        en respectant le quota Gemini.
+
+        Maximum :
+        50 contenus par requête.
+
+        Maximum volontaire :
+        80 contenus par minute.
+        """
 
         if not texts:
 
@@ -147,7 +203,17 @@ class GeminiEmbeddingService:
                 start + self.MAX_BATCH_SIZE
             ]
 
-            self._wait_before_request()
+            # =============================================
+            # QUOTA
+            # =============================================
+
+            self._wait_for_quota(
+                len(batch)
+            )
+
+            # =============================================
+            # GEMINI
+            # =============================================
 
             result = (
                 self.client.models.embed_content(
@@ -173,12 +239,17 @@ class GeminiEmbeddingService:
                 if not embedding.values:
 
                     raise ValueError(
-                        "Un embedding vide a été généré."
+                        "Un embedding vide "
+                        "a été généré."
                     )
 
                 embeddings.append(
                     embedding.values
                 )
+
+        # =============================================
+        # VÉRIFICATION
+        # =============================================
 
         if len(embeddings) != len(
             cleaned_texts
@@ -186,7 +257,8 @@ class GeminiEmbeddingService:
 
             raise ValueError(
                 "Le nombre d'embeddings générés "
-                "ne correspond pas au nombre de textes."
+                "ne correspond pas au nombre "
+                "de textes."
             )
 
         return embeddings
@@ -206,7 +278,7 @@ class GeminiEmbeddingService:
                 "La requête à encoder est vide."
             )
 
-        self._wait_before_request()
+        self._wait_for_quota(1)
 
         result = (
             self.client.models.embed_content(
@@ -248,7 +320,8 @@ def test_embedding():
         vector = (
             embedding_service
             .generate_document_embedding(
-                "Comment cultiver le maïs au Bénin ?"
+                "Comment cultiver "
+                "le maïs au Bénin ?"
             )
         )
 
