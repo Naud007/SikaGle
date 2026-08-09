@@ -1,6 +1,4 @@
-from app.knowledge_engine.connectors.registry import (
-    registry,
-)
+from app.knowledge_engine.connectors.registry import registry
 from app.knowledge_engine.ingestion.global_ingestion_report import (
     GlobalIngestionReport,
 )
@@ -24,7 +22,7 @@ class IngestionManager:
     def ingest_source(
         self,
         source: str,
-        limit: int = 5,
+        limit: int | None = 5,
         offset: int = 0,
     ) -> IngestionJob:
 
@@ -61,7 +59,9 @@ class IngestionManager:
         for source in registry.names():
 
             job = self.ingest_source(
-                source
+                source=source,
+                limit=None,
+                offset=0,
             )
 
             report.jobs.append(

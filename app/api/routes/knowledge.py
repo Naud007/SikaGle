@@ -41,6 +41,10 @@ class DebugRequest(BaseModel):
     )
 
 
+# ==========================================================
+# CHROMA
+# ==========================================================
+
 @router.get("/chroma-debug")
 def chroma_debug():
 
@@ -79,7 +83,7 @@ def count_documents():
 
 
 # ==========================================================
-# INGESTION
+# SOURCES
 # ==========================================================
 
 @router.get("/sources")
@@ -89,6 +93,10 @@ def available_sources():
         "sources": service.available_sources()
     }
 
+
+# ==========================================================
+# INGESTION
+# ==========================================================
 
 @router.post("/ingest/all")
 def ingest_all():
@@ -110,13 +118,20 @@ def ingest_all():
 @router.post("/ingest/{source}")
 def ingest_source(
     source: str,
+    all: bool = Query(
+        default=False,
+        description=(
+            "Traiter automatiquement tous les "
+            "documents disponibles."
+        ),
+    ),
     limit: int = Query(
         default=5,
         ge=1,
         le=20,
         description=(
             "Nombre de documents à traiter "
-            "dans ce batch."
+            "dans ce batch lorsque all=false."
         ),
     ),
     offset: int = Query(
@@ -124,7 +139,7 @@ def ingest_source(
         ge=0,
         description=(
             "Position du premier document "
-            "à traiter."
+            "à traiter lorsque all=false."
         ),
     ),
 ):
@@ -145,8 +160,8 @@ def ingest_source(
 
         job = service.ingest_source(
             source=source,
-            limit=limit,
-            offset=offset,
+            limit=None if all else limit,
+            offset=0 if all else offset,
         )
 
         return job.to_dict()

@@ -1,4 +1,4 @@
-from time import perf_counter, sleep
+from time import perf_counter
 
 from app.knowledge_engine.connectors.registry import (
     registry,
@@ -33,11 +33,11 @@ class SourceIngestor:
     def ingest(
         self,
         source: str,
-        limit: int = 5,
+        limit: int | None = 5,
         offset: int = 0,
     ) -> IngestionReport:
 
-        if limit <= 0:
+        if limit is not None and limit <= 0:
 
             raise ValueError(
                 "limit doit être supérieur à 0."
@@ -55,7 +55,9 @@ class SourceIngestor:
 
         started = perf_counter()
 
-        connector = registry.get(source)
+        connector = registry.get(
+            source
+        )
 
         all_documents = connector.discover()
 
@@ -63,10 +65,22 @@ class SourceIngestor:
             all_documents
         )
 
-        documents = all_documents[
-            offset:
-            offset + limit
-        ]
+        # =====================================================
+        # SÉLECTION DES DOCUMENTS
+        # =====================================================
+
+        if limit is None:
+
+            documents = all_documents[
+                offset:
+            ]
+
+        else:
+
+            documents = all_documents[
+                offset:
+                offset + limit
+            ]
 
         report.documents_found = len(
             documents
@@ -85,25 +99,42 @@ class SourceIngestor:
             f"[INGESTION] Offset : {offset}"
         )
 
-        print(
-            f"[INGESTION] Limite : {limit}"
-        )
+        if limit is None:
+
+            print(
+                "[INGESTION] Mode : TOUS LES DOCUMENTS"
+            )
+
+        else:
+
+            print(
+                f"[INGESTION] Limite : {limit}"
+            )
 
         print(
             f"[INGESTION] Batch : "
             f"{len(documents)}"
         )
 
+        # =====================================================
+        # TRAITEMENT
+        # =====================================================
+
         for document in documents:
 
             try:
+
+                # =============================================
+                # PDF DISPONIBLE ?
+                # =============================================
 
                 if not document.attachments:
 
                     report.skipped += 1
 
                     report.add_warning(
-                        f"{document.title} : aucun PDF disponible."
+                        f"{document.title} : "
+                        "aucun PDF disponible."
                     )
 
                     continue
@@ -117,12 +148,20 @@ class SourceIngestor:
                     attachment.url,
                 )
 
+                # =============================================
+                # CHEMIN LOCAL
+                # =============================================
+
                 pdf_path = (
                     self.paths.pdf_path(
                         source=document.source,
                         filename=attachment.filename,
                     )
                 )
+
+                # =============================================
+                # TÉLÉCHARGEMENT
+                # =============================================
 
                 if not pdf_path.exists():
 
@@ -138,18 +177,18 @@ class SourceIngestor:
                 else:
 
                     report.add_warning(
-                        f"{attachment.filename} déjà présent sur le disque."
+                        f"{attachment.filename} "
+                        "déjà présent sur le disque."
                     )
 
-                force_reindex = (
-                    source.lower() == "brab"
-                )
+                # =============================================
+                # INDEXATION
+                # =============================================
 
                 result = (
                     self.indexer.index_pdf(
                         pdf_path=pdf_path,
                         metadata=document.model_dump(),
-                        force=force_reindex,
                     )
                 )
 
@@ -176,6 +215,10 @@ class SourceIngestor:
 
                     report.skipped += 1
 
+                # =============================================
+                # ERREURS
+                # =============================================
+
                 for error in result.get(
                     "errors",
                     [],
@@ -184,6 +227,10 @@ class SourceIngestor:
                     report.add_error(
                         error
                     )
+
+                # =============================================
+                # AVERTISSEMENTS
+                # =============================================
 
                 for warning in result.get(
                     "warnings",
@@ -194,10 +241,6 @@ class SourceIngestor:
                         warning
                     )
 
-                if source.lower() == "brab":
-
-                    sleep(1)
-
             except Exception as exc:
 
                 report.failed += 1
@@ -205,6 +248,10 @@ class SourceIngestor:
                 report.add_error(
                     f"{document.title} : {exc}"
                 )
+
+        # =====================================================
+        # DURÉE
+        # =====================================================
 
         report.duration_seconds = (
             perf_counter()

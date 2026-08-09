@@ -105,7 +105,7 @@ class KnowledgeService:
     def ingest_source(
         self,
         source: str,
-        limit: int = 5,
+        limit: int | None = 5,
         offset: int = 0,
     ):
 
