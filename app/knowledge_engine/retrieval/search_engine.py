@@ -29,9 +29,9 @@ class SearchEngine:
 
         merged: dict[str, SearchResult] = {}
 
-        #
-        # Résultats vectoriels
-        #
+        # =====================================================
+        # RÉSULTATS VECTORIELS
+        # =====================================================
 
         for result in vector_results:
 
@@ -39,9 +39,9 @@ class SearchEngine:
                 self._key(result)
             ] = result
 
-        #
-        # Résultats keyword
-        #
+        # =====================================================
+        # RÉSULTATS KEYWORD
+        # =====================================================
 
         for result in keyword_results:
 
@@ -49,9 +49,15 @@ class SearchEngine:
 
             if key in merged:
 
-                merged[
-                    key
-                ].keyword_score = (
+                # Le résultat vectoriel possède généralement
+                # les métadonnées les plus complètes.
+                #
+                # On conserve donc le résultat vectoriel
+                # et on lui ajoute uniquement le score lexical.
+
+                merged_result = merged[key]
+
+                merged_result.keyword_score = (
                     result.keyword_score
                 )
 
@@ -63,26 +69,26 @@ class SearchEngine:
             merged.values()
         )
 
-        #
-        # Filtres
-        #
+        # =====================================================
+        # FILTRES
+        # =====================================================
 
         results = self.apply_filters(
             results,
             query,
         )
 
-        #
-        # Re-ranking
-        #
+        # =====================================================
+        # RE-RANKING
+        # =====================================================
 
         results = self.rerank(
             results
         )
 
-        #
-        # Tri
-        #
+        # =====================================================
+        # TRI
+        # =====================================================
 
         results.sort(
             key=lambda r: r.score,
@@ -107,9 +113,9 @@ class SearchEngine:
                 result.metadata or {}
             )
 
-            #
-            # Source
-            #
+            # =================================================
+            # SOURCE
+            # =================================================
 
             if query.source:
 
@@ -129,9 +135,9 @@ class SearchEngine:
 
                     continue
 
-            #
-            # Langue
-            #
+            # =================================================
+            # LANGUE
+            # =================================================
 
             if query.language:
 
@@ -151,9 +157,9 @@ class SearchEngine:
 
                     continue
 
-            #
-            # Type
-            #
+            # =================================================
+            # TYPE
+            # =================================================
 
             if query.publication_type:
 
@@ -173,9 +179,9 @@ class SearchEngine:
 
                     continue
 
-            #
-            # Année
-            #
+            # =================================================
+            # ANNÉE
+            # =================================================
 
             if (
                 query.publication_year
@@ -233,9 +239,6 @@ class SearchEngine:
     ) -> float:
         """
         Calcule le score final d'un document.
-
-        Ce score pourra évoluer dans les prochains
-        sprints sans modifier les retrievers.
         """
 
         metadata = (
@@ -244,25 +247,25 @@ class SearchEngine:
 
         score = 0.0
 
-        #
-        # Similarité vectorielle
-        #
+        # =================================================
+        # SIMILARITÉ VECTORIELLE
+        # =================================================
 
         score += (
             result.vector_score * 10
         )
 
-        #
-        # Recherche lexicale
-        #
+        # =================================================
+        # RECHERCHE LEXICALE
+        # =================================================
 
         score += (
             result.keyword_score * 2
         )
 
-        #
-        # Bonus langue
-        #
+        # =================================================
+        # BONUS LANGUE
+        # =================================================
 
         language = str(
 
@@ -277,9 +280,9 @@ class SearchEngine:
 
             score += 1
 
-        #
-        # Bonus récence
-        #
+        # =================================================
+        # BONUS RÉCENCE
+        # =================================================
 
         try:
 
@@ -315,11 +318,17 @@ class SearchEngine:
 
             pass
 
+        # =================================================
+        # DÉTAILS DE CLASSEMENT
+        # =================================================
+
         result.ranking_details = {
 
-            "vector_score": result.vector_score,
+            "vector_score":
+                result.vector_score,
 
-            "keyword_score": result.keyword_score,
+            "keyword_score":
+                result.keyword_score,
 
             "language_bonus": (
                 1
@@ -327,7 +336,8 @@ class SearchEngine:
                 else 0
             ),
 
-            "final_score": score,
+            "final_score":
+                score,
 
         }
 
@@ -342,20 +352,43 @@ class SearchEngine:
             result.metadata or {}
         )
 
-        return str(
+        # =================================================
+        # IDENTIFIANT DOCUMENT
+        # =================================================
+        #
+        # Chroma ajoute toujours "document"
+        # lors de l'indexation.
+        #
+        # On privilégie donc "document" afin que
+        # VectorRetriever et KeywordRetriever utilisent
+        # exactement la même clé.
 
-            metadata.get(
+        document_id = metadata.get(
+            "document"
+        )
 
-                "identifier",
+        if document_id:
 
-                metadata.get(
-
-                    "document",
-
-                    result.document[:80],
-
-                ),
-
+            return str(
+                document_id
             )
 
+        # =================================================
+        # IDENTIFIER
+        # =================================================
+
+        identifier = metadata.get(
+            "identifier"
         )
+
+        if identifier:
+
+            return str(
+                identifier
+            )
+
+        # =================================================
+        # DERNIER RECOURS
+        # =================================================
+
+        return result.document[:80]

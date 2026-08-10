@@ -1,5 +1,8 @@
 from pathlib import Path
 
+from app.knowledge_engine.repositories import (
+    KnowledgeRepository,
+)
 from app.knowledge_engine.retrieval.search_query import (
     SearchQuery,
 )
@@ -10,11 +13,12 @@ from app.knowledge_engine.retrieval.search_result import (
 
 class KeywordRetriever:
     """
-    Recherche lexicale simple basée sur les fichiers texte extraits
-    des documents PDF.
+    Recherche lexicale simple basée sur les fichiers texte
+    extraits des documents PDF.
 
-    Cette implémentation est volontairement simple et servira de base
-    avant l'introduction d'un véritable moteur BM25.
+    Les métadonnées complètes sont récupérées depuis
+    le KnowledgeRepository afin de rester cohérent
+    avec la recherche vectorielle.
     """
 
     def __init__(
@@ -27,12 +31,17 @@ class KeywordRetriever:
             or Path("data/texts")
         )
 
+        self.repository = (
+            KnowledgeRepository()
+        )
+
     def search(
         self,
         query: SearchQuery,
     ) -> list[SearchResult]:
         """
-        Recherche les documents contenant les mots de la question.
+        Recherche les documents contenant les mots
+        de la question.
         """
 
         if not self.text_directory.exists():
@@ -71,17 +80,59 @@ class KeywordRetriever:
 
                 continue
 
+            # =================================================
+            # RÉCUPÉRATION DES MÉTADONNÉES
+            # =================================================
+
+            metadata = {
+                "document": txt_file.stem,
+            }
+
+            try:
+
+                stored_document = (
+                    self.repository.get_document(
+                        txt_file.stem
+                    )
+                )
+
+                stored_metadatas = (
+                    stored_document.get(
+                        "metadatas",
+                        [],
+                    )
+                    or []
+                )
+
+                if stored_metadatas:
+
+                    stored_metadata = (
+                        stored_metadatas[0]
+                        or {}
+                    )
+
+                    metadata.update(
+                        stored_metadata
+                    )
+
+            except Exception:
+
+                # Le résultat lexical reste utilisable
+                # même si les métadonnées ne peuvent
+                # pas être récupérées.
+                pass
+
+            # =================================================
+            # RÉSULTAT
+            # =================================================
+
             results.append(
 
                 SearchResult(
 
                     document=text[:700],
 
-                    metadata={
-
-                        "document": txt_file.stem,
-
-                    },
+                    metadata=metadata,
 
                     keyword_score=float(
                         score
@@ -92,13 +143,15 @@ class KeywordRetriever:
                     ),
 
                     source="keyword",
+
                 )
 
             )
 
         results.sort(
 
-            key=lambda r: r.keyword_score,
+            key=lambda r:
+                r.keyword_score,
 
             reverse=True,
 
