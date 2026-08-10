@@ -20,6 +20,10 @@ class SearchEngine:
         - classement final
     """
 
+    # =========================================================
+    # FUSION DES RÉSULTATS
+    # =========================================================
+
     def merge(
         self,
         vector_results: list[SearchResult],
@@ -49,15 +53,7 @@ class SearchEngine:
 
             if key in merged:
 
-                # Le résultat vectoriel possède généralement
-                # les métadonnées les plus complètes.
-                #
-                # On conserve donc le résultat vectoriel
-                # et on lui ajoute uniquement le score lexical.
-
-                merged_result = merged[key]
-
-                merged_result.keyword_score = (
+                merged[key].keyword_score = (
                     result.keyword_score
                 )
 
@@ -96,8 +92,12 @@ class SearchEngine:
         )
 
         return results[
-            : query.top_k
+            :query.top_k
         ]
+
+    # =========================================================
+    # FILTRES
+    # =========================================================
 
     def apply_filters(
         self,
@@ -120,12 +120,10 @@ class SearchEngine:
             if query.source:
 
                 source = str(
-
                     metadata.get(
                         "source",
                         "",
                     )
-
                 )
 
                 if (
@@ -142,12 +140,10 @@ class SearchEngine:
             if query.language:
 
                 language = str(
-
                     metadata.get(
                         "language",
                         "",
                     )
-
                 )
 
                 if (
@@ -158,18 +154,19 @@ class SearchEngine:
                     continue
 
             # =================================================
-            # TYPE
+            # TYPE DOCUMENT
             # =================================================
 
             if query.publication_type:
 
                 publication_type = str(
-
                     metadata.get(
                         "publication_type",
-                        "",
+                        metadata.get(
+                            "document_type",
+                            "",
+                        ),
                     )
-
                 )
 
                 if (
@@ -191,11 +188,12 @@ class SearchEngine:
                 try:
 
                     year = int(
-
                         metadata.get(
-                            "publication_year"
+                            "publication_year",
+                            metadata.get(
+                                "published_at"
+                            ),
                         )
-
                     )
 
                 except Exception:
@@ -215,6 +213,10 @@ class SearchEngine:
 
         return filtered
 
+    # =========================================================
+    # RE-RANKING
+    # =========================================================
+
     def rerank(
         self,
         results: list[SearchResult],
@@ -233,12 +235,16 @@ class SearchEngine:
 
         return results
 
+    # =========================================================
+    # SCORE FINAL
+    # =========================================================
+
     def compute_score(
         self,
         result: SearchResult,
     ) -> float:
         """
-        Calcule le score final d'un document.
+        Calcule le score final d'un document/chunk.
         """
 
         metadata = (
@@ -247,51 +253,65 @@ class SearchEngine:
 
         score = 0.0
 
-        # =================================================
+        # =====================================================
         # SIMILARITÉ VECTORIELLE
-        # =================================================
+        # =====================================================
 
         score += (
             result.vector_score * 10
         )
 
-        # =================================================
+        # =====================================================
         # RECHERCHE LEXICALE
-        # =================================================
+        # =====================================================
 
         score += (
             result.keyword_score * 2
         )
 
-        # =================================================
-        # BONUS LANGUE
-        # =================================================
+        # =====================================================
+        # BONUS LANGUE FRANÇAISE
+        # =====================================================
 
         language = str(
-
             metadata.get(
                 "language",
                 "",
             )
-
         ).lower()
 
         if language == "fr":
 
             score += 1
 
-        # =================================================
+        # =====================================================
         # BONUS RÉCENCE
-        # =================================================
+        # =====================================================
 
         try:
 
-            year = int(
-
+            publication_year = (
                 metadata.get(
                     "publication_year"
                 )
+            )
 
+            if publication_year is None:
+
+                published_at = metadata.get(
+                    "published_at"
+                )
+
+                if published_at:
+
+                    publication_year = (
+                        str(
+                            published_at
+                        )[:4]
+                    )
+
+            year = int(
+                publication_year
             )
 
             current_year = (
@@ -318,9 +338,9 @@ class SearchEngine:
 
             pass
 
-        # =================================================
-        # DÉTAILS DE CLASSEMENT
-        # =================================================
+        # =====================================================
+        # DÉTAILS DU CLASSEMENT
+        # =====================================================
 
         result.ranking_details = {
 
@@ -330,11 +350,12 @@ class SearchEngine:
             "keyword_score":
                 result.keyword_score,
 
-            "language_bonus": (
-                1
-                if language == "fr"
-                else 0
-            ),
+            "language_bonus":
+                (
+                    1
+                    if language == "fr"
+                    else 0
+                ),
 
             "final_score":
                 score,
@@ -343,52 +364,59 @@ class SearchEngine:
 
         return score
 
+    # =========================================================
+    # CLÉ UNIQUE D'UN CHUNK
+    # =========================================================
+
     @staticmethod
     def _key(
         result: SearchResult,
     ) -> str:
+        """
+        Génère une clé unique pour un chunk.
+
+        IMPORTANT :
+        Un même document peut contenir plusieurs chunks.
+        L'identifiant du document seul ne doit donc PAS
+        être utilisé comme clé.
+
+        La combinaison :
+
+            document + chunk_index
+
+        permet de conserver chaque chunk séparément.
+        """
 
         metadata = (
             result.metadata or {}
         )
 
-        # =================================================
-        # IDENTIFIANT DOCUMENT
-        # =================================================
-        #
-        # Chroma ajoute toujours "document"
-        # lors de l'indexation.
-        #
-        # On privilégie donc "document" afin que
-        # VectorRetriever et KeywordRetriever utilisent
-        # exactement la même clé.
-
-        document_id = metadata.get(
-            "document"
+        document_id = (
+            metadata.get(
+                "document"
+            )
+            or metadata.get(
+                "document_id"
+            )
+            or metadata.get(
+                "identifier"
+            )
+            or result.document[:80]
         )
 
-        if document_id:
-
-            return str(
-                document_id
+        chunk_index = (
+            metadata.get(
+                "chunk_index"
             )
-
-        # =================================================
-        # IDENTIFIER
-        # =================================================
-
-        identifier = metadata.get(
-            "identifier"
         )
 
-        if identifier:
+        if chunk_index is not None:
 
-            return str(
-                identifier
+            return (
+                f"{document_id}"
+                f"::chunk::{chunk_index}"
             )
 
-        # =================================================
-        # DERNIER RECOURS
-        # =================================================
-
-        return result.document[:80]
+        return str(
+            document_id
+        )
