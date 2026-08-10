@@ -61,7 +61,23 @@ class Settings:
             "EMBEDDING_DIMENSION",
             1536,
         )
+        # =====================================================
+        # Jina Embeddings
+        # =====================================================
 
+        self.JINA_API_KEY = EnvironmentLoader.get_required(
+            "JINA_API_KEY",
+        )
+
+        self.JINA_EMBEDDING_MODEL = EnvironmentLoader.get(
+            "JINA_EMBEDDING_MODEL",
+            "jina-embeddings-v3",
+        )
+
+        self.JINA_EMBEDDING_DIMENSION = EnvironmentLoader.get_int(
+            "JINA_EMBEDDING_DIMENSION",
+            1024,
+        )
         # =====================================================
         # ChromaDB
         # =====================================================

@@ -1,21 +1,25 @@
-from time import sleep, monotonic
-
-from google import genai
-from google.genai import types
+import requests
 
 from app.core import settings
 
 
-class GeminiEmbeddingService:
+class JinaEmbeddingService:
     """
-    Service de génération d'embeddings avec Gemini.
+    Service de génération d'embeddings avec Jina.
 
-    Respecte le quota gratuit Gemini :
-    maximum volontaire de 80 contenus par minute.
+    Jina est utilisé uniquement pour les embeddings.
+    Gemini reste utilisé pour la génération des réponses.
+
+    Documents :
+        retrieval.passage
+
+    Requêtes :
+        retrieval.query
     """
+
+    API_URL = "https://api.jina.ai/v1/embeddings"
 
     MAX_BATCH_SIZE = 50
-    MAX_ITEMS_PER_MINUTE = 80
 
     def __init__(
         self,
@@ -23,101 +27,134 @@ class GeminiEmbeddingService:
         output_dimensionality=None,
     ):
 
-        api_key = settings.GEMINI_API_KEY
+        api_key = settings.JINA_API_KEY
 
         if not api_key:
             raise ValueError(
-                "GEMINI_API_KEY n'est pas configurée."
+                "JINA_API_KEY n'est pas configurée."
             )
 
-        self.client = genai.Client(
-            api_key=api_key
-        )
+        self.api_key = api_key
 
         self.model = (
             model
-            or settings.GEMINI_EMBEDDING_MODEL
+            or settings.JINA_EMBEDDING_MODEL
         )
 
         self.output_dimensionality = (
             output_dimensionality
-            or settings.EMBEDDING_DIMENSION
+            or settings.JINA_EMBEDDING_DIMENSION
         )
 
-        self._window_started = monotonic()
-        self._items_in_window = 0
-
     # =========================================================
-    # GESTION DU QUOTA
+    # APPEL JINA
     # =========================================================
 
-    def _wait_for_quota(
+    def _embed(
         self,
-        item_count: int,
-    ) -> None:
+        texts: list[str],
+        task: str,
+    ) -> list[list[float]]:
         """
-        Garantit que nous ne dépassons pas
-        volontairement 80 contenus par minute.
+        Génère les embeddings Jina.
         """
 
-        if item_count > self.MAX_ITEMS_PER_MINUTE:
+        if not texts:
 
             raise ValueError(
-                "Le nombre de contenus demandé "
-                "dépasse la limite interne."
+                "Aucun texte à encoder."
             )
 
-        now = monotonic()
+        if len(texts) > self.MAX_BATCH_SIZE:
 
-        elapsed = (
-            now
-            - self._window_started
+            raise ValueError(
+                f"Maximum de "
+                f"{self.MAX_BATCH_SIZE} textes "
+                f"par requête."
+            )
+
+        response = requests.post(
+            self.API_URL,
+            headers={
+                "Authorization": (
+                    f"Bearer {self.api_key}"
+                ),
+                "Content-Type": (
+                    "application/json"
+                ),
+            },
+            json={
+                "model": self.model,
+                "input": texts,
+                "task": task,
+                "dimensions": (
+                    self.output_dimensionality
+                ),
+            },
+            timeout=120,
         )
 
-        # Nouvelle fenêtre après une minute
-        if elapsed >= 60:
+        if not response.ok:
 
-            self._window_started = now
-            self._items_in_window = 0
-
-        # Vérifie si le prochain lot dépasse
-        # notre limite interne
-        if (
-            self._items_in_window
-            + item_count
-            > self.MAX_ITEMS_PER_MINUTE
-        ):
-
-            remaining = (
-                60
-                - (
-                    monotonic()
-                    - self._window_started
-                )
+            raise RuntimeError(
+                "Erreur Jina Embeddings : "
+                f"{response.status_code} "
+                f"{response.text}"
             )
 
-            if remaining > 0:
+        data = response.json()
 
-                sleep(
-                    remaining + 1
-                )
+        embeddings = data.get(
+            "data",
+            [],
+        )
 
-            self._window_started = (
-                monotonic()
+        if not embeddings:
+
+            raise ValueError(
+                "Jina n'a retourné aucun embedding."
             )
 
-            self._items_in_window = 0
+        embeddings = sorted(
+            embeddings,
+            key=lambda item: item["index"],
+        )
 
-        self._items_in_window += item_count
+        vectors = [
+            item["embedding"]
+            for item in embeddings
+        ]
+
+        for vector in vectors:
+
+            if not vector:
+
+                raise ValueError(
+                    "Jina a retourné un "
+                    "embedding vide."
+                )
+
+            if len(vector) != (
+                self.output_dimensionality
+            ):
+
+                raise ValueError(
+                    "Dimension incorrecte : "
+                    f"{len(vector)} "
+                    "au lieu de "
+                    f"{self.output_dimensionality}."
+                )
+
+        return vectors
 
     # =========================================================
-    # EMBEDDING DOCUMENT UNIQUE
+    # DOCUMENT UNIQUE
     # =========================================================
 
     def generate_document_embedding(
         self,
         text: str,
-    ):
+    ) -> list[float]:
 
         if not text or not text.strip():
 
@@ -125,34 +162,15 @@ class GeminiEmbeddingService:
                 "Le texte à encoder est vide."
             )
 
-        self._wait_for_quota(1)
-
-        result = (
-            self.client.models.embed_content(
-                model=self.model,
-                contents=text.strip(),
-                config=types.EmbedContentConfig(
-                    task_type="RETRIEVAL_DOCUMENT",
-                    output_dimensionality=(
-                        self.output_dimensionality
-                    ),
-                ),
-            )
+        embeddings = self._embed(
+            texts=[text.strip()],
+            task="retrieval.passage",
         )
 
-        if (
-            not result.embeddings
-            or not result.embeddings[0].values
-        ):
-
-            raise ValueError(
-                "Aucun embedding document généré."
-            )
-
-        return result.embeddings[0].values
+        return embeddings[0]
 
     # =========================================================
-    # EMBEDDINGS DOCUMENTS EN BATCH
+    # DOCUMENTS EN BATCH
     # =========================================================
 
     def generate_document_embeddings(
@@ -160,20 +178,17 @@ class GeminiEmbeddingService:
         texts: list[str],
     ) -> list[list[float]]:
         """
-        Génère les embeddings de plusieurs textes
-        en respectant le quota Gemini.
+        Génère les embeddings de plusieurs documents.
 
-        Maximum :
-        50 contenus par requête.
-
-        Maximum volontaire :
-        80 contenus par minute.
+        Les textes sont automatiquement découpés
+        en lots de 50 maximum.
         """
 
         if not texts:
 
             raise ValueError(
-                "La liste des textes à encoder est vide."
+                "La liste des textes "
+                "à encoder est vide."
             )
 
         cleaned_texts = []
@@ -183,7 +198,8 @@ class GeminiEmbeddingService:
             if not text or not text.strip():
 
                 raise ValueError(
-                    "Un des textes à encoder est vide."
+                    "Un des textes à encoder "
+                    "est vide."
                 )
 
             cleaned_texts.append(
@@ -203,60 +219,21 @@ class GeminiEmbeddingService:
                 start + self.MAX_BATCH_SIZE
             ]
 
-            # =============================================
-            # QUOTA
-            # =============================================
-
-            self._wait_for_quota(
-                len(batch)
+            batch_embeddings = self._embed(
+                texts=batch,
+                task="retrieval.passage",
             )
 
-            # =============================================
-            # GEMINI
-            # =============================================
-
-            result = (
-                self.client.models.embed_content(
-                    model=self.model,
-                    contents=batch,
-                    config=types.EmbedContentConfig(
-                        task_type="RETRIEVAL_DOCUMENT",
-                        output_dimensionality=(
-                            self.output_dimensionality
-                        ),
-                    ),
-                )
+            embeddings.extend(
+                batch_embeddings
             )
-
-            if not result.embeddings:
-
-                raise ValueError(
-                    "Aucun embedding document généré."
-                )
-
-            for embedding in result.embeddings:
-
-                if not embedding.values:
-
-                    raise ValueError(
-                        "Un embedding vide "
-                        "a été généré."
-                    )
-
-                embeddings.append(
-                    embedding.values
-                )
-
-        # =============================================
-        # VÉRIFICATION
-        # =============================================
 
         if len(embeddings) != len(
             cleaned_texts
         ):
 
             raise ValueError(
-                "Le nombre d'embeddings générés "
+                "Le nombre d'embeddings "
                 "ne correspond pas au nombre "
                 "de textes."
             )
@@ -264,13 +241,13 @@ class GeminiEmbeddingService:
         return embeddings
 
     # =========================================================
-    # EMBEDDING REQUÊTE
+    # REQUÊTE
     # =========================================================
 
     def generate_query_embedding(
         self,
         text: str,
-    ):
+    ) -> list[float]:
 
         if not text or not text.strip():
 
@@ -278,74 +255,17 @@ class GeminiEmbeddingService:
                 "La requête à encoder est vide."
             )
 
-        self._wait_for_quota(1)
-
-        result = (
-            self.client.models.embed_content(
-                model=self.model,
-                contents=text.strip(),
-                config=types.EmbedContentConfig(
-                    task_type="RETRIEVAL_QUERY",
-                    output_dimensionality=(
-                        self.output_dimensionality
-                    ),
-                ),
-            )
+        embeddings = self._embed(
+            texts=[text.strip()],
+            task="retrieval.query",
         )
 
-        if (
-            not result.embeddings
-            or not result.embeddings[0].values
-        ):
-
-            raise ValueError(
-                "Aucun embedding de requête généré."
-            )
-
-        return result.embeddings[0].values
+        return embeddings[0]
 
 
-# =========================================================
-# TEST EMBEDDING
-# =========================================================
+# =============================================================
+# COMPATIBILITÉ
+# =============================================================
 
-def test_embedding():
-
-    try:
-
-        embedding_service = (
-            GeminiEmbeddingService()
-        )
-
-        vector = (
-            embedding_service
-            .generate_document_embedding(
-                "Comment cultiver "
-                "le maïs au Bénin ?"
-            )
-        )
-
-        return {
-            "status": "success",
-            "model": embedding_service.model,
-            "dimension": len(vector),
-            "expected_dimension": (
-                embedding_service
-                .output_dimensionality
-            ),
-            "preview": vector[:5],
-        }
-
-    except Exception as e:
-
-        return {
-            "status": "error",
-            "message": str(e),
-        }
-
-
-# =========================================================
-# COMPATIBILITÉ ANCIENNE VERSION
-# =========================================================
-
-GeminiEmbedding = GeminiEmbeddingService
+GeminiEmbeddingService = JinaEmbeddingService
+GeminiEmbedding = JinaEmbeddingService
