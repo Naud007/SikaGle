@@ -24,6 +24,8 @@ class IngestionJob:
 
     report: IngestionReport | None = None
 
+    error: str | None = None
+
     def finish(self) -> None:
         """
         Termine le job.
@@ -38,12 +40,15 @@ class IngestionJob:
         reason: str | None = None,
     ) -> None:
         """
-        Marque le job comme échoué.
+        Marque le job comme échoué
+        et conserve la raison de l'échec.
         """
 
         self.finished_at = datetime.utcnow()
 
         self.status = "FAILED"
+
+        self.error = reason
 
     @property
     def duration_seconds(self) -> float:
@@ -51,22 +56,42 @@ class IngestionJob:
         Durée totale du job.
         """
 
-        end = self.finished_at or datetime.utcnow()
+        end = (
+            self.finished_at
+            or datetime.utcnow()
+        )
 
-        return (end - self.started_at).total_seconds()
+        return (
+            end - self.started_at
+        ).total_seconds()
 
-    def to_dict(self) -> dict:
+    def to_dict(
+        self,
+    ) -> dict:
 
         return {
-            "source": self.source,
-            "status": self.status,
-            "started_at": self.started_at.isoformat(),
+
+            "source":
+                self.source,
+
+            "status":
+                self.status,
+
+            "started_at":
+                self.started_at.isoformat(),
+
             "finished_at": (
                 self.finished_at.isoformat()
                 if self.finished_at
                 else None
             ),
-            "duration_seconds": self.duration_seconds,
+
+            "duration_seconds":
+                self.duration_seconds,
+
+            "error":
+                self.error,
+
             "report": (
                 self.report.to_dict()
                 if self.report
