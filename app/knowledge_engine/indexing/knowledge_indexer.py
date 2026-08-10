@@ -6,14 +6,17 @@ from app.knowledge_engine.embeddings.embedding_service import (
 from app.knowledge_engine.processing import (
     DocumentProcessor,
 )
-from app.knowledge_engine.vectorstore import (
-    ChromaStore,
+from app.knowledge_engine.repositories import (
+    KnowledgeRepository,
 )
 
 
 class KnowledgeIndexer:
     """
     Orchestre l'indexation complète d'un document.
+
+    Le stockage vectoriel est délégué au
+    KnowledgeRepository.
     """
 
     def __init__(self):
@@ -24,7 +27,9 @@ class KnowledgeIndexer:
             GeminiEmbeddingService()
         )
 
-        self.vectorstore = ChromaStore()
+        self.repository = (
+            KnowledgeRepository()
+        )
 
     def index_pdf(
         self,
@@ -40,7 +45,7 @@ class KnowledgeIndexer:
         # =====================================
 
         if (
-            self.vectorstore.exists(
+            self.repository.exists(
                 pdf_path.stem
             )
             and not force
@@ -58,7 +63,7 @@ class KnowledgeIndexer:
                 "characters": 0,
                 "chunks": 0,
                 "collection_size": (
-                    self.vectorstore.count()
+                    self.repository.count()
                 ),
             }
 
@@ -68,7 +73,7 @@ class KnowledgeIndexer:
 
         if force:
 
-            self.vectorstore.delete_document(
+            self.repository.delete_document(
                 pdf_path.stem
             )
 
@@ -98,7 +103,7 @@ class KnowledgeIndexer:
                 "characters": result["characters"],
                 "chunks": result["chunks_count"],
                 "collection_size": (
-                    self.vectorstore.count()
+                    self.repository.count()
                 ),
             }
 
@@ -116,10 +121,10 @@ class KnowledgeIndexer:
         )
 
         # =====================================
-        # VECTOR STORE
+        # STOCKAGE VECTORIEL
         # =====================================
 
-        self.vectorstore.add_document(
+        self.repository.add_document(
             doc_id=pdf_path.stem,
             chunks=chunks,
             embeddings=embeddings,
@@ -140,6 +145,6 @@ class KnowledgeIndexer:
             "characters": result["characters"],
             "chunks": result["chunks_count"],
             "collection_size": (
-                self.vectorstore.count()
+                self.repository.count()
             ),
         }
