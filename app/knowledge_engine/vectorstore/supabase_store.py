@@ -13,6 +13,7 @@ class SupabaseStore:
     """
 
     TABLE_NAME = "knowledge_embeddings"
+    EMBEDDING_DIMENSION = 1024
 
     def __init__(self):
 
@@ -20,13 +21,11 @@ class SupabaseStore:
         supabase_key = settings.SUPABASE_KEY
 
         if not supabase_url:
-
             raise ValueError(
                 "SUPABASE_URL est manquante."
             )
 
         if not supabase_key:
-
             raise ValueError(
                 "SUPABASE_KEY est manquante."
             )
@@ -51,7 +50,7 @@ class SupabaseStore:
             .select("id")
             .eq(
                 "document_id",
-                doc_id,
+                str(doc_id),
             )
             .limit(1)
             .execute()
@@ -74,29 +73,44 @@ class SupabaseStore:
     ) -> None:
 
         if not chunks:
-
             raise ValueError(
                 "Aucun chunk à enregistrer."
             )
 
-        if len(chunks) != len(
-            embeddings
-        ):
-
+        if len(chunks) != len(embeddings):
             raise ValueError(
                 "Le nombre de chunks et "
                 "d'embeddings ne correspond pas."
             )
 
-        total_chunks = len(
-            chunks
-        )
+        total_chunks = len(chunks)
 
         rows = []
 
-        for index, chunk in enumerate(
-            chunks
-        ):
+        for index, chunk in enumerate(chunks):
+
+            embedding = embeddings[index]
+
+            # -------------------------------------------------
+            # VALIDATION EMBEDDING
+            # -------------------------------------------------
+
+            if not embedding:
+                raise ValueError(
+                    f"Embedding vide pour le chunk {index}."
+                )
+
+            if len(embedding) != self.EMBEDDING_DIMENSION:
+                raise ValueError(
+                    "Dimension embedding incorrecte "
+                    f"pour le chunk {index} : "
+                    f"{len(embedding)} au lieu de "
+                    f"{self.EMBEDDING_DIMENSION}."
+                )
+
+            # -------------------------------------------------
+            # LIGNE SUPABASE
+            # -------------------------------------------------
 
             rows.append(
                 {
@@ -112,39 +126,40 @@ class SupabaseStore:
                     "content":
                         str(chunk),
 
+                    # =========================================
+                    # EMBEDDING
+                    # =========================================
+
+                    "embedding":
+                        embedding,
+
+                    # =========================================
+                    # MÉTADONNÉES
+                    # =========================================
+
                     "title":
                         self._to_string(
-                            metadata.get(
-                                "title"
-                            )
+                            metadata.get("title")
                         ),
 
                     "source":
                         self._to_string(
-                            metadata.get(
-                                "source"
-                            )
+                            metadata.get("source")
                         ),
 
                     "identifier":
                         self._to_string(
-                            metadata.get(
-                                "identifier"
-                            )
+                            metadata.get("identifier")
                         ),
 
                     "url":
                         self._to_string(
-                            metadata.get(
-                                "url"
-                            )
+                            metadata.get("url")
                         ),
 
                     "author":
                         self._to_string(
-                            metadata.get(
-                                "author"
-                            )
+                            metadata.get("author")
                         ),
 
                     "published_at":
@@ -156,9 +171,7 @@ class SupabaseStore:
 
                     "language":
                         self._to_string(
-                            metadata.get(
-                                "language"
-                            )
+                            metadata.get("language")
                         ),
 
                     "document_type":
@@ -177,33 +190,23 @@ class SupabaseStore:
 
                     "crop":
                         self._to_string(
-                            metadata.get(
-                                "crop"
-                            )
+                            metadata.get("crop")
                         ),
 
                     "culture":
                         self._to_string(
-                            metadata.get(
-                                "culture"
-                            )
+                            metadata.get("culture")
                         ),
 
                     "keywords":
                         self._normalize_keywords(
-                            metadata.get(
-                                "keywords"
-                            )
-                            or metadata.get(
-                                "mots_cles"
-                            )
+                            metadata.get("keywords")
+                            or metadata.get("mots_cles")
                         ),
 
                     "country":
                         self._to_string(
-                            metadata.get(
-                                "country"
-                            )
+                            metadata.get("country")
                         ),
 
                     "zone_geographique":
@@ -214,6 +217,10 @@ class SupabaseStore:
                         ),
                 }
             )
+
+        # -----------------------------------------------------
+        # INSERTION
+        # -----------------------------------------------------
 
         (
             self.client
@@ -231,6 +238,18 @@ class SupabaseStore:
         embedding: list[float],
         n_results: int = 5,
     ) -> dict:
+
+        if not embedding:
+            raise ValueError(
+                "Embedding de recherche vide."
+            )
+
+        if len(embedding) != self.EMBEDDING_DIMENSION:
+            raise ValueError(
+                "Dimension embedding de recherche incorrecte : "
+                f"{len(embedding)} au lieu de "
+                f"{self.EMBEDDING_DIMENSION}."
+            )
 
         response = self.client.rpc(
             "match_knowledge_embeddings",
@@ -250,9 +269,7 @@ class SupabaseStore:
         metadatas = []
         distances = []
 
-        for row in (
-            response.data or []
-        ):
+        for row in response.data or []:
 
             documents.append(
                 row.get(
@@ -316,7 +333,7 @@ class SupabaseStore:
         )
 
     # =========================================================
-    # SUPPRIMER
+    # SUPPRIMER UN DOCUMENT
     # =========================================================
 
     def delete_document(
@@ -330,13 +347,13 @@ class SupabaseStore:
             .delete()
             .eq(
                 "document_id",
-                doc_id,
+                str(doc_id),
             )
             .execute()
         )
 
     # =========================================================
-    # RÉCUPÉRER
+    # RÉCUPÉRER UN DOCUMENT
     # =========================================================
 
     def get_document(
@@ -350,7 +367,7 @@ class SupabaseStore:
             .select("*")
             .eq(
                 "document_id",
-                doc_id,
+                str(doc_id),
             )
             .order(
                 "chunk_index"
@@ -358,9 +375,7 @@ class SupabaseStore:
             .execute()
         )
 
-        rows = (
-            response.data or []
-        )
+        rows = response.data or []
 
         return {
             "ids": [
@@ -395,89 +410,55 @@ class SupabaseStore:
 
         metadata = {
             "document":
-                row.get(
-                    "document_id"
-                ),
+                row.get("document_id"),
 
             "chunk_index":
-                row.get(
-                    "chunk_index"
-                ),
+                row.get("chunk_index"),
 
             "chunk_count":
-                row.get(
-                    "chunk_count"
-                ),
+                row.get("chunk_count"),
 
             "title":
-                row.get(
-                    "title"
-                ),
+                row.get("title"),
 
             "source":
-                row.get(
-                    "source"
-                ),
+                row.get("source"),
 
             "identifier":
-                row.get(
-                    "identifier"
-                ),
+                row.get("identifier"),
 
             "url":
-                row.get(
-                    "url"
-                ),
+                row.get("url"),
 
             "author":
-                row.get(
-                    "author"
-                ),
+                row.get("author"),
 
             "published_at":
-                row.get(
-                    "published_at"
-                ),
+                row.get("published_at"),
 
             "language":
-                row.get(
-                    "language"
-                ),
+                row.get("language"),
 
             "document_type":
-                row.get(
-                    "document_type"
-                ),
+                row.get("document_type"),
 
             "publisher":
-                row.get(
-                    "publisher"
-                ),
+                row.get("publisher"),
 
             "crop":
-                row.get(
-                    "crop"
-                ),
+                row.get("crop"),
 
             "culture":
-                row.get(
-                    "culture"
-                ),
+                row.get("culture"),
 
             "keywords":
-                row.get(
-                    "keywords"
-                ),
+                row.get("keywords"),
 
             "country":
-                row.get(
-                    "country"
-                ),
+                row.get("country"),
 
             "zone_geographique":
-                row.get(
-                    "zone_geographique"
-                ),
+                row.get("zone_geographique"),
         }
 
         return {
@@ -487,7 +468,7 @@ class SupabaseStore:
         }
 
     # =========================================================
-    # CONVERSION VALEUR → STRING
+    # CONVERSION → STRING
     # =========================================================
 
     @staticmethod
@@ -496,7 +477,6 @@ class SupabaseStore:
     ):
 
         if value is None:
-
             return None
 
         return str(value)
@@ -511,14 +491,12 @@ class SupabaseStore:
     ):
 
         if value is None:
-
             return None
 
         if hasattr(
             value,
             "isoformat",
         ):
-
             return value.isoformat()
 
         return str(value)
@@ -533,14 +511,12 @@ class SupabaseStore:
     ):
 
         if value is None:
-
             return None
 
         if isinstance(
             value,
             list,
         ):
-
             return ", ".join(
                 str(item)
                 for item in value
