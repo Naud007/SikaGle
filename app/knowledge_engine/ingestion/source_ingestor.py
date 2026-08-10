@@ -6,6 +6,9 @@ from app.knowledge_engine.connectors.registry import (
 from app.knowledge_engine.filesystem.path_manager import (
     PathManager,
 )
+from app.knowledge_engine.filters import (
+    AgriculturalRelevanceFilter,
+)
 from app.knowledge_engine.indexing import (
     KnowledgeIndexer,
 )
@@ -29,6 +32,10 @@ class SourceIngestor:
         self.indexer = KnowledgeIndexer()
 
         self.paths = PathManager()
+
+        self.relevance_filter = (
+            AgriculturalRelevanceFilter()
+        )
 
     def ingest(
         self,
@@ -123,6 +130,40 @@ class SourceIngestor:
         for document in documents:
 
             try:
+
+                # =============================================
+                # FILTRE DE PERTINENCE AGRICOLE
+                # =============================================
+
+                relevance = (
+                    self.relevance_filter.analyze(
+                        document.model_dump()
+                    )
+                )
+
+                print(
+                    "[RELEVANCE] "
+                    f"{document.title} : "
+                    f"{relevance.relevant} "
+                    f"(score={relevance.score:.3f})"
+                )
+
+                if not relevance.relevant:
+
+                    report.filtered_out += 1
+
+                    report.add_warning(
+                        f"{document.title} : "
+                        f"document hors domaine agricole. "
+                        f"{relevance.reason}"
+                    )
+
+                    print(
+                        "⏭️ Document filtré : "
+                        f"{document.title}"
+                    )
+
+                    continue
 
                 # =============================================
                 # PDF DISPONIBLE ?

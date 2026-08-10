@@ -26,13 +26,19 @@ class IngestionReport:
 
     skipped: int = 0
 
+    filtered_out: int = 0
+
     failed: int = 0
 
     duration_seconds: float = 0.0
 
-    errors: list[str] = field(default_factory=list)
+    errors: list[str] = field(
+        default_factory=list
+    )
 
-    warnings: list[str] = field(default_factory=list)
+    warnings: list[str] = field(
+        default_factory=list
+    )
 
     def add_error(
         self,
@@ -41,14 +47,18 @@ class IngestionReport:
 
         self.failed += 1
 
-        self.errors.append(message)
+        self.errors.append(
+            message
+        )
 
     def add_warning(
         self,
         message: str,
     ) -> None:
 
-        self.warnings.append(message)
+        self.warnings.append(
+            message
+        )
 
     def to_dict(
         self,
@@ -56,28 +66,41 @@ class IngestionReport:
 
         return {
 
-            "source": self.source,
+            "source":
+                self.source,
 
-            "documents_found": self.documents_found,
+            "documents_found":
+                self.documents_found,
 
-            "downloaded": self.downloaded,
+            "downloaded":
+                self.downloaded,
 
-            "validated": self.validated,
+            "validated":
+                self.validated,
 
-            "indexed": self.indexed,
+            "indexed":
+                self.indexed,
 
-            "skipped": self.skipped,
+            "skipped":
+                self.skipped,
 
-            "failed": self.failed,
+            "filtered_out":
+                self.filtered_out,
 
-            "duration_seconds": round(
-                self.duration_seconds,
-                2,
-            ),
+            "failed":
+                self.failed,
 
-            "errors": self.errors,
+            "duration_seconds":
+                round(
+                    self.duration_seconds,
+                    2,
+                ),
 
-            "warnings": self.warnings,
+            "errors":
+                self.errors,
+
+            "warnings":
+                self.warnings,
         }
 
     def save(
@@ -99,8 +122,10 @@ class IngestionReport:
             exist_ok=True,
         )
 
-        timestamp = datetime.now().strftime(
-            "%Y-%m-%d_%H-%M-%S"
+        timestamp = (
+            datetime.now().strftime(
+                "%Y-%m-%d_%H-%M-%S"
+            )
         )
 
         log_file = (
