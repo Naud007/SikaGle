@@ -9,8 +9,7 @@ class SupabaseStore:
     """
     Gestionnaire de la base vectorielle Supabase + pgvector.
 
-    Remplace progressivement ChromaDB comme stockage
-    persistant des embeddings SikaGlé.
+    Stockage persistant des documents et de leurs embeddings.
     """
 
     TABLE_NAME = "knowledge_embeddings"
@@ -38,30 +37,32 @@ class SupabaseStore:
         )
 
     # =========================================================
-    # VÉRIFIER L'EXISTENCE D'UN DOCUMENT
+    # EXISTENCE
     # =========================================================
 
     def exists(
         self,
         doc_id: str,
     ) -> bool:
-        """
-        Vérifie si au moins un chunk du document existe.
-        """
 
         response = (
             self.client
             .table(self.TABLE_NAME)
             .select("id")
-            .eq("document_id", doc_id)
+            .eq(
+                "document_id",
+                doc_id,
+            )
             .limit(1)
             .execute()
         )
 
-        return bool(response.data)
+        return bool(
+            response.data
+        )
 
     # =========================================================
-    # AJOUTER UN DOCUMENT
+    # AJOUT DOCUMENT
     # =========================================================
 
     def add_document(
@@ -71,10 +72,6 @@ class SupabaseStore:
         embeddings: list[list[float]],
         metadata: dict,
     ) -> None:
-        """
-        Enregistre tous les chunks et leurs embeddings
-        dans Supabase.
-        """
 
         if not chunks:
 
@@ -82,76 +79,117 @@ class SupabaseStore:
                 "Aucun chunk à enregistrer."
             )
 
-        if len(chunks) != len(embeddings):
+        if len(chunks) != len(
+            embeddings
+        ):
 
             raise ValueError(
                 "Le nombre de chunks et "
                 "d'embeddings ne correspond pas."
             )
 
-        total_chunks = len(chunks)
+        total_chunks = len(
+            chunks
+        )
 
         rows = []
 
-        for index, chunk in enumerate(chunks):
+        for index, chunk in enumerate(
+            chunks
+        ):
 
             rows.append(
                 {
-                    "document_id": doc_id,
-                    "chunk_index": index,
-                    "chunk_count": total_chunks,
-                    "content": chunk,
-                    "embedding": embeddings[index],
+                    "document_id":
+                        str(doc_id),
 
-                    "title": metadata.get(
-                        "title"
-                    ),
+                    "chunk_index":
+                        index,
 
-                    "source": metadata.get(
-                        "source"
-                    ),
+                    "chunk_count":
+                        total_chunks,
 
-                    "identifier": metadata.get(
-                        "identifier"
-                    ),
+                    "content":
+                        str(chunk),
 
-                    "url": metadata.get(
-                        "url"
-                    ),
+                    "title":
+                        self._to_string(
+                            metadata.get(
+                                "title"
+                            )
+                        ),
 
-                    "author": metadata.get(
-                        "author"
-                    ),
+                    "source":
+                        self._to_string(
+                            metadata.get(
+                                "source"
+                            )
+                        ),
 
-                    "published_at": (
+                    "identifier":
+                        self._to_string(
+                            metadata.get(
+                                "identifier"
+                            )
+                        ),
+
+                    "url":
+                        self._to_string(
+                            metadata.get(
+                                "url"
+                            )
+                        ),
+
+                    "author":
+                        self._to_string(
+                            metadata.get(
+                                "author"
+                            )
+                        ),
+
+                    "published_at":
                         self._normalize_date(
                             metadata.get(
                                 "published_at"
                             )
-                        )
-                    ),
+                        ),
 
-                    "language": metadata.get(
-                        "language"
-                    ),
+                    "language":
+                        self._to_string(
+                            metadata.get(
+                                "language"
+                            )
+                        ),
 
-                    "document_type": metadata.get(
-                        "document_type"
-                    ),
+                    "document_type":
+                        self._to_string(
+                            metadata.get(
+                                "document_type"
+                            )
+                        ),
 
-                    "publisher": metadata.get(
-                        "publisher"
-                    ),
+                    "publisher":
+                        self._to_string(
+                            metadata.get(
+                                "publisher"
+                            )
+                        ),
 
-                    "crop": metadata.get(
-                        "crop"
-                    ),
+                    "crop":
+                        self._to_string(
+                            metadata.get(
+                                "crop"
+                            )
+                        ),
 
-                    "culture": metadata.get(
-                        "culture"
-                    ),
+                    "culture":
+                        self._to_string(
+                            metadata.get(
+                                "culture"
+                            )
+                        ),
 
-                    "keywords": (
+                    "keywords":
                         self._normalize_keywords(
                             metadata.get(
                                 "keywords"
@@ -159,18 +197,21 @@ class SupabaseStore:
                             or metadata.get(
                                 "mots_cles"
                             )
-                        )
-                    ),
+                        ),
 
-                    "country": metadata.get(
-                        "country"
-                    ),
+                    "country":
+                        self._to_string(
+                            metadata.get(
+                                "country"
+                            )
+                        ),
 
-                    "zone_geographique": (
-                        metadata.get(
-                            "zone_geographique"
-                        )
-                    ),
+                    "zone_geographique":
+                        self._to_string(
+                            metadata.get(
+                                "zone_geographique"
+                            )
+                        ),
                 }
             )
 
@@ -190,17 +231,18 @@ class SupabaseStore:
         embedding: list[float],
         n_results: int = 5,
     ) -> dict:
-        """
-        Recherche les chunks les plus proches
-        via pgvector.
-        """
 
         response = self.client.rpc(
             "match_knowledge_embeddings",
             {
-                "query_embedding": embedding,
-                "match_threshold": 0.20,
-                "match_count": n_results,
+                "query_embedding":
+                    embedding,
+
+                "match_threshold":
+                    0.20,
+
+                "match_count":
+                    n_results,
             },
         ).execute()
 
@@ -208,14 +250,21 @@ class SupabaseStore:
         metadatas = []
         distances = []
 
-        for row in response.data or []:
+        for row in (
+            response.data or []
+        ):
 
             documents.append(
-                row.get("content", "")
+                row.get(
+                    "content",
+                    "",
+                )
             )
 
             metadatas.append(
-                self._build_metadata(row)
+                self._build_metadata(
+                    row
+                )
             )
 
             similarity = float(
@@ -225,8 +274,6 @@ class SupabaseStore:
                 )
             )
 
-            # VectorRetriever utilise une distance
-            # qu'il convertit ensuite en similarité.
             distances.append(
                 max(
                     0.0,
@@ -235,21 +282,24 @@ class SupabaseStore:
             )
 
         return {
-            "documents": [documents],
-            "metadatas": [metadatas],
-            "distances": [distances],
+            "documents": [
+                documents
+            ],
+            "metadatas": [
+                metadatas
+            ],
+            "distances": [
+                distances
+            ],
         }
 
     # =========================================================
-    # COMPTER LES CHUNKS
+    # COMPTER
     # =========================================================
 
     def count(
         self,
     ) -> int:
-        """
-        Retourne le nombre total de chunks indexés.
-        """
 
         response = (
             self.client
@@ -266,16 +316,13 @@ class SupabaseStore:
         )
 
     # =========================================================
-    # SUPPRIMER UN DOCUMENT
+    # SUPPRIMER
     # =========================================================
 
     def delete_document(
         self,
         doc_id: str,
     ) -> None:
-        """
-        Supprime tous les chunks d'un document.
-        """
 
         (
             self.client
@@ -289,16 +336,13 @@ class SupabaseStore:
         )
 
     # =========================================================
-    # RÉCUPÉRER UN DOCUMENT
+    # RÉCUPÉRER
     # =========================================================
 
     def get_document(
         self,
         doc_id: str,
     ) -> dict:
-        """
-        Retourne tous les chunks d'un document.
-        """
 
         response = (
             self.client
@@ -314,7 +358,9 @@ class SupabaseStore:
             .execute()
         )
 
-        rows = response.data or []
+        rows = (
+            response.data or []
+        )
 
         return {
             "ids": [
@@ -331,7 +377,9 @@ class SupabaseStore:
             ],
 
             "metadatas": [
-                self._build_metadata(row)
+                self._build_metadata(
+                    row
+                )
                 for row in rows
             ],
         }
@@ -346,73 +394,90 @@ class SupabaseStore:
     ) -> dict:
 
         metadata = {
-            "document": row.get(
-                "document_id"
-            ),
+            "document":
+                row.get(
+                    "document_id"
+                ),
 
-            "chunk_index": row.get(
-                "chunk_index"
-            ),
+            "chunk_index":
+                row.get(
+                    "chunk_index"
+                ),
 
-            "chunk_count": row.get(
-                "chunk_count"
-            ),
+            "chunk_count":
+                row.get(
+                    "chunk_count"
+                ),
 
-            "title": row.get(
-                "title"
-            ),
+            "title":
+                row.get(
+                    "title"
+                ),
 
-            "source": row.get(
-                "source"
-            ),
+            "source":
+                row.get(
+                    "source"
+                ),
 
-            "identifier": row.get(
-                "identifier"
-            ),
+            "identifier":
+                row.get(
+                    "identifier"
+                ),
 
-            "url": row.get(
-                "url"
-            ),
+            "url":
+                row.get(
+                    "url"
+                ),
 
-            "author": row.get(
-                "author"
-            ),
+            "author":
+                row.get(
+                    "author"
+                ),
 
-            "published_at": row.get(
-                "published_at"
-            ),
+            "published_at":
+                row.get(
+                    "published_at"
+                ),
 
-            "language": row.get(
-                "language"
-            ),
+            "language":
+                row.get(
+                    "language"
+                ),
 
-            "document_type": row.get(
-                "document_type"
-            ),
+            "document_type":
+                row.get(
+                    "document_type"
+                ),
 
-            "publisher": row.get(
-                "publisher"
-            ),
+            "publisher":
+                row.get(
+                    "publisher"
+                ),
 
-            "crop": row.get(
-                "crop"
-            ),
+            "crop":
+                row.get(
+                    "crop"
+                ),
 
-            "culture": row.get(
-                "culture"
-            ),
+            "culture":
+                row.get(
+                    "culture"
+                ),
 
-            "keywords": row.get(
-                "keywords"
-            ),
+            "keywords":
+                row.get(
+                    "keywords"
+                ),
 
-            "country": row.get(
-                "country"
-            ),
+            "country":
+                row.get(
+                    "country"
+                ),
 
-            "zone_geographique": row.get(
-                "zone_geographique"
-            ),
+            "zone_geographique":
+                row.get(
+                    "zone_geographique"
+                ),
         }
 
         return {
@@ -420,6 +485,21 @@ class SupabaseStore:
             for key, value in metadata.items()
             if value is not None
         }
+
+    # =========================================================
+    # CONVERSION VALEUR → STRING
+    # =========================================================
+
+    @staticmethod
+    def _to_string(
+        value: Any,
+    ):
+
+        if value is None:
+
+            return None
+
+        return str(value)
 
     # =========================================================
     # NORMALISATION DATE
