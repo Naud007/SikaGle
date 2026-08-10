@@ -55,8 +55,8 @@ class RAGIngestion:
 
         self.embedding_service = (
             GeminiEmbeddingService(
-                model="gemini-embedding-001",
-                output_dimensionality=1536
+                model="jina-embeddings-v3",
+                output_dimensionality=1024
             )
         )
 
