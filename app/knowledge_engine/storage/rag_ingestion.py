@@ -1,107 +1,93 @@
-import os
-import time
+from typing import Any
 
-from supabase import create_client, Client
-
-from app.ai.embeddings import (
-    GeminiEmbeddingService
+from app.knowledge_engine.embeddings.embedding_service import (
+    GeminiEmbeddingService,
+)
+from app.knowledge_engine.vectorstore.supabase_store import (
+    SupabaseStore,
 )
 
 
-# =============================================================
-# RAG INGESTION
-# =============================================================
-
 class RAGIngestion:
+    """
+    Pipeline d'ingestion RAG des documents FAO/AGRIS.
+
+    Architecture :
+
+        Document FAO
+            ↓
+        construction du texte RAG
+            ↓
+        Jina Embeddings v3
+            ↓
+        embedding 1024D
+            ↓
+        SupabaseStore
+            ↓
+        knowledge_embeddings
+
+    Cette classe conserve également la pagination utilisée
+    par le pipeline FAO existant.
+    """
+
+    EMBEDDING_DIMENSION = 1024
 
     def __init__(self):
 
         # =====================================================
-        # CONFIGURATION SUPABASE
-        # =====================================================
-
-        supabase_url = os.getenv(
-            "SUPABASE_URL"
-        )
-
-        supabase_key = os.getenv(
-            "SUPABASE_KEY"
-        )
-
-        if not supabase_url:
-
-            raise ValueError(
-                "SUPABASE_URL manquante."
-            )
-
-        if not supabase_key:
-
-            raise ValueError(
-                "SUPABASE_KEY manquante."
-            )
-
-
-        self.supabase: Client = (
-            create_client(
-                supabase_url,
-                supabase_key
-            )
-        )
-
-
-        # =====================================================
-        # SERVICE EMBEDDING GEMINI
+        # SERVICE EMBEDDINGS
         # =====================================================
 
         self.embedding_service = (
-            GeminiEmbeddingService(
-                model="jina-embeddings-v3",
-                output_dimensionality=1024
-            )
+            GeminiEmbeddingService()
         )
 
+        # =====================================================
+        # STOCKAGE VECTORIEL PERSISTANT
+        # =====================================================
+
+        self.vectorstore = (
+            SupabaseStore()
+        )
 
     # =========================================================
-    # CONVERTIR UN DOCUMENT EN DICTIONNAIRE
+    # NORMALISATION DOCUMENT
     # =========================================================
 
+    @staticmethod
     def normalize_document(
-        self,
-        document
-    ):
+        document: Any,
+    ) -> dict:
 
         if isinstance(
             document,
-            dict
+            dict,
         ):
 
             return document
 
-
         if hasattr(
             document,
-            "model_dump"
+            "model_dump",
         ):
 
             return document.model_dump(
                 mode="json"
             )
 
-
         raise ValueError(
             "Format document non supporté : "
             f"{type(document).__name__}"
         )
 
-
     # =========================================================
-    # EXTRAIRE LA SOURCE UNIQUE
+    # SOURCE / URL
     # =========================================================
 
+    @staticmethod
     def get_document_source(
-        self,
-        document
-    ):
+        document: dict,
+    ) -> str | None:
 
         url = document.get(
             "url"
@@ -113,7 +99,6 @@ class RAGIngestion:
                 url
             ).strip()
 
-
         source_path = document.get(
             "source_path"
         )
@@ -124,18 +109,56 @@ class RAGIngestion:
                 source_path
             ).strip()
 
-
         return None
 
-
     # =========================================================
-    # EXTRAIRE LE TITRE
+    # IDENTIFIANT DOCUMENT
     # =========================================================
 
-    def get_document_title(
+    def get_document_id(
         self,
-        document
-    ):
+        document: dict,
+    ) -> str:
+
+        identifier = (
+            document.get(
+                "identifier"
+            )
+            or document.get(
+                "id"
+            )
+        )
+
+        if identifier:
+
+            return str(
+                identifier
+            ).strip()
+
+        source = (
+            self.get_document_source(
+                document
+            )
+        )
+
+        if source:
+
+            return source
+
+        title = self.get_document_title(
+            document
+        )
+
+        return title
+
+    # =========================================================
+    # TITRE
+    # =========================================================
+
+    @staticmethod
+    def get_document_title(
+        document: dict,
+    ) -> str:
 
         title = document.get(
             "title"
@@ -147,7 +170,6 @@ class RAGIngestion:
                 title
             ).strip()
 
-
         titre = document.get(
             "titre"
         )
@@ -158,18 +180,16 @@ class RAGIngestion:
                 titre
             ).strip()
 
-
         return "Document sans titre"
 
-
     # =========================================================
-    # EXTRAIRE LE CONTENU
+    # CONTENU
     # =========================================================
 
+    @staticmethod
     def get_document_content(
-        self,
-        document
-    ):
+        document: dict,
+    ) -> str:
 
         content = document.get(
             "content"
@@ -181,7 +201,6 @@ class RAGIngestion:
                 content
             ).strip()
 
-
         description = document.get(
             "description"
         )
@@ -192,18 +211,16 @@ class RAGIngestion:
                 description
             ).strip()
 
-
         return ""
 
-
     # =========================================================
-    # EXTRAIRE ORGANISME / SOURCE
+    # SOURCE / ORGANISME
     # =========================================================
 
+    @staticmethod
     def get_document_source_name(
-        self,
-        document
-    ):
+        document: dict,
+    ) -> str:
 
         source = document.get(
             "source"
@@ -215,7 +232,6 @@ class RAGIngestion:
                 source
             ).strip()
 
-
         organisme = document.get(
             "organisme"
         )
@@ -226,18 +242,16 @@ class RAGIngestion:
                 organisme
             ).strip()
 
-
         return "FAO AGRIS"
 
-
     # =========================================================
-    # CONSTRUIRE TEXTE POUR EMBEDDING
+    # TEXTE RAG
     # =========================================================
 
     def build_rag_text(
         self,
-        document
-    ):
+        document: dict,
+    ) -> str:
 
         title = self.get_document_title(
             document
@@ -255,9 +269,7 @@ class RAGIngestion:
             document
         )
 
-
         parts = []
-
 
         if title:
 
@@ -265,13 +277,11 @@ class RAGIngestion:
                 f"Titre : {title}"
             )
 
-
         if content:
 
             parts.append(
                 f"Contenu :\n{content}"
             )
-
 
         if source:
 
@@ -279,274 +289,312 @@ class RAGIngestion:
                 f"Source : {source}"
             )
 
-
         if url:
 
             parts.append(
                 f"URL : {url}"
             )
 
-
         return "\n\n".join(
             parts
         )
 
-
     # =========================================================
-    # RECHERCHER DOCUMENT EXISTANT
+    # MÉTADONNÉES
     # =========================================================
 
-    def find_existing_document(
-        self,
-        source_path
-    ):
+    @staticmethod
+    def build_metadata(
+        document: dict,
+    ) -> dict:
 
-        if not source_path:
-
-            return None
-
-
-        try:
-
-            response = (
-
-                self.supabase
-
-                .table(
-                    "documents_rag"
-                )
-
-                .select(
-                    "id, source_path"
-                )
-
-                .eq(
-                    "source_path",
-                    source_path
-                )
-
-                .limit(
-                    1
-                )
-
-                .execute()
-
+        published_at = (
+            document.get(
+                "published_at"
             )
-
-
-            if response.data:
-
-                return response.data[0]
-
-
-            return None
-
-
-        except Exception as e:
-
-            print(
-                "[RAG INGESTION] "
-                "Erreur recherche doublon :",
-                e
+            or document.get(
+                "publication_date"
             )
-
-            return None
-
-
-    # =========================================================
-    # CONSTRUIRE LA LIGNE SUPABASE
-    # =========================================================
-
-    def build_supabase_row(
-        self,
-        document,
-        embedding
-    ):
-
-        title = self.get_document_title(
-            document
         )
-
-        source = self.get_document_source_name(
-            document
-        )
-
-        url = self.get_document_source(
-            document
-        )
-
-        text = self.build_rag_text(
-            document
-        )
-
-
-        # -----------------------------------------------------
-        # LANGUE
-        # -----------------------------------------------------
 
         language = (
             document.get(
                 "language"
             )
-            or
-            document.get(
+            or document.get(
                 "langue"
             )
         )
-
-
-        # -----------------------------------------------------
-        # TYPE DOCUMENT
-        # -----------------------------------------------------
 
         document_type = (
             document.get(
                 "document_type"
             )
-            or
-            document.get(
+            or document.get(
                 "type_document"
             )
-            or
-            "agricultural_publication"
+            or "agricultural_publication"
         )
 
-
-        # -----------------------------------------------------
-        # CULTURE
-        # -----------------------------------------------------
-
-        culture = (
-            document.get(
-                "culture"
-            )
-            or
+        crop = (
             document.get(
                 "crop"
             )
         )
 
-
-        # -----------------------------------------------------
-        # ZONE GÉOGRAPHIQUE
-        # -----------------------------------------------------
-
-        zone_geographique = (
+        culture = (
             document.get(
-                "zone_geographique"
+                "culture"
             )
-            or
+            or crop
+        )
+
+        country = (
             document.get(
                 "country"
             )
         )
 
-
-        # -----------------------------------------------------
-        # MOTS-CLÉS
-        # -----------------------------------------------------
-
-        mots_cles = (
+        zone_geographique = (
             document.get(
-                "mots_cles"
+                "zone_geographique"
             )
-            or
+            or country
+        )
+
+        keywords = (
             document.get(
                 "keywords"
             )
-        )
-
-
-        # -----------------------------------------------------
-        # ANNÉE
-        # -----------------------------------------------------
-
-        annee = (
-            document.get(
-                "year"
-            )
-            or
-            document.get(
-                "annee"
+            or document.get(
+                "mots_cles"
             )
         )
 
-
-        if annee:
-
-            try:
-
-                annee = int(
-                    str(annee)[:4]
-                )
-
-            except Exception:
-
-                annee = None
-
+        identifier = (
+            document.get(
+                "identifier"
+            )
+            or document.get(
+                "id"
+            )
+        )
 
         return {
 
-            "titre":
-                title,
+            "title":
+                RAGIngestion.get_document_title(
+                    document
+                ),
 
-            "organisme":
-                source,
+            "source":
+                RAGIngestion.get_document_source_name(
+                    document
+                ),
 
-            "annee":
-                annee,
+            "identifier":
+                (
+                    str(identifier)
+                    if identifier is not None
+                    else None
+                ),
 
-            "langue":
-                language,
+            "url":
+                RAGIngestion.get_document_source(
+                    document
+                ),
 
-            "type_document":
-                document_type,
+            "author":
+                RAGIngestion._normalize_author(
+                    document.get(
+                        "author"
+                    )
+                    or document.get(
+                        "authors"
+                    )
+                ),
+
+            "published_at":
+                RAGIngestion._normalize_date(
+                    published_at
+                ),
+
+            "language":
+                (
+                    str(language)
+                    if language is not None
+                    else None
+                ),
+
+            "document_type":
+                (
+                    str(document_type)
+                    if document_type is not None
+                    else None
+                ),
+
+            "publisher":
+                RAGIngestion._normalize_string(
+                    document.get(
+                        "publisher"
+                    )
+                ),
+
+            "crop":
+                RAGIngestion._normalize_string(
+                    crop
+                ),
 
             "culture":
-                culture,
+                RAGIngestion._normalize_string(
+                    culture
+                ),
+
+            "keywords":
+                RAGIngestion._normalize_keywords(
+                    keywords
+                ),
+
+            "country":
+                RAGIngestion._normalize_string(
+                    country
+                ),
 
             "zone_geographique":
-                zone_geographique,
-
-            "mots_cles":
-                mots_cles,
-
-            "source_path":
-                url,
-
-            "content":
-                text,
-
-            "embedding":
-                embedding
-
+                RAGIngestion._normalize_string(
+                    zone_geographique
+                ),
         }
 
+    # =========================================================
+    # NORMALISATION STRING
+    # =========================================================
+
+    @staticmethod
+    def _normalize_string(
+        value: Any,
+    ) -> str | None:
+
+        if value is None:
+
+            return None
+
+        if isinstance(
+            value,
+            str,
+        ):
+
+            value = value.strip()
+
+            return value or None
+
+        return str(
+            value
+        )
 
     # =========================================================
-    # INGÉRER DES DOCUMENTS DIRECTEMENT EN MÉMOIRE
+    # NORMALISATION AUTEUR
+    # =========================================================
+
+    @staticmethod
+    def _normalize_author(
+        value: Any,
+    ) -> str | None:
+
+        if value is None:
+
+            return None
+
+        if isinstance(
+            value,
+            list,
+        ):
+
+            return ", ".join(
+                str(item)
+                for item in value
+            )
+
+        return str(
+            value
+        ).strip() or None
+
+    # =========================================================
+    # NORMALISATION DATE
+    # =========================================================
+
+    @staticmethod
+    def _normalize_date(
+        value: Any,
+    ) -> str | None:
+
+        if value is None:
+
+            return None
+
+        if hasattr(
+            value,
+            "isoformat",
+        ):
+
+            return value.isoformat()
+
+        value = str(
+            value
+        ).strip()
+
+        return value or None
+
+    # =========================================================
+    # NORMALISATION MOTS-CLÉS
+    # =========================================================
+
+    @staticmethod
+    def _normalize_keywords(
+        value: Any,
+    ) -> str | None:
+
+        if value is None:
+
+            return None
+
+        if isinstance(
+            value,
+            list,
+        ):
+
+            values = [
+                str(item).strip()
+                for item in value
+                if str(item).strip()
+            ]
+
+            return ", ".join(
+                values
+            ) or None
+
+        return str(
+            value
+        ).strip() or None
+
+    # =========================================================
+    # INGESTION
     # =========================================================
 
     def ingest_documents(
         self,
         documents,
         limit=None,
-        offset=0
+        offset=0,
     ):
-
-        # =====================================================
-        # VALIDATION
-        # =====================================================
 
         if documents is None:
 
             documents = []
 
-
         total_documents = len(
             documents
         )
-
 
         if offset < 0:
 
@@ -554,11 +602,9 @@ class RAGIngestion:
                 "offset ne peut pas être négatif."
             )
 
-
         if limit is None:
 
             limit = total_documents
-
 
         if limit <= 0:
 
@@ -566,16 +612,10 @@ class RAGIngestion:
                 "limit doit être supérieur à 0."
             )
 
-
-        # =====================================================
-        # SÉLECTION DU BATCH
-        # =====================================================
-
         batch = documents[
             offset:
             offset + limit
         ]
-
 
         print("=" * 60)
 
@@ -603,12 +643,10 @@ class RAGIngestion:
 
         print("=" * 60)
 
-
         inserted = 0
         updated = 0
         skipped = 0
         errors = 0
-
 
         # =====================================================
         # TRAITEMENT
@@ -616,43 +654,44 @@ class RAGIngestion:
 
         for index, raw_document in enumerate(
             batch,
-            start=offset + 1
+            start=offset + 1,
         ):
 
             try:
 
-                # -------------------------------------------------
-                # NORMALISER
-                # -------------------------------------------------
-
-                document = self.normalize_document(
-                    raw_document
+                document = (
+                    self.normalize_document(
+                        raw_document
+                    )
                 )
 
-
-                title = self.get_document_title(
-                    document
+                title = (
+                    self.get_document_title(
+                        document
+                    )
                 )
 
-                source_path = self.get_document_source(
-                    document
+                content = (
+                    self.get_document_content(
+                        document
+                    )
                 )
 
-                content = self.get_document_content(
-                    document
+                document_id = (
+                    self.get_document_id(
+                        document
+                    )
                 )
-
 
                 print(
-                    f"[RAG INGESTION] "
+                    "[RAG INGESTION] "
                     f"[{index}/{total_documents}] "
                     f"{title[:100]}"
                 )
 
-
-                # -------------------------------------------------
-                # VÉRIFIER CONTENU
-                # -------------------------------------------------
+                # =============================================
+                # CONTENU
+                # =============================================
 
                 if not content:
 
@@ -664,15 +703,15 @@ class RAGIngestion:
 
                     continue
 
+                # =============================================
+                # TEXTE RAG
+                # =============================================
 
-                # -------------------------------------------------
-                # CONSTRUIRE TEXTE
-                # -------------------------------------------------
-
-                text = self.build_rag_text(
-                    document
+                text = (
+                    self.build_rag_text(
+                        document
+                    )
                 )
-
 
                 if not text.strip():
 
@@ -684,26 +723,20 @@ class RAGIngestion:
 
                     continue
 
-
-                # -------------------------------------------------
-                # EMBEDDING
-                # -------------------------------------------------
+                # =============================================
+                # EMBEDDING JINA
+                # =============================================
 
                 print(
-                    "🤖 Génération embedding..."
+                    "🤖 Génération embedding Jina..."
                 )
 
-
                 embedding = (
-
                     self.embedding_service
-
                     .generate_document_embedding(
                         text
                     )
-
                 )
-
 
                 if not embedding:
 
@@ -711,121 +744,96 @@ class RAGIngestion:
                         "Embedding vide."
                     )
 
+                if len(embedding) != (
+                    self.EMBEDDING_DIMENSION
+                ):
 
-                # -------------------------------------------------
-                # LIGNE SUPABASE
-                # -------------------------------------------------
+                    raise ValueError(
+                        "Dimension embedding incorrecte : "
+                        f"{len(embedding)} "
+                        f"au lieu de "
+                        f"{self.EMBEDDING_DIMENSION}."
+                    )
 
-                row = self.build_supabase_row(
-                    document,
-                    embedding
+                # =============================================
+                # MÉTADONNÉES
+                # =============================================
+
+                metadata = (
+                    self.build_metadata(
+                        document
+                    )
                 )
 
-
-                # -------------------------------------------------
+                # =============================================
                 # DOCUMENT EXISTANT ?
-                # -------------------------------------------------
+                # =============================================
 
-                existing_document = (
-                    self.find_existing_document(
-                        source_path
+                existing = (
+                    self.vectorstore.exists(
+                        document_id
                     )
                 )
 
+                # =============================================
+                # MISE À JOUR
+                # =============================================
 
-                # -------------------------------------------------
-                # UPDATE
-                # -------------------------------------------------
+                if existing:
 
-                if existing_document:
-
-                    document_id = (
-                        existing_document.get(
-                            "id"
-                        )
+                    print(
+                        "🔄 Document déjà présent. "
+                        "Mise à jour."
                     )
 
-
-                    (
-
-                        self.supabase
-
-                        .table(
-                            "documents_rag"
-                        )
-
-                        .update(
-                            row
-                        )
-
-                        .eq(
-                            "id",
-                            document_id
-                        )
-
-                        .execute()
-
+                    self.vectorstore.delete_document(
+                        document_id
                     )
 
+                    self.vectorstore.add_document(
+                        doc_id=document_id,
+                        chunks=[text],
+                        embeddings=[embedding],
+                        metadata=metadata,
+                    )
 
                     updated += 1
 
-
-                    print(
-                        "🔄 Document mis à jour."
-                    )
-
-
-                # -------------------------------------------------
-                # INSERT
-                # -------------------------------------------------
+                # =============================================
+                # INSERTION
+                # =============================================
 
                 else:
 
-                    (
-
-                        self.supabase
-
-                        .table(
-                            "documents_rag"
-                        )
-
-                        .insert(
-                            row
-                        )
-
-                        .execute()
-
+                    self.vectorstore.add_document(
+                        doc_id=document_id,
+                        chunks=[text],
+                        embeddings=[embedding],
+                        metadata=metadata,
                     )
-
 
                     inserted += 1
 
-
                     print(
-                        "✅ Document inséré."
+                        "✅ Document inséré dans "
+                        "knowledge_embeddings."
                     )
 
+                # =============================================
+                # PAUSE
+                # =============================================
 
-                # -------------------------------------------------
-                # PETITE PAUSE GEMINI
-                # -------------------------------------------------
-
-                time.sleep(
-                    0.7
-                )
-
+                # Pas de pause artificielle nécessaire ici.
+                # Le service d'embedding gère son propre appel.
 
             except Exception as e:
 
                 errors += 1
 
-
                 print(
                     f"❌ Erreur document {index} : "
                     f"{e}"
                 )
-
 
         # =====================================================
         # PAGINATION
@@ -836,16 +844,10 @@ class RAGIngestion:
             + len(batch)
         )
 
-
         has_more = (
             next_offset
             < total_documents
         )
-
-
-        # =====================================================
-        # RÉSULTAT
-        # =====================================================
 
         return {
 
@@ -880,20 +882,18 @@ class RAGIngestion:
                 next_offset,
 
             "has_more":
-                has_more
-
+                has_more,
         }
 
-
     # =========================================================
-    # COMPATIBILITÉ AVEC ANCIEN CODE
+    # COMPATIBILITÉ
     # =========================================================
 
     def ingest(
         self,
         documents=None,
         limit=100,
-        offset=0
+        offset=0,
     ):
 
         if documents is None:
@@ -905,9 +905,10 @@ class RAGIngestion:
 
                 "message":
                     (
-                        "Cette version de RAGIngestion "
-                        "fonctionne directement avec "
-                        "des documents en mémoire."
+                        "Cette version de "
+                        "RAGIngestion fonctionne "
+                        "directement avec des "
+                        "documents en mémoire."
                     ),
 
                 "total_documents":
@@ -932,19 +933,13 @@ class RAGIngestion:
                     offset,
 
                 "has_more":
-                    False
-
+                    False,
             }
 
-
         return self.ingest_documents(
-
             documents=documents,
-
             limit=limit,
-
-            offset=offset
-
+            offset=offset,
         )
 
 
@@ -962,8 +957,8 @@ def test_rag_ingestion():
         "message":
             (
                 "RAGIngestion opérationnel. "
-                "Le service attend maintenant "
-                "des documents directement en mémoire."
-            )
-
+                "Le pipeline utilise maintenant "
+                "Jina Embeddings v3 1024D et "
+                "Supabase knowledge_embeddings."
+            ),
     }
