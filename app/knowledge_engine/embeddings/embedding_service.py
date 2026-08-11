@@ -1,3 +1,5 @@
+import time
+
 import requests
 
 from app.core import settings
@@ -19,7 +21,19 @@ class JinaEmbeddingService:
 
     API_URL = "https://api.jina.ai/v1/embeddings"
 
-    MAX_BATCH_SIZE = 50
+    # Jina accepte davantage de textes, mais pour SikaGlé
+    # nous privilégions la stabilité et la maîtrise
+    # de la limite de tokens par minute.
+    MAX_BATCH_SIZE = 5
+
+    # Nombre maximal de nouvelles tentatives après un 429.
+    MAX_RETRIES = 5
+
+    # Délai initial entre deux requêtes.
+    INITIAL_DELAY_SECONDS = 2.0
+
+    # Délai minimum entre deux appels Jina.
+    REQUEST_DELAY_SECONDS = 2.0
 
     def __init__(
         self,
@@ -57,6 +71,11 @@ class JinaEmbeddingService:
     ) -> list[list[float]]:
         """
         Génère les embeddings Jina.
+
+        Protection contre :
+        - les lots trop importants ;
+        - les erreurs 429 de limitation de débit ;
+        - les réponses invalides.
         """
 
         if not texts:
@@ -73,79 +92,163 @@ class JinaEmbeddingService:
                 f"par requête."
             )
 
-        response = requests.post(
-            self.API_URL,
-            headers={
-                "Authorization": (
-                    f"Bearer {self.api_key}"
-                ),
-                "Content-Type": (
-                    "application/json"
-                ),
-            },
-            json={
-                "model": self.model,
-                "input": texts,
-                "task": task,
-                "dimensions": (
-                    self.output_dimensionality
-                ),
-            },
-            timeout=120,
-        )
-
-        if not response.ok:
-
-            raise RuntimeError(
-                "Erreur Jina Embeddings : "
-                f"{response.status_code} "
-                f"{response.text}"
-            )
-
-        data = response.json()
-
-        embeddings = data.get(
-            "data",
-            [],
-        )
-
-        if not embeddings:
-
-            raise ValueError(
-                "Jina n'a retourné aucun embedding."
-            )
-
-        embeddings = sorted(
-            embeddings,
-            key=lambda item: item["index"],
-        )
-
-        vectors = [
-            item["embedding"]
-            for item in embeddings
-        ]
-
-        for vector in vectors:
-
-            if not vector:
-
-                raise ValueError(
-                    "Jina a retourné un "
-                    "embedding vide."
-                )
-
-            if len(vector) != (
+        payload = {
+            "model": self.model,
+            "input": texts,
+            "task": task,
+            "dimensions": (
                 self.output_dimensionality
-            ):
+            ),
+        }
 
-                raise ValueError(
-                    "Dimension incorrecte : "
-                    f"{len(vector)} "
-                    "au lieu de "
-                    f"{self.output_dimensionality}."
+        headers = {
+            "Authorization": (
+                f"Bearer {self.api_key}"
+            ),
+            "Content-Type": (
+                "application/json"
+            ),
+        }
+
+        delay = self.INITIAL_DELAY_SECONDS
+
+        for attempt in range(
+            self.MAX_RETRIES + 1
+        ):
+
+            try:
+
+                response = requests.post(
+                    self.API_URL,
+                    headers=headers,
+                    json=payload,
+                    timeout=120,
                 )
 
-        return vectors
+                # =========================================
+                # RATE LIMIT JINA
+                # =========================================
+
+                if response.status_code == 429:
+
+                    if attempt >= self.MAX_RETRIES:
+
+                        raise RuntimeError(
+                            "Erreur Jina Embeddings : "
+                            "limite de débit atteinte "
+                            "après plusieurs tentatives. "
+                            f"{response.text}"
+                        )
+
+                    print(
+                        "[JINA] Rate limit 429. "
+                        f"Nouvelle tentative dans "
+                        f"{delay:.1f}s..."
+                    )
+
+                    time.sleep(
+                        delay
+                    )
+
+                    delay *= 2
+
+                    continue
+
+                # =========================================
+                # AUTRES ERREURS HTTP
+                # =========================================
+
+                if not response.ok:
+
+                    raise RuntimeError(
+                        "Erreur Jina Embeddings : "
+                        f"{response.status_code} "
+                        f"{response.text}"
+                    )
+
+                data = response.json()
+
+                embeddings = data.get(
+                    "data",
+                    [],
+                )
+
+                if not embeddings:
+
+                    raise ValueError(
+                        "Jina n'a retourné "
+                        "aucun embedding."
+                    )
+
+                embeddings = sorted(
+                    embeddings,
+                    key=lambda item: item["index"],
+                )
+
+                vectors = [
+                    item["embedding"]
+                    for item in embeddings
+                ]
+
+                # =========================================
+                # VALIDATION
+                # =========================================
+
+                for vector in vectors:
+
+                    if not vector:
+
+                        raise ValueError(
+                            "Jina a retourné "
+                            "un embedding vide."
+                        )
+
+                    if len(vector) != (
+                        self.output_dimensionality
+                    ):
+
+                        raise ValueError(
+                            "Dimension incorrecte : "
+                            f"{len(vector)} "
+                            "au lieu de "
+                            f"{self.output_dimensionality}."
+                        )
+
+                # =========================================
+                # PETITE PAUSE ENTRE LES REQUÊTES
+                # =========================================
+
+                time.sleep(
+                    self.REQUEST_DELAY_SECONDS
+                )
+
+                return vectors
+
+            except requests.RequestException as exc:
+
+                if attempt >= self.MAX_RETRIES:
+
+                    raise RuntimeError(
+                        "Erreur réseau Jina après "
+                        "plusieurs tentatives : "
+                        f"{exc}"
+                    ) from exc
+
+                print(
+                    "[JINA] Erreur réseau. "
+                    f"Nouvelle tentative dans "
+                    f"{delay:.1f}s..."
+                )
+
+                time.sleep(
+                    delay
+                )
+
+                delay *= 2
+
+        raise RuntimeError(
+            "Échec inattendu du service Jina."
+        )
 
     # =========================================================
     # DOCUMENT UNIQUE
@@ -163,7 +266,9 @@ class JinaEmbeddingService:
             )
 
         embeddings = self._embed(
-            texts=[text.strip()],
+            texts=[
+                text.strip()
+            ],
             task="retrieval.passage",
         )
 
@@ -181,7 +286,8 @@ class JinaEmbeddingService:
         Génère les embeddings de plusieurs documents.
 
         Les textes sont automatiquement découpés
-        en lots de 50 maximum.
+        en lots de 5 maximum afin de limiter
+        le risque de dépassement du quota Jina.
         """
 
         if not texts:
@@ -218,6 +324,13 @@ class JinaEmbeddingService:
                 start:
                 start + self.MAX_BATCH_SIZE
             ]
+
+            print(
+                "[JINA] Embedding batch : "
+                f"{start + 1}-"
+                f"{start + len(batch)} / "
+                f"{len(cleaned_texts)}"
+            )
 
             batch_embeddings = self._embed(
                 texts=batch,
@@ -256,7 +369,9 @@ class JinaEmbeddingService:
             )
 
         embeddings = self._embed(
-            texts=[text.strip()],
+            texts=[
+                text.strip()
+            ],
             task="retrieval.query",
         )
 
@@ -268,4 +383,5 @@ class JinaEmbeddingService:
 # =============================================================
 
 GeminiEmbeddingService = JinaEmbeddingService
+
 GeminiEmbedding = JinaEmbeddingService

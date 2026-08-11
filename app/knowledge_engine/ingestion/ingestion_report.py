@@ -44,8 +44,13 @@ class IngestionReport:
         self,
         message: str,
     ) -> None:
+        """
+        Enregistre une erreur.
 
-        self.failed += 1
+        Le compteur failed est géré par le niveau
+        d'orchestration qui connaît le document réellement
+        en échec. Cela évite un double comptage.
+        """
 
         self.errors.append(
             message
