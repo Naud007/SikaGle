@@ -3,6 +3,9 @@ from typing import Any
 from app.knowledge_engine.embeddings.embedding_service import (
     GeminiEmbeddingService,
 )
+from app.knowledge_engine.filters.agricultural_relevance import (
+    AgriculturalRelevanceFilter,
+)
 from app.knowledge_engine.vectorstore.supabase_store import (
     SupabaseStore,
 )
@@ -16,6 +19,10 @@ class RAGIngestion:
 
         Document FAO
             ↓
+        normalisation
+            ↓
+        filtre de pertinence agricole
+            ↓
         construction du texte RAG
             ↓
         Jina Embeddings v3
@@ -26,8 +33,11 @@ class RAGIngestion:
             ↓
         knowledge_embeddings
 
-    Cette classe conserve également la pagination utilisée
-    par le pipeline FAO existant.
+    Les documents hors domaine agricole sont rejetés
+    avant la génération de leur embedding.
+
+    La pagination utilisée par le pipeline FAO
+    est conservée.
     """
 
     EMBEDDING_DIMENSION = 1024
@@ -40,6 +50,14 @@ class RAGIngestion:
 
         self.embedding_service = (
             GeminiEmbeddingService()
+        )
+
+        # =====================================================
+        # FILTRE DE PERTINENCE AGRICOLE
+        # =====================================================
+
+        self.relevance_filter = (
+            AgriculturalRelevanceFilter()
         )
 
         # =====================================================
@@ -646,6 +664,7 @@ class RAGIngestion:
         inserted = 0
         updated = 0
         skipped = 0
+        filtered_out = 0
         errors = 0
 
         # =====================================================
@@ -704,6 +723,51 @@ class RAGIngestion:
                     continue
 
                 # =============================================
+                # FILTRE AGRICOLE
+                # =============================================
+
+                relevance = (
+                    self.relevance_filter.analyze(
+                        document
+                    )
+                )
+
+                if not relevance.relevant:
+
+                    filtered_out += 1
+
+                    print(
+                        "🌾 Document filtré : "
+                        "hors domaine agricole."
+                    )
+
+                    print(
+                        f"   Score : "
+                        f"{relevance.score:.3f}"
+                    )
+
+                    print(
+                        f"   Raison : "
+                        f"{relevance.reason}"
+                    )
+
+                    continue
+
+                print(
+                    "🌾 Document agricole validé."
+                )
+
+                print(
+                    f"   Score : "
+                    f"{relevance.score:.3f}"
+                )
+
+                print(
+                    f"   Raison : "
+                    f"{relevance.reason}"
+                )
+
+                # =============================================
                 # TEXTE RAG
                 # =============================================
 
@@ -724,11 +788,11 @@ class RAGIngestion:
                     continue
 
                 # =============================================
-                # EMBEDDING JINA
+                # EMBEDDING
                 # =============================================
 
                 print(
-                    "🤖 Génération embedding Jina..."
+                    "🤖 Génération embedding..."
                 )
 
                 embedding = (
@@ -819,13 +883,6 @@ class RAGIngestion:
                         "knowledge_embeddings."
                     )
 
-                # =============================================
-                # PAUSE
-                # =============================================
-
-                # Pas de pause artificielle nécessaire ici.
-                # Le service d'embedding gère son propre appel.
-
             except Exception as e:
 
                 errors += 1
@@ -871,6 +928,9 @@ class RAGIngestion:
 
             "updated":
                 updated,
+
+            "filtered_out":
+                filtered_out,
 
             "skipped":
                 skipped,
@@ -923,6 +983,9 @@ class RAGIngestion:
                 "updated":
                     0,
 
+                "filtered_out":
+                    0,
+
                 "skipped":
                     0,
 
@@ -958,7 +1021,8 @@ def test_rag_ingestion():
             (
                 "RAGIngestion opérationnel. "
                 "Le pipeline utilise maintenant "
-                "Jina Embeddings v3 1024D et "
-                "Supabase knowledge_embeddings."
+                "Jina Embeddings v3 1024D, "
+                "le filtre de pertinence agricole "
+                "et Supabase knowledge_embeddings."
             ),
     }
