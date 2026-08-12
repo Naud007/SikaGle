@@ -1915,6 +1915,51 @@ def fao_dataset_pipeline_auto(
         "max_batches":
             max_batches,
     }
+    
+# =========================================================
+# STATUT PIPELINE FAO
+# =========================================================
+
+@app.get("/knowledge/fao-dataset-status")
+def fao_dataset_status():
+
+    try:
+
+        worker = FAOIngestionWorker()
+
+        state = worker.get_state()
+
+        return {
+            "status": "success",
+
+            "pipeline_name":
+                worker.PIPELINE_NAME,
+
+            "dataset_offset":
+                state.get("dataset_offset"),
+
+            "document_offset":
+                state.get("document_offset"),
+
+            "documents_processed":
+                state.get("documents_processed"),
+
+            "datasets_completed":
+                state.get("datasets_completed"),
+
+            "pipeline_status":
+                state.get("status"),
+
+            "last_error":
+                state.get("last_error"),
+        }
+
+    except Exception as e:
+
+        return {
+            "status": "error",
+            "message": str(e),
+        }
 # =========================================================
 # TEST PARSER DATASETS FAO
 # =========================================================
