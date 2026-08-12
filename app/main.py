@@ -1772,11 +1772,8 @@ def fao_dataset_pipeline_test(
 @app.get("/knowledge/fao-dataset-pipeline-auto")
 def fao_dataset_pipeline_auto(
     rag_limit: int = 20,
-    max_batches: int = 10,
+    max_batches: int = 1,
 ):
-
-    import threading
-    import time
 
     # =====================================================
     # VALIDATION
@@ -1791,172 +1788,77 @@ def fao_dataset_pipeline_auto(
             )
         }
 
-    if max_batches <= 0:
+    if max_batches != 1:
 
         return {
             "status": "error",
             "message": (
-                "max_batches doit être supérieur à 0."
+                "Cette route exécute un seul batch "
+                "à la fois. Le watcher PowerShell "
+                "lance automatiquement le suivant."
             )
         }
 
-    if max_batches > 20:
+    # =====================================================
+    # EXÉCUTER UN SEUL BATCH
+    # =====================================================
+
+    try:
+
+        print(
+            "[FAO AUTO] "
+            "Lancement d'un batch."
+        )
+
+        result = (
+            fao_dataset_pipeline_test(
+                dataset_limit=1,
+                rag_limit=rag_limit,
+            )
+        )
+
+        print(
+            "[FAO AUTO] "
+            f"Batch terminé : "
+            f"{result.get('status')}"
+        )
 
         return {
-            "status": "error",
-            "message": (
-                "max_batches ne peut pas dépasser 20."
-            )
-        }
 
-    # =====================================================
-    # TRAITEMENT ARRIÈRE-PLAN
-    # =====================================================
+            "status":
+                "success",
 
-    def run_pipeline():
+            "message":
+                (
+                    "Batch FAO terminé. "
+                    "La progression est sauvegardée."
+                ),
 
-        try:
+            "rag_limit":
+                rag_limit,
 
-            print(
-                "[FAO AUTO] "
-                "Pipeline automatique démarré."
-            )
-
-            for batch_number in range(
+            "max_batches":
                 1,
-                max_batches + 1
-            ):
 
-                print(
-                    "[FAO AUTO] "
-                    f"Batch {batch_number}/{max_batches}"
-                )
+            "result":
+                result
+        }
 
-                result = (
-                    fao_dataset_pipeline_test(
-                        dataset_limit=1,
-                        rag_limit=rag_limit,
-                    )
-                )
+    except Exception as e:
 
-                status = (
-                    result.get(
-                        "status"
-                    )
-                )
+        print(
+            "[FAO AUTO] "
+            f"Erreur : {e}"
+        )
 
-                print(
-                    "[FAO AUTO] "
-                    f"Résultat batch {batch_number} : "
-                    f"{status}"
-                )
+        return {
 
-                # =============================================
-                # ERREUR
-                # =============================================
+            "status":
+                "error",
 
-                if status == "error":
-
-                    print(
-                        "[FAO AUTO] "
-                        "Erreur détectée. "
-                        "Arrêt du pipeline."
-                    )
-
-                    break
-
-                # =============================================
-                # TERMINÉ
-                # =============================================
-
-                if status == "completed":
-
-                    print(
-                        "[FAO AUTO] "
-                        "Tous les datasets sont terminés."
-                    )
-
-                    break
-
-                # =============================================
-                # PLUS DE DATASETS
-                # =============================================
-
-                if not result.get(
-                    "has_more_datasets",
-                    False
-                ):
-
-                    print(
-                        "[FAO AUTO] "
-                        "Tous les datasets sont terminés."
-                    )
-
-                    break
-
-                # =============================================
-                # PROCHAIN BATCH
-                # =============================================
-
-                print(
-                    "[FAO AUTO] "
-                    "Prochain batch dans 2 secondes..."
-                )
-
-                time.sleep(2)
-
-            print(
-                "[FAO AUTO] "
-                "Pipeline automatique terminé."
-            )
-
-        except Exception as e:
-
-            print(
-                "[FAO AUTO] "
-                f"Erreur critique : {e}"
-            )
-
-    # =====================================================
-    # LANCEMENT EN ARRIÈRE-PLAN
-    # =====================================================
-
-    thread = threading.Thread(
-        target=run_pipeline,
-        daemon=True,
-    )
-
-    thread.start()
-
-    # =====================================================
-    # RÉPONSE IMMÉDIATE
-    # =====================================================
-
-    return {
-
-        "status":
-            "started",
-
-        "message":
-            (
-                "Le pipeline FAO a été "
-                "lancé en arrière-plan."
-            ),
-
-        "rag_limit":
-            rag_limit,
-
-        "max_batches":
-            max_batches,
-
-        "message_important":
-            (
-                "Les batches seront exécutés "
-                "automatiquement jusqu'à "
-                "max_batches ou jusqu'à la fin "
-                "des datasets."
-            )
-    }
+            "message":
+                str(e)
+        }
     
 # =========================================================
 # STATUT PIPELINE FAO
