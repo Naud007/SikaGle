@@ -1772,10 +1772,11 @@ def fao_dataset_pipeline_test(
 @app.get("/knowledge/fao-dataset-pipeline-auto")
 def fao_dataset_pipeline_auto(
     rag_limit: int = 20,
-    max_batches: int = 1,
+    max_batches: int = 10,
 ):
 
     import threading
+    import time
 
     # =====================================================
     # VALIDATION
@@ -1809,7 +1810,7 @@ def fao_dataset_pipeline_auto(
         }
 
     # =====================================================
-    # TRAITEMENT EN ARRIÈRE-PLAN
+    # TRAITEMENT ARRIÈRE-PLAN
     # =====================================================
 
     def run_pipeline():
@@ -1818,8 +1819,7 @@ def fao_dataset_pipeline_auto(
 
             print(
                 "[FAO AUTO] "
-                "Démarrage du traitement "
-                f"({max_batches} batch(s))."
+                "Pipeline automatique démarré."
             )
 
             for batch_number in range(
@@ -1829,8 +1829,7 @@ def fao_dataset_pipeline_auto(
 
                 print(
                     "[FAO AUTO] "
-                    f"Batch {batch_number}/"
-                    f"{max_batches}"
+                    f"Batch {batch_number}/{max_batches}"
                 )
 
                 result = (
@@ -1840,24 +1839,48 @@ def fao_dataset_pipeline_auto(
                     )
                 )
 
-                print(
-                    "[FAO AUTO] "
-                    f"Résultat batch "
-                    f"{batch_number} : "
-                    f"{result.get('status')}"
+                status = (
+                    result.get(
+                        "status"
+                    )
                 )
 
-                if result.get("status") in (
-                    "error",
-                    "completed",
-                ):
+                print(
+                    "[FAO AUTO] "
+                    f"Résultat batch {batch_number} : "
+                    f"{status}"
+                )
+
+                # =============================================
+                # ERREUR
+                # =============================================
+
+                if status == "error":
 
                     print(
                         "[FAO AUTO] "
-                        "Arrêt du traitement."
+                        "Erreur détectée. "
+                        "Arrêt du pipeline."
                     )
 
                     break
+
+                # =============================================
+                # TERMINÉ
+                # =============================================
+
+                if status == "completed":
+
+                    print(
+                        "[FAO AUTO] "
+                        "Tous les datasets sont terminés."
+                    )
+
+                    break
+
+                # =============================================
+                # PLUS DE DATASETS
+                # =============================================
 
                 if not result.get(
                     "has_more_datasets",
@@ -1871,20 +1894,31 @@ def fao_dataset_pipeline_auto(
 
                     break
 
+                # =============================================
+                # PROCHAIN BATCH
+                # =============================================
+
                 print(
                     "[FAO AUTO] "
-                    f"Batch {batch_number} terminé."
+                    "Prochain batch dans 2 secondes..."
                 )
+
+                time.sleep(2)
+
+            print(
+                "[FAO AUTO] "
+                "Pipeline automatique terminé."
+            )
 
         except Exception as e:
 
             print(
                 "[FAO AUTO] "
-                f"Erreur arrière-plan : {e}"
+                f"Erreur critique : {e}"
             )
 
     # =====================================================
-    # LANCER LE THREAD
+    # LANCEMENT EN ARRIÈRE-PLAN
     # =====================================================
 
     thread = threading.Thread(
@@ -1914,6 +1948,14 @@ def fao_dataset_pipeline_auto(
 
         "max_batches":
             max_batches,
+
+        "message_important":
+            (
+                "Les batches seront exécutés "
+                "automatiquement jusqu'à "
+                "max_batches ou jusqu'à la fin "
+                "des datasets."
+            )
     }
     
 # =========================================================
