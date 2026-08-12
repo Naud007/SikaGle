@@ -1764,6 +1764,97 @@ def fao_dataset_pipeline_test(
             "message":
                 str(e)
         }
+        
+# =========================================================
+# FAO PIPELINE AUTOMATIQUE
+# =========================================================
+
+@app.get("/knowledge/fao-dataset-pipeline-auto")
+def fao_dataset_pipeline_auto(
+    rag_limit: int = 20,
+    max_batches: int = 10,
+):
+    """
+    Exécute automatiquement plusieurs batches du pipeline FAO.
+
+    La progression est sauvegardée dans Supabase après
+    chaque batch. En cas d'arrêt ou de redémarrage,
+    le prochain appel reprend automatiquement au dernier offset.
+    """
+
+    import time
+
+    if rag_limit <= 0:
+        return {
+            "status": "error",
+            "message": "rag_limit doit être supérieur à 0."
+        }
+
+    if max_batches <= 0:
+        return {
+            "status": "error",
+            "message": "max_batches doit être supérieur à 0."
+        }
+
+    if max_batches > 20:
+        return {
+            "status": "error",
+            "message": "max_batches ne peut pas dépasser 20."
+        }
+
+    results = []
+
+    for batch_number in range(1, max_batches + 1):
+
+        print(
+            "[FAO AUTO] "
+            f"Batch {batch_number}/{max_batches}"
+        )
+
+        result = fao_dataset_pipeline_test(
+            dataset_limit=1,
+            rag_limit=rag_limit,
+        )
+
+        results.append(result)
+
+        if result.get("status") == "error":
+            return {
+                "status": "error",
+                "message": "Le pipeline FAO a rencontré une erreur.",
+                "batches_executed": batch_number,
+                "results": results,
+            }
+
+        if result.get("status") == "completed":
+            return {
+                "status": "completed",
+                "message": "Tous les datasets FAO sont terminés.",
+                "batches_executed": batch_number,
+                "results": results,
+            }
+
+        if not result.get("has_more_datasets", False):
+            return {
+                "status": "completed",
+                "message": "Tous les datasets FAO sont terminés.",
+                "batches_executed": batch_number,
+                "results": results,
+            }
+
+        # Petite pause pour éviter d'enchaîner
+        # immédiatement les appels externes.
+        time.sleep(2)
+
+    return {
+        "status": "success",
+        "message": (
+            "Lot automatique terminé. "
+            "La progression est sauvegardée dans Supabase."
+        ),
+        "batches_executed": len(results),
+        "last_result": results[-1] if results else None,
+    }
 # =========================================================
 # TEST PARSER DATASETS FAO
 # =========================================================
