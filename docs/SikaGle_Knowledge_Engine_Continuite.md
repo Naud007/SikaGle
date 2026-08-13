@@ -1,33 +1,75 @@
-# SikaGlé — Knowledge Engine
-## Document de continuité et guide d'ajout de sources
+# SikaGlé --- État du projet et document de reprise
 
-> Document de référence pour reprendre le travail dans une nouvelle conversation.
-> Décrit l'état réel, les décisions d'architecture, les sources validées et le processus d'ajout d'une nouvelle source.
+## 1. Objet
 
----
+Document de reprise officiel du projet SikaGlé pour une nouvelle
+conversation.
 
-## 1. Objectif
+Il décrit l'état réel du projet, les décisions d'architecture, ce qui
+est terminé, ce qui reste à faire et l'ordre recommandé jusqu'à la V1
+client final.
 
-Le Knowledge Engine de SikaGlé permet de découvrir des documents, les parser, filtrer les contenus hors domaine agricole, générer des embeddings de dimension **1024**, les stocker dans **Supabase / `knowledge_embeddings`**, puis les exploiter avec le moteur RAG.
+**Règle : ne pas recommencer les travaux déjà validés.**
 
-Sources prévues :
-- BRAB
-- FAO / AGRIS
-- INRAB
-- ITA
-- AfricaRice
-- autres sources agricoles pertinentes
+------------------------------------------------------------------------
 
----
+## 2. Vision du produit
 
-## 2. Architecture générale
+SikaGlé est un assistant agricole intelligent destiné en priorité aux
+agriculteurs d'Afrique de l'Ouest.
 
-```text
+Vision V1 :
+
+> Un agriculteur peut envoyer une question par texte, voix ou image.
+> SikaGlé comprend le problème, consulte les connaissances agricoles
+> disponibles, raisonne sur le contexte et répond dans une langue
+> adaptée à l'utilisateur.
+
+Langues prévues pour la V1 :
+
+-   Français
+-   Fon
+-   Yoruba
+-   Dendi
+
+Canal prioritaire :
+
+-   WhatsApp
+
+Parcours cible :
+
+``` text
+Agriculteur
+   ↓
+WhatsApp
+   ↓
+Texte / voix / image
+   ↓
+Compréhension
+   ↓
+Conversation Engine
+   ↓
+Knowledge Engine / RAG
+   ↓
+Raisonnement
+   ↓
+Réponse
+   ↓
+Texte ou voix
+   ↓
+Agriculteur
+```
+
+------------------------------------------------------------------------
+
+## 3. Architecture actuelle
+
+``` text
 SOURCE DOCUMENTAIRE
         ↓
-Découverte / catalogue
+CONNECTEUR / DOWNLOADER
         ↓
-Parser / normalisation
+PARSER / NORMALISATION
         ↓
 DocumentMetadata
         ↓
@@ -37,7 +79,7 @@ RAGIngestion
         ↓
 Construction du texte RAG
         ↓
-Embedding 1024D
+Jina Embeddings
         ↓
 Supabase
         ↓
@@ -47,736 +89,967 @@ HybridRetriever
         ↓
 RAGService
         ↓
-Réponse SikaGlé + sources
+Réponse + sources
 ```
 
-Le filtre agricole intervient **avant la génération d'embedding**.
+Principe essentiel : les nouvelles sources doivent alimenter le pipeline
+commun. Ne pas créer un RAG différent pour chaque source.
 
----
+------------------------------------------------------------------------
 
-## 3. Stockage vectoriel
+## 4. État global
 
-Table :
+  Élément                       État
+  ----------------------------- ------------------------------
+  Infrastructure backend        ✅
+  Knowledge Engine              ✅
+  Supabase vector store         ✅
+  Jina Embeddings 1024D         ✅
+  RAG                           ✅
+  AgriculturalRelevanceFilter   ⚠️ à améliorer
+  BRAB                          ✅ 152/152 parcourus
+  FAO / AGRIS                   🔄 à terminer
+  INRAB                         ⏸ BRAB actuellement exploité
+  ITA                           ⏳ après V1
+  AfricaRice                    ⏳ après V1
+  Refactor main.py              ⏳
+  Conversation Engine           🔄 à finaliser
+  Voix                          ⏳
+  Image / Vision                ⏳
+  Français                      🔄
+  Fon                           ⏳
+  Yoruba                        ⏳
+  Dendi                         ⏳
+  WhatsApp                      🔄
+  Tests bout en bout            ⏳
 
-```text
+------------------------------------------------------------------------
+
+## 5. Knowledge Engine --- terminé
+
+Les composants suivants sont fonctionnels :
+
+-   FastAPI
+-   logging
+-   health checks
+-   readiness
+-   monitoring de base
+-   Supabase
+-   stockage vectoriel
+-   embeddings 1024D
+-   ingestion
+-   parsing
+-   filtrage agricole
+-   retrieval
+-   RAG
+
+Table vectorielle :
+
+``` text
 knowledge_embeddings
 ```
 
-Colonnes importantes :
+Embedding :
 
-```text
-id
-document_id
-chunk_index
-chunk_count
-content
-embedding
-title
-source
-identifier
-url
-author
-published_at
-language
-document_type
-publisher
-crop
-culture
-keywords
-country
-zone_geographique
-created_at
-```
-
-L'embedding est :
-
-```text
+``` text
 vector(1024)
 ```
 
----
+Recherche :
 
-## 4. Recherche vectorielle
-
-Fonction SQL :
-
-```text
-public.match_knowledge_embeddings(
-    query_embedding vector,
-    match_threshold double precision DEFAULT 0.20,
-    match_count integer DEFAULT 5
-)
+``` text
+public.match_knowledge_embeddings(...)
 ```
 
-Similarité :
+Endpoint principal :
 
-```sql
-1 - (ke.embedding <=> query_embedding)
-```
-
----
-
-## 5. RAG
-
-Chaîne :
-
-```text
-RAGService
-    ↓
-HybridRetriever
-    ↓
-VectorRetriever
-    ↓
-GeminiEmbeddingService
-    ↓
-KnowledgeRepository
-    ↓
-Supabase
-```
-
-Endpoint :
-
-```text
+``` text
 POST /knowledge/ask
 ```
 
-Test validé avec :
+Un test RAG a été validé avec une question sur les effets du changement
+climatique sur l'agriculture au Bénin.
 
-```text
-Quels sont les effets du changement climatique sur l'agriculture au Bénin ?
+Résultat observé :
+
+``` text
+success = true
+chunks_used = 5
+source = BRAB
 ```
 
-Résultat validé :
-- `success = true`
-- `chunks_used = 5`
-- source BRAB
-- réponse fondée sur `Effects and trend of climate change in Bénin`
+------------------------------------------------------------------------
 
----
+## 6. BRAB --- TERMINÉ
 
-# 6. BRAB
+BRAB est actuellement la source INRAB exploitable retenue.
 
-## État
+Collection entièrement parcourue :
 
-```text
-Pipeline : ✅
-Découverte : ✅
-Téléchargement : ✅
-Parsing : ✅
-Indexation : ✅
-RAG : ✅
-Test question/réponse : ✅
-Collection complète : ⏳
+``` text
+0    → 20   ✅
+20   → 40   ✅
+40   → 60   ✅
+60   → 80   ✅
+80   → 100  ✅
+100  → 120  ✅
+120  → 140  ✅
+140  → 152  ✅
 ```
 
-BRAB est actuellement notre source INRAB active et exploitable.
+Résultat :
 
-**Important :** le pipeline BRAB est validé, mais toute la collection n'est pas encore considérée comme entièrement ingérée.
+``` text
+152 / 152 documents parcourus
+```
 
----
+Dernier batch :
 
-# 7. FAO / AGRIS
+``` text
+documents_found = 12
+downloaded = 11
+validated = 11
+indexed = 7
+skipped = 4
+filtered_out = 1
+failed = 0
+errors = []
+```
 
-## Pipeline fonctionnel
+BRAB est donc terminé pour cette phase d'ingestion.
 
-Le pipeline FAO utilisé pour le RAG est le pipeline AGRIS ODS :
+------------------------------------------------------------------------
 
-```text
-AGRIS.ODS.xml
-        ↓
-datasets AGRIS
-        ↓
-AGRIS.ODS.BRI.xml
-        ↓
-FAODatasetParser
-        ↓
-RAGIngestion
-        ↓
-AgriculturalRelevanceFilter
-        ↓
-embedding 1024D
-        ↓
-Supabase
+## 7. Incident Jina --- CORRIGÉ
+
+Pendant BRAB, Jina avait retourné :
+
+``` text
+HTTP 429
+RATE_TOKEN_LIMIT_EXCEEDED
+```
+
+Exemple :
+
+``` text
+109,179 / 100,000 tokens per minute
+```
+
+Correction dans :
+
+``` text
+app/knowledge_engine/embeddings/embedding_service.py
+```
+
+Configuration actuelle :
+
+``` text
+MAX_BATCH_SIZE = 5
+MAX_RETRIES = 5
+INITIAL_DELAY_SECONDS = 2
+REQUEST_DELAY_SECONDS = 2
+```
+
+Ajouts :
+
+-   retry automatique ;
+-   backoff progressif ;
+-   délai entre requêtes ;
+-   gestion spécifique du HTTP 429 ;
+-   gestion des erreurs réseau ;
+-   validation des embeddings.
+
+Après correction, le batch BRAB `offset=140` a réussi :
+
+``` text
+failed = 0
+errors = []
+indexed = 7
+```
+
+------------------------------------------------------------------------
+
+## 8. Double comptage des erreurs --- CORRIGÉ
+
+Le fichier :
+
+``` text
+app/knowledge_engine/ingestion/ingestion_report.py
+```
+
+a été corrigé.
+
+Avant, `add_error()` incrémentait `failed`, alors que l'orchestration
+pouvait aussi incrémenter `failed`.
+
+Désormais :
+
+``` text
+add_error()
+```
+
+enregistre uniquement l'erreur.
+
+Le compteur `failed` est géré au niveau de l'orchestration du document.
+
+------------------------------------------------------------------------
+
+## 9. AgriculturalRelevanceFilter
+
+Fichier :
+
+``` text
+app/knowledge_engine/filters/agricultural_relevance.py
+```
+
+Le filtre est intégré au pipeline RAG avant l'embedding.
+
+Il sait déjà rejeter des contenus manifestement hors domaine agricole.
+
+### Problème connu
+
+Un faux positif a été identifié :
+
+``` text
+A systematic literature review on food and nutrition research
+in Benin and how research integrate equity lens
+for healthier food choices
+```
+
+Il a été rejeté à cause de :
+
+``` text
+literature
+```
+
+Autre cas à surveiller :
+
+``` text
+Overview of technological feed manufacturing processes
+and criteria for the manufacture of an extruder
+for fish feed in Benin: Literature review
+```
+
+Ce document est lié à l'alimentation animale / aquaculture et doit être
+considéré comme pertinent.
+
+Conclusion :
+
+``` text
+literature
+systematic review
+literature review
+```
+
+ne doivent pas, à eux seuls, provoquer l'exclusion.
+
+### Travail restant
+
+1.  revoir les règles d'exclusion ;
+2.  supprimer les faux positifs ;
+3.  ajouter des tests de régression ;
+4.  tester agriculture, élevage, aquaculture, agroalimentaire, sols,
+    climat agricole, etc. ;
+5.  valider le filtre avant la suite.
+
+**Ne pas modifier le filtre sans tests.**
+
+------------------------------------------------------------------------
+
+## 10. FAO / AGRIS --- EN COURS
+
+Le pipeline AGRIS fonctionne.
+
+Source :
+
+``` text
+https://agris.fao.org/ods/AGRIS.ODS.xml
 ```
 
 Catalogue :
 
-```text
-https://agris.fao.org/ods/AGRIS.ODS.xml
+``` text
+AGRIS.ODS.xml
 ```
 
-Dataset déjà testé :
+Statistique observée :
 
-```text
+``` text
+datasets_found = 1235
+```
+
+Dataset testé :
+
+``` text
 AGRIS.ODS.BRI.xml
 ```
 
-Statistiques observées :
+Résultat :
 
-```text
-datasets_found = 1235
+``` text
 documents_parsed = 784
 ```
 
-## Test réel du filtre
+Test réel :
 
-Test :
-
-```text
+``` text
 dataset_limit = 1
 rag_limit = 5
 ```
 
-Résultat validé :
+Résultat :
 
-```text
+``` text
+datasets_processed = 1
+datasets_success = 1
+datasets_errors = 0
+documents_parsed = 784
+inserted = 2
+updated = 0
+skipped = 0
+errors = 0
+documents_processed = 739
+datasets_completed = 1
+next_dataset_offset = 1
+next_document_offset = 725
+has_more_datasets = true
+pipeline_status = idle
+```
+
+Batch RAG :
+
+``` text
+total_documents = 784
+batch_offset = 720
+batch_limit = 5
 batch_processed = 5
 inserted = 2
-filtered_out = 3
 updated = 0
+filtered_out = 3
 skipped = 0
 errors = 0
 next_offset = 725
 has_more = true
 ```
 
-Donc :
+État :
 
-```text
-5 documents
-├── 2 conservés → embedding → Supabase
-└── 3 filtrés → aucun embedding
+``` text
+Pipeline : ✅
+Downloader : ✅
+Parser : ✅
+Filtre : ⚠️ à améliorer
+RAG ingestion : ✅
+Pagination : ✅
+Collection complète : 🔄 à terminer
 ```
 
-La pagination fonctionne.
+### Prochaine action Knowledge Engine
 
-**La collection FAO/AGRIS complète reste à poursuivre.**
+**Terminer FAO / AGRIS.**
 
----
+Ne pas retraiter BRAB.
 
-# 8. Ancien connecteur FAO DSpace
+------------------------------------------------------------------------
 
-Fichier :
+## 11. Ancien connecteur FAO DSpace
 
-```text
-app/knowledge_engine/connectors/fao.py
-```
+Le connecteur :
 
-Il utilise :
-
-```text
+``` text
 https://openknowledge.fao.org/server/api
-```
-
-L'appel :
-
-```text
-/server/api/core/items
 ```
 
 a retourné :
 
-```text
+``` text
 HTTP 401
 ```
 
-Erreur :
+Décision : conserver la voie AGRIS ODS fonctionnelle et ne pas revenir
+au connecteur DSpace sauf nécessité future.
 
-```text
-401 Client Error: 401 for url:
-https://openknowledge.fao.org/server/api/core/items?size=20
-```
+------------------------------------------------------------------------
 
-## Décision
+## 12. INRAB
 
-Ne pas utiliser cette voie pour le pipeline FAO/AGRIS.
+Plateformes testées mais actuellement non exploitables :
 
-Conserver le pipeline AGRIS ODS fonctionnel.
-
----
-
-# 9. INRAB
-
-Anciennes plateformes identifiées :
-
-```text
+``` text
 https://publications-chercheurs.inrab.bj/
 https://technologies.inrab.bj/
 https://chercheurs.inrab.bj/
 ```
 
-Elles sont actuellement problématiques/inaccessibles dans notre environnement.
+BRAB est actuellement la source INRAB exploitable retenue.
 
-Le BRAB est une publication de l'INRAB et constitue actuellement la source INRAB exploitable.
+Cela ne signifie pas que BRAB contient nécessairement toute la
+documentation INRAB.
 
-## Décision
+------------------------------------------------------------------------
 
-Pour le moment :
+## 13. Total actuel Supabase
 
-```text
-INRAB
+Endpoint :
+
+``` text
+GET /knowledge/count
+```
+
+Dernier résultat :
+
+``` json
+{
+  "documents": 2367
+}
+```
+
+Attention : 2367 est le total global du stockage de connaissances, pas
+le nombre BRAB.
+
+------------------------------------------------------------------------
+
+## 14. main.py --- REFACTORISATION À FAIRE
+
+`main.py` est devenu trop long.
+
+Objectif : en faire un point d'assemblage de l'application plutôt qu'un
+fichier contenant toute la logique.
+
+Architecture cible :
+
+``` text
+app/
+├── main.py
+├── api/
+│   ├── health.py
+│   ├── knowledge.py
+│   ├── ai.py
+│   ├── webhook.py
+│   ├── voice.py
+│   └── vision.py
+├── knowledge_engine/
+├── conversation/
+├── voice/
+├── vision/
+├── languages/
+└── ...
+```
+
+Le refactoring doit être fait **après stabilisation FAO + filtre**, puis
+suivi de tests de non-régression.
+
+Ne pas supprimer les endpoints historiques sans vérifier leur
+utilisation.
+
+------------------------------------------------------------------------
+
+## 15. PRODUIT V1 --- priorité
+
+Nous ne voulons plus piloter le projet uniquement par le nombre de
+sources documentaires.
+
+Objectif :
+
+**terminer le produit utilisable par le client final.**
+
+Parcours cible :
+
+``` text
+Agriculteur
+      ↓
+WhatsApp
+      ↓
+Texte / Voix / Image
+      ↓
+Compréhension
+      ↓
+Conversation Engine
+      ↓
+Contexte utilisateur
+      ↓
+Knowledge Engine / RAG
+      ↓
+Raisonnement
+      ↓
+Réponse
+      ↓
+Texte ou Voix
+      ↓
+Agriculteur
+```
+
+------------------------------------------------------------------------
+
+## 16. Langues V1
+
+Langues :
+
+``` text
+Français
+Fon
+Yoruba
+Dendi
+```
+
+Le système doit pouvoir :
+
+-   comprendre la langue ;
+-   conserver le contexte ;
+-   produire une réponse adaptée ;
+-   produire une réponse vocale lorsque demandé.
+
+------------------------------------------------------------------------
+
+## 17. Conversation Engine --- À FINALISER
+
+Le système doit combiner :
+
+``` text
+question utilisateur
++
+historique
++
+profil
++
+langue
++
+contexte agricole
++
+résultats RAG
+```
+
+pour produire une réponse cohérente.
+
+Chaîne :
+
+``` text
+Comprendre
    ↓
-BRAB
+Contextualiser
+   ↓
+Chercher
+   ↓
+Raisonner
+   ↓
+Répondre
 ```
 
-Nous ne créons pas de connecteur INRAB séparé dépendant des anciennes plateformes.
+À finaliser :
 
-Cela ne signifie pas que toute la documentation INRAB est nécessairement dans BRAB ; cela signifie seulement que BRAB est la source INRAB active retenue actuellement.
+-   mémoire conversationnelle ;
+-   contexte ;
+-   profil agriculteur ;
+-   langue préférée ;
+-   réponses avec sources ;
+-   gestion de l'incertitude.
 
----
+------------------------------------------------------------------------
 
-# 10. AgriculturalRelevanceFilter
+## 18. Voix --- À FAIRE
 
-Fichier :
+Objectif :
 
-```text
-app/knowledge_engine/filters/agricultural_relevance.py
+``` text
+Audio agriculteur
+      ↓
+Speech-to-Text
+      ↓
+détection / identification langue
+      ↓
+Conversation Engine
+      ↓
+RAG
+      ↓
+réponse
+      ↓
+Text-to-Speech
+      ↓
+Audio
 ```
 
-Méthodes importantes :
+À développer :
 
-```python
-analyze(document)
-is_relevant(document)
+-   réception audio ;
+-   transcription ;
+-   identification langue ;
+-   traitement conversationnel ;
+-   synthèse vocale ;
+-   Français ;
+-   Fon ;
+-   Yoruba ;
+-   Dendi ;
+-   gestion des erreurs ;
+-   tests avec de vrais messages vocaux.
+
+------------------------------------------------------------------------
+
+## 19. Image / Vision --- À FAIRE
+
+Objectif :
+
+``` text
+Photo plante / feuille / fruit / ravageur
+          +
+question utilisateur
+          ↓
+Vision
+          ↓
+analyse
+          ↓
+Knowledge Engine / RAG
+          ↓
+raisonnement
+          ↓
+réponse
 ```
 
-`analyze()` retourne un résultat contenant :
+Cas :
 
-```text
-relevant
-score
-reason
+-   feuilles jaunissantes ;
+-   symptômes ;
+-   ravageurs ;
+-   maladies ;
+-   plantes ;
+-   fruits ;
+-   dégâts visibles.
+
+Le système doit gérer l'incertitude et ne pas présenter une analyse
+visuelle incertaine comme un diagnostic certain.
+
+------------------------------------------------------------------------
+
+## 20. WhatsApp --- À FINALISER
+
+Canal principal V1 :
+
+``` text
+WhatsApp
 ```
 
-Exemples validés :
+Routes présentes :
 
-```text
-Effects and trend of climate change in Bénin
-→ True
-
-FOOT REFLEXOLOGY MASSAGE IN OLDER WOMEN
-→ False
-
-DISSEMINATION AND POPULARIZATION OF ASTRONOMY...
-→ False
-
-DISSEMINATION OF THE BEHAVIOR ANALYSIS...
-→ False
-
-NUTRITIONAL AMBULATORY CARE...
-→ False
-
-Integrated soil fertility management for maize production
-→ True
-
-Cassava production and pest management
-→ True
-
-Improving soil fertility in West Africa
-→ True
-
-Climate variability and rice yields
-→ True
-
-Livestock feeding systems in Benin
-→ True
-
-Irrigation water management for maize
-→ True
+``` text
+GET  /webhook
+POST /webhook
 ```
 
-Le matching utilise des frontières de mots afin d'éviter les faux positifs de sous-chaînes comme :
+À finaliser :
 
-```text
-POPULARIZATION
+-   vérification webhook ;
+-   réception texte ;
+-   réception audio ;
+-   réception image ;
+-   réponse texte ;
+-   réponse audio ;
+-   gestion utilisateurs ;
+-   gestion erreurs ;
+-   tests multi-utilisateurs.
+
+------------------------------------------------------------------------
+
+## 21. Parcours client final
+
+### Scénario voix
+
+``` text
+Agriculteur
+→ message vocal en Fon
+→ Speech-to-Text
+→ compréhension
+→ RAG
+→ raisonnement
+→ réponse en Fon
+→ Text-to-Speech
+→ message vocal
 ```
 
-qui ne doit pas être interprété comme contenant :
+### Scénario image
 
-```text
-agriculture
+``` text
+Photo feuille
++
+question
+→ Vision
+→ RAG
+→ raisonnement
+→ réponse
 ```
 
----
+### Scénario texte
 
-# 11. RAGIngestion
-
-Fichier :
-
-```text
-app/knowledge_engine/storage/rag_ingestion.py
+``` text
+Question texte en français
+→ RAG
+→ réponse française sourcée
 ```
 
-Le filtre est intégré avant l'embedding :
+------------------------------------------------------------------------
 
-```text
-document
-    ↓
-normalize_document()
-    ↓
-relevance_filter.analyze(document)
-    ↓
-False → filtered_out += 1 → continue
-    ↓
-True
-    ↓
-build_rag_text()
-    ↓
-generate_document_embedding()
-    ↓
-dimension 1024
-    ↓
-Supabase
+## 22. Ordre de travail jusqu'à la V1
+
+### Phase A --- Knowledge Engine
+
+``` text
+1. Terminer FAO / AGRIS
+2. Corriger AgriculturalRelevanceFilter
+3. Ajouter tests de régression
+4. Vérifier RAG
 ```
 
-Le résultat contient :
+### Phase B --- Backend
 
-```text
-filtered_out
+``` text
+5. Refactoriser main.py
+6. Séparer les routers
+7. Nettoyer les endpoints de test historiques
+8. Tests de non-régression
 ```
 
-## Pagination
+### Phase C --- Conversation
 
-```python
-batch = documents[offset:offset + limit]
+``` text
+9. Finaliser Conversation Engine
+10. Mémoire / contexte
+11. Profil agriculteur
+12. Langues
+13. Réponses sourcées
+14. Gestion de l'incertitude
 ```
 
-puis :
+### Phase D --- Multimodal
 
-```text
-next_offset = offset + len(batch)
+``` text
+15. Speech-to-Text
+16. Text-to-Speech
+17. Image / Vision
+18. Image + texte
 ```
 
-Un document filtré compte donc dans le batch consommé.
+### Phase E --- WhatsApp
 
-Exemple :
-
-```text
-5 documents
-2 indexés
-3 filtrés
-next_offset = offset + 5
+``` text
+19. Texte
+20. Voix
+21. Image
+22. Réponses texte
+23. Réponses audio
+24. Multi-utilisateurs
 ```
 
-Cela évite de retraiter indéfiniment les documents rejetés.
+### Phase F --- Validation V1
 
----
-
-# 12. Ingestion et erreurs
-
-Composants :
-
-```text
-IngestionManager
-SourceIngestor
-IngestionReport
-GlobalIngestionReport
-IngestionJob
+``` text
+25. Tests bout en bout
+26. Tests langues
+27. Tests voix
+28. Tests images
+29. Tests RAG
+30. Tests erreurs
+31. Tests performance
+32. Monitoring
+33. Sécurité
+34. Démonstration client
 ```
 
-`IngestionJob` conserve maintenant :
+------------------------------------------------------------------------
 
-```python
-error: str | None
+## 23. Sources supplémentaires --- APRÈS V1
+
+Une fois la V1 client final terminée :
+
+``` text
+V1 client final
+      ↓
+ITA
+      ↓
+AfricaRice
+      ↓
+autres sources
 ```
 
-et `fail(reason)` sauvegarde l'erreur.
+Ces sources devront utiliser le pipeline commun.
 
-Cela permet de diagnostiquer une ingestion échouée.
+Ne pas interrompre la finalisation de la V1 pour brancher toutes les
+sources possibles.
 
----
+------------------------------------------------------------------------
 
-# 13. Endpoints importants
+## 24. Git / déploiement
 
-Sources :
+Dépôt :
 
-```text
-GET /knowledge/sources
+``` text
+main
 ```
 
-Retour actuel :
+Dernier état connu après les corrections :
 
-```text
-brab
-fao
-inrab
+``` text
+working tree clean
+branch main
+up to date with origin/main
 ```
 
-RAG :
+Commits importants :
 
-```text
-POST /knowledge/ask
-```
-
-Tests AGRIS :
-
-```text
-GET /knowledge/fao-ods-structure
-GET /knowledge/fao-ods-test
-GET /knowledge/fao-parser-test
-GET /knowledge/fao-datasets-test
-GET /knowledge/fao-dataset-parser-test
-GET /knowledge/fao-rag-pipeline-test
-GET /knowledge/fao-dataset-pipeline-test
-GET /knowledge/rag-ingestion-test
-GET /knowledge/rag-ingest
-```
-
-Pipeline AGRIS validé :
-
-```text
-GET /knowledge/fao-dataset-pipeline-test
-```
-
-Paramètres exposés :
-
-```text
-dataset_limit
-rag_limit
-```
-
-Test validé :
-
-```text
-dataset_limit = 1
-rag_limit = 5
-```
-
----
-
-# 14. Procédure pour une nouvelle source
-
-Toujours suivre cet ordre.
-
-### 1. Étudier la source
-
-Identifier :
-- site officiel ;
-- catalogue ;
-- API ;
-- XML/ODS/CSV ;
-- pages de publications ;
-- URLs PDF ;
-- pagination ;
-- authentification éventuelle.
-
-### 2. Tester l'accès
-
-Obtenir :
-- HTTP 200 ;
-- contenu non vide ;
-- taille cohérente.
-
-### 3. Créer le downloader/client si nécessaire
-
-### 4. Créer le parser
-
-Normaliser autant que possible :
-
-```text
-title
-content
-source
-identifier
-url
-author
-published_at
-language
-document_type
-publisher
-crop
-culture
-keywords
-country
-zone_geographique
-```
-
-### 5. Tester le parser
-
-Utiliser quelques documents.
-
-### 6. Passer par le filtre
-
-Toujours :
-
-```python
-AgriculturalRelevanceFilter.analyze(document)
-```
-
-avant l'embedding.
-
-### 7. Passer par RAGIngestion
-
-Ne pas dupliquer le pipeline embedding/Supabase pour chaque source sans nécessité.
-
-### 8. Tester un petit batch
-
-Commencer par :
-
-```text
-1 dataset
-5 documents
-```
-
-ou le plus petit équivalent.
-
-### 9. Vérifier
-
-```text
-batch_processed
-inserted
-updated
-filtered_out
-skipped
-errors
-next_offset
-has_more
-```
-
-### 10. Tester le RAG
-
-Poser une vraie question agricole et vérifier :
-- pertinence ;
-- source ;
-- chunks utilisés ;
-- absence de contenu hors domaine.
-
-### 11. Seulement ensuite lancer l'ingestion complète.
-
----
-
-# 15. Git / déploiement
-
-Avant commit :
-
-```bash
-python -m compileall app/knowledge_engine
-```
-
-Puis :
-
-```bash
-git status
-```
-
-Vérifier les fichiers modifiés.
-
-Ensuite :
-
-```bash
-git add <fichiers>
-git status
-git commit -m "Message clair"
-git push
-```
-
-Attendre :
-
-```text
-Render → Live
-```
-
-puis tester en production.
-
----
-
-# 16. Commits importants
-
-Filtre agricole :
-
-```text
+``` text
 991fe46
 Add agricultural relevance filter to ingestion
-```
 
-Conservation des erreurs :
-
-```text
 beba0d3
 Preserve ingestion job errors
-```
 
-Intégration du filtre dans RAG :
-
-```text
 be31463
 Integrate agricultural relevance filter into RAG ingestion
 ```
 
-Ces commits sont sur `main`.
+Les corrections Jina et ingestion ont également été poussées avant le
+dernier test BRAB.
 
----
+Procédure :
 
-# 17. État actuel
-
-| Source | Pipeline | Tests | Collection complète |
-|---|---|---|---|
-| BRAB | ✅ | ✅ | ⏳ |
-| FAO / AGRIS | ✅ | ✅ | ⏳ |
-| INRAB | couvert actuellement par BRAB | ✅ | — |
-| ITA | ⏳ | — | — |
-| AfricaRice | ⏳ | — | — |
-
-**BRAB et FAO ne sont donc pas encore terminés au niveau de l'ingestion complète.**
-
----
-
-# 18. Prochaines tâches
-
-Ordre recommandé :
-
-```text
-1. Poursuivre/terminer ingestion BRAB
-2. Poursuivre/terminer ingestion FAO/AGRIS
-3. Documenter les résultats finaux
-4. Intégrer ITA
-5. Intégrer AfricaRice
-6. Ajouter d'autres sources si nécessaire
+``` text
+python -m compileall app/knowledge_engine
+↓
+git status
+↓
+git add
+↓
+git status
+↓
+git commit
+↓
+git push
+↓
+Render → Live
+↓
+test production
 ```
 
-Une source n'est considérée comme pleinement validée qu'après :
-- pipeline fonctionnel ;
-- petit batch réussi ;
-- filtre validé ;
-- embeddings valides ;
-- indexation Supabase valide ;
-- test RAG ;
-- documentation.
+------------------------------------------------------------------------
 
----
+## 25. Règle de reprise après erreur
 
-# 19. Continuité entre conversations
-
-Si une nouvelle conversation est nécessaire, fournir ce fichier et écrire :
-
-> Voici le document de continuité du Knowledge Engine de SikaGlé. Utilise-le comme référence principale. Ne recommence pas les étapes déjà validées. Vérifie l'état indiqué dans « État actuel » et reprends à « Prochaines tâches ».
-
-Mettre ce document à jour après chaque grande décision ou intégration.
-
----
-
-# 20. Règle architecturale principale
-
-Le principe à préserver :
-
-```text
-SOURCE
-  ↓
-CONNECTEUR / DOWNLOADER
-  ↓
-PARSER
-  ↓
-DocumentMetadata
-  ↓
-AgriculturalRelevanceFilter
-  ↓
-RAGIngestion
-  ↓
-Embedding 1024D
-  ↓
-Supabase
+``` text
+1. Ne pas avancer l'offset.
+2. Identifier l'erreur.
+3. Corriger uniquement la cause.
+4. Compiler.
+5. Commit.
+6. Push.
+7. Attendre Render Live.
+8. Relancer le même offset.
+9. Vérifier failed/errors.
+10. Continuer seulement après succès.
 ```
 
-Une nouvelle source doit s'adapter à cette architecture.
+Cette règle a déjà été appliquée avec succès lors du timeout BRAB
+`offset=120`.
 
-**Le pipeline RAG commun ne doit pas être dupliqué pour chaque source.**
+------------------------------------------------------------------------
+
+## 26. Point de reprise actuel
+
+``` text
+SikaGlé
+│
+├── Infrastructure                  ✅
+├── Knowledge Engine                ✅
+├── Supabase                        ✅
+├── Jina                            ✅
+├── RAG                             ✅
+├── Filtre agricole                 ⚠️ correction à faire
+│
+├── BRAB                            ✅ 152/152
+├── FAO / AGRIS                     🔄 à terminer
+├── INRAB                           ⏸ BRAB exploité
+│
+├── main.py                         ⏳ refactor
+├── Conversation Engine             🔄 à finaliser
+├── Texte                           🔄
+├── Voix                            ⏳
+├── Image                           ⏳
+├── Français                        🔄
+├── Fon                             ⏳
+├── Yoruba                          ⏳
+├── Dendi                           ⏳
+├── WhatsApp                        🔄
+│
+├── Tests bout en bout              ⏳
+└── V1 client final                 ⏳
+```
+
+------------------------------------------------------------------------
+
+# 27. PROCHAINE ACTION IMMÉDIATE
+
+**Ne pas recommencer BRAB.**
+
+Ordre immédiat :
+
+``` text
+FAO / AGRIS
+    ↓
+terminer l'ingestion
+    ↓
+corriger le filtre agricole
+    ↓
+tests de régression
+    ↓
+valider le RAG
+    ↓
+refactor main.py
+    ↓
+Conversation Engine
+    ↓
+Voix
+    ↓
+Image
+    ↓
+Français / Fon / Yoruba / Dendi
+    ↓
+WhatsApp
+    ↓
+tests bout en bout
+    ↓
+V1 client final
+```
+
+ITA, AfricaRice et les autres sources seront rebranchées **après la
+V1**.
+
+------------------------------------------------------------------------
+
+# 28. Prompt de reprise pour une nouvelle conversation
+
+Copier ce prompt avec ce document :
+
+> Nous continuons le projet SikaGlé.
+>
+> Voici le document de continuité officiel du projet.
+>
+> Utilise-le comme référence principale.
+>
+> Agis comme architecte du projet : préserve l'architecture existante,
+> évite les régressions, vérifie les impacts sur les autres modules et
+> guide-moi étape par étape.
+>
+> Je ne suis pas développeur : donne-moi des instructions concrètes,
+> simples et séquentielles. Ne me donne pas plusieurs modifications
+> simultanément lorsque cela peut créer de la confusion.
+>
+> Ne recommence pas les étapes marquées comme terminées.
+>
+> Notre priorité immédiate est de terminer FAO/AGRIS, puis de corriger
+> définitivement le filtre agricole et ses tests.
+>
+> Ensuite nous refactoriserons main.py, puis nous terminerons le produit
+> V1 de bout en bout : texte, voix, image, Français, Fon, Yoruba, Dendi
+> et WhatsApp.
+>
+> Nous ajouterons ITA, AfricaRice et les autres sources seulement après
+> la V1.
+>
+> Commence par lire ce document, résume très brièvement où nous en
+> sommes, puis indique-moi **une seule prochaine action concrète**.

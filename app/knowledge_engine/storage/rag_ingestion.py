@@ -38,6 +38,10 @@ class RAGIngestion:
 
     La pagination utilisée par le pipeline FAO
     est conservée.
+
+    Une erreur d'embedding ou de stockage est considérée
+    comme une erreur de batch afin d'éviter de considérer
+    le batch comme entièrement réussi.
     """
 
     EMBEDDING_DIMENSION = 1024
@@ -354,10 +358,8 @@ class RAGIngestion:
             or "agricultural_publication"
         )
 
-        crop = (
-            document.get(
-                "crop"
-            )
+        crop = document.get(
+            "crop"
         )
 
         culture = (
@@ -367,10 +369,8 @@ class RAGIngestion:
             or crop
         )
 
-        country = (
-            document.get(
-                "country"
-            )
+        country = document.get(
+            "country"
         )
 
         zone_geographique = (
@@ -909,7 +909,11 @@ class RAGIngestion:
         return {
 
             "status":
-                "success",
+                (
+                    "success"
+                    if errors == 0
+                    else "error"
+                ),
 
             "total_documents":
                 total_documents,

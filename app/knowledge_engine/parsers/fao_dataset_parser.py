@@ -6,23 +6,20 @@ from app.schemas.document import DocumentMetadata
 
 
 class FAODatasetParser:
+    """
+    Parser des datasets XML AGRIS de la FAO.
+
+    Le parser reçoit directement le contenu XML téléchargé en mémoire.
+
+    Objectifs :
+    - extraire les publications AGRIS ;
+    - conserver les métadonnées réelles ;
+    - ne jamais inventer un pays ou une culture ;
+    - préparer des documents propres pour le RAG.
+    """
 
     def __init__(self):
-        """
-        Parser des datasets XML AGRIS.
-
-        Le parser reçoit directement le contenu XML
-        téléchargé en mémoire.
-
-        Objectifs :
-        - extraire les publications AGRIS ;
-        - conserver les métadonnées réelles ;
-        - ne jamais inventer un pays ou une culture ;
-        - préparer des documents propres pour le RAG.
-        """
-
         pass
-
 
     # =========================================================
     # PARSER PRINCIPAL
@@ -32,121 +29,75 @@ class FAODatasetParser:
         self,
         xml_content,
         filename=None,
-        source_url=None
+        source_url=None,
     ):
-
         print("=" * 60)
-
         print(
             "[FAO DATASET PARSER] "
             f"Analyse : {filename or 'dataset XML'}"
         )
-
         print("=" * 60)
 
         documents = []
 
         try:
-
             # =================================================
             # 1. VÉRIFIER LE CONTENU
             # =================================================
 
             if not xml_content:
-
                 print(
                     "[FAO DATASET PARSER] "
                     "Contenu XML vide."
                 )
-
                 return []
-
 
             # =================================================
             # 2. CHARGER LE XML
             # =================================================
 
-            if isinstance(
-                xml_content,
-                bytes
-            ):
-
+            if isinstance(xml_content, bytes):
                 print(
                     "[FAO DATASET PARSER] "
-                    f"XML bytes : "
-                    f"{len(xml_content)} octets"
+                    f"XML bytes : {len(xml_content)} octets"
                 )
 
-                root = ET.fromstring(
-                    xml_content
-                )
+                root = ET.fromstring(xml_content)
 
-
-            elif isinstance(
-                xml_content,
-                str
-            ):
-
+            elif isinstance(xml_content, str):
                 print(
                     "[FAO DATASET PARSER] "
-                    f"XML texte : "
-                    f"{len(xml_content)} caractères"
+                    f"XML texte : {len(xml_content)} caractères"
                 )
 
-                root = ET.fromstring(
-                    xml_content
-                )
+                root = ET.fromstring(xml_content)
 
-
-            elif hasattr(
-                xml_content,
-                "read"
-            ):
-
-                tree = ET.parse(
-                    xml_content
-                )
-
+            elif hasattr(xml_content, "read"):
+                tree = ET.parse(xml_content)
                 root = tree.getroot()
 
-
             else:
-
                 raise ValueError(
                     "Format XML non supporté : "
                     f"{type(xml_content).__name__}"
                 )
-
 
             print(
                 "[FAO DATASET PARSER] "
                 f"Root : {root.tag}"
             )
 
-
             # =================================================
             # 3. NAMESPACES AGRIS
             # =================================================
 
             namespaces = {
-
-                "dc":
-                    "http://purl.org/dc/elements/1.1/",
-
-                "dct":
-                    "http://purl.org/dc/terms/",
-
-                "dctypes":
-                    "http://purl.org/dc/dcmitype/",
-
-                "dcat":
-                    "http://www.w3.org/ns/dcat#",
-
-                "xsi":
-                    "http://www.w3.org/2001/XMLSchema-instance",
-
+                "dc": "http://purl.org/dc/elements/1.1/",
+                "dct": "http://purl.org/dc/terms/",
+                "dctypes": "http://purl.org/dc/dcmitype/",
+                "dcat": "http://www.w3.org/ns/dcat#",
+                "xsi": "http://www.w3.org/2001/XMLSchema-instance",
             }
-
 
             # =================================================
             # 4. RECHERCHER LES NOTICES
@@ -154,127 +105,81 @@ class FAODatasetParser:
 
             records = root.findall(
                 ".//dctypes:BibliographicResource",
-                namespaces
+                namespaces,
             )
 
-
             # Le root peut lui-même être une notice.
-
             if (
-                self._local_name(
-                    root.tag
-                )
+                self._local_name(root.tag)
                 == "BibliographicResource"
             ):
-
-                records.insert(
-                    0,
-                    root
-                )
-
+                records.insert(0, root)
 
             # =================================================
             # 5. FALLBACK GÉNÉRIQUE
             # =================================================
 
             if not records:
-
                 for element in root.iter():
-
                     if (
-                        self._local_name(
-                            element.tag
-                        )
+                        self._local_name(element.tag)
                         == "BibliographicResource"
                     ):
-
-                        records.append(
-                            element
-                        )
-
+                        records.append(element)
 
             print(
                 "[FAO DATASET PARSER] "
-                f"{len(records)} "
-                "notice(s) trouvée(s)."
+                f"{len(records)} notice(s) trouvée(s)."
             )
 
-
             if not records:
-
                 return []
-
 
             # =================================================
             # 6. PARSER LES NOTICES
             # =================================================
 
-            for index, record in enumerate(
-                records,
-                start=1
-            ):
-
+            for index, record in enumerate(records, start=1):
                 try:
-
-                    document = (
-                        self._parse_record(
-                            record=record,
-                            namespaces=namespaces,
-                            filename=filename,
-                            source_url=source_url,
-                            index=index
-                        )
+                    document = self._parse_record(
+                        record=record,
+                        namespaces=namespaces,
+                        filename=filename,
+                        source_url=source_url,
+                        index=index,
                     )
-
 
                     if document:
-
-                        documents.append(
-                            document
-                        )
-
+                        documents.append(document)
 
                 except Exception as e:
-
                     print(
                         "[FAO DATASET PARSER] "
-                        f"Notice {index} ignorée : "
-                        f"{e}"
+                        f"Notice {index} ignorée : {e}"
                     )
 
-
             print("=" * 60)
-
             print(
                 "[FAO DATASET PARSER] "
                 f"{len(documents)} document(s) analysé(s)."
             )
-
             print("=" * 60)
-
 
             return documents
 
-
         except ET.ParseError as e:
-
             print(
                 "[FAO DATASET PARSER] "
                 f"Erreur XML : {e}"
             )
-
             return []
 
-
         except Exception as e:
-
             print(
                 "[FAO DATASET PARSER] "
                 f"Erreur parsing : {e}"
             )
-
             return []
-
 
     # =========================================================
     # PARSER UNE NOTICE
@@ -286,9 +191,8 @@ class FAODatasetParser:
         namespaces,
         filename,
         source_url,
-        index
+        index,
     ):
-
         # =====================================================
         # TITRE
         # =====================================================
@@ -299,21 +203,13 @@ class FAODatasetParser:
                 "dc:title",
                 "dct:title",
             ],
-            namespaces
+            namespaces,
         )
-
 
         if not title:
+            title = f"Document AGRIS {index}"
 
-            title = (
-                f"Document AGRIS {index}"
-            )
-
-
-        title = self._clean_text(
-            title
-        )
-
+        title = self._clean_text(title)
 
         # =====================================================
         # DESCRIPTION
@@ -327,14 +223,10 @@ class FAODatasetParser:
                 "dc:abstract",
                 "dct:abstract",
             ],
-            namespaces
+            namespaces,
         )
 
-
-        description = self._clean_text(
-            description
-        )
-
+        description = self._clean_text(description)
 
         # =====================================================
         # AUTEURS
@@ -348,9 +240,8 @@ class FAODatasetParser:
                 "dc:contributor",
                 "dct:contributor",
             ],
-            namespaces
+            namespaces,
         )
-
 
         # =====================================================
         # DATE
@@ -365,23 +256,11 @@ class FAODatasetParser:
                 "dct:created",
                 "dct:modified",
             ],
-            namespaces
+            namespaces,
         )
 
-
-        published_at = (
-            self._parse_date(
-                date_value
-            )
-        )
-
-
-        year = (
-            self._extract_year(
-                date_value
-            )
-        )
-
+        published_at = self._parse_date(date_value)
+        year = self._extract_year(date_value)
 
         # =====================================================
         # TYPE DU DOCUMENT
@@ -393,16 +272,12 @@ class FAODatasetParser:
                 "dc:type",
                 "dct:type",
             ],
-            namespaces
+            namespaces,
         )
 
-
-        publication_type = (
-            self._clean_text(
-                publication_type
-            )
+        publication_type = self._clean_text(
+            publication_type
         )
-
 
         # =====================================================
         # MOTS-CLÉS
@@ -414,16 +289,10 @@ class FAODatasetParser:
                 "dc:subject",
                 "dct:subject",
             ],
-            namespaces
+            namespaces,
         )
 
-
-        keywords = (
-            self._clean_list(
-                keywords
-            )
-        )
-
+        keywords = self._clean_list(keywords)
 
         # =====================================================
         # SOURCE DE PUBLICATION
@@ -435,16 +304,12 @@ class FAODatasetParser:
                 "dc:source",
                 "dct:source",
             ],
-            namespaces
+            namespaces,
         )
 
-
-        publication_source = (
-            self._clean_text(
-                publication_source
-            )
+        publication_source = self._clean_text(
+            publication_source
         )
-
 
         # =====================================================
         # ÉDITEUR
@@ -456,14 +321,10 @@ class FAODatasetParser:
                 "dc:publisher",
                 "dct:publisher",
             ],
-            namespaces
+            namespaces,
         )
 
-
-        publisher = self._clean_text(
-            publisher
-        )
-
+        publisher = self._clean_text(publisher)
 
         # =====================================================
         # LANGUE
@@ -475,16 +336,10 @@ class FAODatasetParser:
                 "dc:language",
                 "dct:language",
             ],
-            namespaces
+            namespaces,
         )
 
-
-        language = (
-            self._normalize_language(
-                language
-            )
-        )
-
+        language = self._normalize_language(language)
 
         # =====================================================
         # IDENTIFIANT AGRIS
@@ -492,9 +347,8 @@ class FAODatasetParser:
 
         agris_id = self._get_agris_id(
             record,
-            namespaces
+            namespaces,
         )
-
 
         # =====================================================
         # URL DU DOCUMENT
@@ -502,74 +356,51 @@ class FAODatasetParser:
 
         url = self._get_document_url(
             record,
-            namespaces
+            namespaces,
         )
 
-
         if not url:
-
             if agris_id:
-
                 url = (
                     "https://agris.fao.org/"
                     "search/en/providers/"
-                    "122436/records/"
-                    f"{agris_id}"
+                    f"122436/records/{agris_id}"
                 )
 
             elif source_url:
-
-                url = str(
-                    source_url
-                ).strip()
+                url = str(source_url).strip()
 
             else:
-
-                url = (
-                    "https://agris.fao.org/"
-                )
-
+                url = "https://agris.fao.org/"
 
         # =====================================================
         # ZONE GÉOGRAPHIQUE
         # =====================================================
 
-        geographic_values = (
-            self._get_geographic_values(
-                record
-            )
+        geographic_values = self._get_geographic_values(
+            record
         )
 
-
-        country = (
-            self._detect_country(
-                geographic_values,
-                title,
-                description
-            )
+        country = self._detect_country(
+            geographic_values,
+            title,
+            description,
         )
 
-
-        zone_geographique = (
-            self._build_geographic_zone(
-                geographic_values,
-                country
-            )
+        zone_geographique = self._build_geographic_zone(
+            geographic_values,
+            country,
         )
-
 
         # =====================================================
         # CULTURE
         # =====================================================
 
-        culture = (
-            self._detect_crop(
-                title=title,
-                description=description,
-                keywords=keywords
-            )
+        culture = self._detect_crop(
+            title=title,
+            description=description,
+            keywords=keywords,
         )
-
 
         # =====================================================
         # CONTENU POUR LE RAG
@@ -577,218 +408,134 @@ class FAODatasetParser:
 
         content_parts = []
 
-
         content_parts.append(
             f"Titre : {title}"
         )
 
-
         if description:
-
             content_parts.append(
                 f"Description : {description}"
             )
 
-
         if authors:
-
             content_parts.append(
                 "Auteur(s) : "
-                + ", ".join(
-                    authors
-                )
+                + ", ".join(authors)
             )
 
-
         if year:
-
             content_parts.append(
                 f"Année : {year}"
             )
 
-
         if publication_type:
-
             content_parts.append(
                 f"Type : {publication_type}"
             )
 
-
         if keywords:
-
             content_parts.append(
                 "Mots-clés : "
-                + ", ".join(
-                    keywords
-                )
+                + ", ".join(keywords)
             )
 
-
         if culture:
-
             content_parts.append(
                 f"Culture : {culture}"
             )
 
-
         if country:
-
             content_parts.append(
                 f"Pays / contexte géographique : {country}"
             )
 
-
         elif zone_geographique:
-
             content_parts.append(
                 "Zone géographique : "
                 f"{zone_geographique}"
             )
 
-
         if publication_source:
-
             content_parts.append(
                 "Publication : "
                 f"{publication_source}"
             )
 
-
         if publisher:
-
             content_parts.append(
                 f"Éditeur : {publisher}"
             )
 
-
         if language:
-
             content_parts.append(
                 f"Langue : {language}"
             )
 
-
         if agris_id:
-
             content_parts.append(
                 "Identifiant AGRIS : "
                 f"{agris_id}"
             )
 
-
         if url:
-
             content_parts.append(
                 f"URL : {url}"
             )
 
-
         if filename:
-
             content_parts.append(
                 "Dataset AGRIS : "
                 f"{filename}"
             )
 
-
-        content = "\n\n".join(
-            content_parts
-        )
-
+        content = "\n\n".join(content_parts)
 
         # =====================================================
         # DOCUMENT STANDARDISÉ
         # =====================================================
 
         document_data = {
-
-            "title":
-                title,
-
-            "source":
-                "FAO AGRIS",
-
-            "url":
-                url,
-
-            "published_at":
-                published_at,
-
-            "language":
-                language,
-
-            "country":
-                country,
-
-            "crop":
-                culture,
-
-            "culture":
-                culture,
-
-            "document_type":
-                (
-                    publication_type
-                    or
-                    "agricultural_publication"
-                ),
-
-            "content":
-                content,
-
-            "description":
-                description,
-
-            "zone_geographique":
-                zone_geographique,
-
-            "mots_cles":
-                keywords,
-
+            "title": title,
+            "source": "FAO AGRIS",
+            "url": url,
+            "published_at": published_at,
+            "language": language,
+            "country": country,
+            "crop": culture,
+            "culture": culture,
+            "document_type": (
+                publication_type
+                or "agricultural_publication"
+            ),
+            "content": content,
+            "description": description,
+            "zone_geographique": zone_geographique,
+            "mots_cles": keywords,
         }
-
 
         # =====================================================
         # NE PAS FORCER DE FAUSSES VALEURS
         # =====================================================
 
         document_data = {
-
             key: value
-
-            for key, value
-            in document_data.items()
-
+            for key, value in document_data.items()
             if value is not None
-
         }
-
 
         # =====================================================
         # NE GARDER QUE LES CHAMPS DU SCHÉMA
         # =====================================================
 
-        document_fields = (
-            DocumentMetadata.model_fields
-        )
-
+        document_fields = DocumentMetadata.model_fields
 
         filtered_data = {
-
             key: value
-
-            for key, value
-            in document_data.items()
-
+            for key, value in document_data.items()
             if key in document_fields
-
         }
 
-
-        return DocumentMetadata(
-            **filtered_data
-        )
-
+        return DocumentMetadata(**filtered_data)
 
     # =========================================================
     # EXTRAIRE UN TEXTE
@@ -798,73 +545,43 @@ class FAODatasetParser:
         self,
         element,
         paths,
-        namespaces
+        namespaces,
     ):
-
         for path in paths:
-
             try:
-
                 child = element.find(
                     path,
-                    namespaces
+                    namespaces,
                 )
-
 
                 if (
                     child is not None
                     and child.text
                     and child.text.strip()
                 ):
-
-                    return (
-                        child.text.strip()
-                    )
-
+                    return child.text.strip()
 
             except Exception:
-
                 pass
 
-
         expected_names = {
-
-            path
-            .split(":")[-1]
-            .lower()
-
+            path.split(":")[-1].lower()
             for path in paths
-
         }
 
-
         for child in element.iter():
+            local_name = self._local_name(
+                child.tag
+            ).lower()
 
-            local_name = (
-                self._local_name(
-                    child.tag
-                )
-                .lower()
-            )
-
-
-            if (
-                local_name
-                in expected_names
-            ):
-
+            if local_name in expected_names:
                 if (
                     child.text
                     and child.text.strip()
                 ):
-
-                    return (
-                        child.text.strip()
-                    )
-
+                    return child.text.strip()
 
         return None
-
 
     # =========================================================
     # EXTRAIRE PLUSIEURS TEXTES
@@ -874,65 +591,38 @@ class FAODatasetParser:
         self,
         element,
         paths,
-        namespaces
+        namespaces,
     ):
-
         values = []
 
-
         expected_names = {
-
-            path
-            .split(":")[-1]
-            .lower()
-
+            path.split(":")[-1].lower()
             for path in paths
-
         }
 
-
         for child in element.iter():
+            local_name = self._local_name(
+                child.tag
+            ).lower()
 
-            local_name = (
-                self._local_name(
-                    child.tag
-                )
-                .lower()
-            )
-
-
-            if (
-                local_name
-                not in expected_names
-            ):
-
+            if local_name not in expected_names:
                 continue
-
 
             if (
                 child.text
                 and child.text.strip()
             ):
-
-                value = (
-                    self._clean_text(
-                        child.text
-                    )
+                value = self._clean_text(
+                    child.text
                 )
-
 
                 if (
                     value
                     and value not in values
                 ):
-
-                    values.append(
-                        value
-                    )
-
+                    values.append(value)
 
         return values
-
 
     # =========================================================
     # EXTRAIRE INFORMATIONS GÉOGRAPHIQUES
@@ -940,66 +630,42 @@ class FAODatasetParser:
 
     def _get_geographic_values(
         self,
-        element
+        element,
     ):
-
         geographic_names = {
-
             "coverage",
             "spatial",
             "location",
             "geographiccoverage",
             "geographic",
             "country",
-
         }
-
 
         values = []
 
-
         for child in element.iter():
+            local_name = self._local_name(
+                child.tag
+            ).lower()
 
-            local_name = (
-                self._local_name(
-                    child.tag
-                )
-                .lower()
-            )
-
-
-            if (
-                local_name
-                not in geographic_names
-            ):
-
+            if local_name not in geographic_names:
                 continue
-
 
             if (
                 child.text
                 and child.text.strip()
             ):
-
-                value = (
-                    self._clean_text(
-                        child.text
-                    )
+                value = self._clean_text(
+                    child.text
                 )
-
 
                 if (
                     value
                     and value not in values
                 ):
-
-                    values.append(
-                        value
-                    )
-
+                    values.append(value)
 
         return values
-
 
     # =========================================================
     # CONSTRUIRE ZONE GÉOGRAPHIQUE
@@ -1008,23 +674,17 @@ class FAODatasetParser:
     def _build_geographic_zone(
         self,
         geographic_values,
-        country
+        country,
     ):
-
         if geographic_values:
-
             return ", ".join(
                 geographic_values[:5]
             )
 
-
         if country:
-
             return country
 
-
         return None
-
 
     # =========================================================
     # DÉTECTER PAYS
@@ -1034,85 +694,34 @@ class FAODatasetParser:
         self,
         geographic_values,
         title,
-        description
+        description,
     ):
-
         countries = {
-
-            "benin":
-                "Bénin",
-
-            "bénin":
-                "Bénin",
-
-            "nigeria":
-                "Nigeria",
-
-            "niger":
-                "Niger",
-
-            "togo":
-                "Togo",
-
-            "ghana":
-                "Ghana",
-
-            "burkina faso":
-                "Burkina Faso",
-
-            "mali":
-                "Mali",
-
-            "senegal":
-                "Sénégal",
-
-            "sénégal":
-                "Sénégal",
-
-            "cameroon":
-                "Cameroun",
-
-            "cameroun":
-                "Cameroun",
-
-            "bulgaria":
-                "Bulgarie",
-
-            "bulgarie":
-                "Bulgarie",
-
-            "nepal":
-                "Népal",
-
-            "népal":
-                "Népal",
-
-            "kenya":
-                "Kenya",
-
-            "uganda":
-                "Ouganda",
-
-            "ethiopia":
-                "Éthiopie",
-
-            "ethiopie":
-                "Éthiopie",
-
-            "éthiopie":
-                "Éthiopie",
-
-            "ivory coast":
-                "Côte d'Ivoire",
-
-            "côte d'ivoire":
-                "Côte d'Ivoire",
-
-            "cote d'ivoire":
-                "Côte d'Ivoire",
-
+            "benin": "Bénin",
+            "bénin": "Bénin",
+            "nigeria": "Nigeria",
+            "niger": "Niger",
+            "togo": "Togo",
+            "ghana": "Ghana",
+            "burkina faso": "Burkina Faso",
+            "mali": "Mali",
+            "senegal": "Sénégal",
+            "sénégal": "Sénégal",
+            "cameroon": "Cameroun",
+            "cameroun": "Cameroun",
+            "bulgaria": "Bulgarie",
+            "bulgarie": "Bulgarie",
+            "nepal": "Népal",
+            "népal": "Népal",
+            "kenya": "Kenya",
+            "uganda": "Ouganda",
+            "ethiopia": "Éthiopie",
+            "ethiopie": "Éthiopie",
+            "éthiopie": "Éthiopie",
+            "ivory coast": "Côte d'Ivoire",
+            "côte d'ivoire": "Côte d'Ivoire",
+            "cote d'ivoire": "Côte d'Ivoire",
         }
-
 
         # -----------------------------------------------------
         # PRIORITÉ AUX MÉTADONNÉES GÉOGRAPHIQUES
@@ -1122,16 +731,12 @@ class FAODatasetParser:
             geographic_values
         ).lower()
 
-
         for name, normalized in countries.items():
-
             if self._contains_word(
                 geographic_text,
-                name
+                name,
             ):
-
                 return normalized
-
 
         # -----------------------------------------------------
         # FALLBACK TITRE + DESCRIPTION
@@ -1142,22 +747,15 @@ class FAODatasetParser:
             f"{description or ''}"
         ).lower()
 
-
         for name, normalized in countries.items():
-
             if self._contains_word(
                 combined_text,
-                name
+                name,
             ):
-
                 return normalized
 
-
-        # IMPORTANT :
-        # aucun pays n'est inventé.
-
+        # Aucun pays n'est inventé.
         return None
-
 
     # =========================================================
     # DÉTECTER CULTURE
@@ -1167,163 +765,60 @@ class FAODatasetParser:
         self,
         title,
         description,
-        keywords
+        keywords,
     ):
-
         crop_names = {
-
-            "maize":
-                "maïs",
-
-            "corn":
-                "maïs",
-
-            "maïs":
-                "maïs",
-
-            "maize crop":
-                "maïs",
-
-            "rice":
-                "riz",
-
-            "riz":
-                "riz",
-
-            "cassava":
-                "manioc",
-
-            "manioc":
-                "manioc",
-
-            "yam":
-                "igname",
-
-            "igname":
-                "igname",
-
-            "soybean":
-                "soja",
-
-            "soybeans":
-                "soja",
-
-            "soya":
-                "soja",
-
-            "soja":
-                "soja",
-
-            "cotton":
-                "coton",
-
-            "coton":
-                "coton",
-
-            "tomato":
-                "tomate",
-
-            "tomatoes":
-                "tomate",
-
-            "tomate":
-                "tomate",
-
-            "carrot":
-                "carotte",
-
-            "carrots":
-                "carotte",
-
-            "carotte":
-                "carotte",
-
-            "millet":
-                "mil",
-
-            "finger millet":
-                "mil",
-
-            "sorghum":
-                "sorgho",
-
-            "sorgho":
-                "sorgho",
-
-            "wheat":
-                "blé",
-
-            "einkorn":
-                "blé",
-
-            "emmer":
-                "blé",
-
-            "blé":
-                "blé",
-
-            "groundnut":
-                "arachide",
-
-            "peanut":
-                "arachide",
-
-            "arachide":
-                "arachide",
-
-            "cowpea":
-                "niébé",
-
-            "niébé":
-                "niébé",
-
-            "niebe":
-                "niébé",
-
-            "cashew":
-                "anacarde",
-
-            "cashew nut":
-                "anacarde",
-
-            "anacardier":
-                "anacarde",
-
-            "anacarde":
-                "anacarde",
-
-            "pineapple":
-                "ananas",
-
-            "ananas":
-                "ananas",
-
-            "banana":
-                "banane",
-
-            "plantain":
-                "banane plantain",
-
-            "potato":
-                "pomme de terre",
-
-            "sweet potato":
-                "patate douce",
-
-            "cocoa":
-                "cacao",
-
-            "cacao":
-                "cacao",
-
-            "coffee":
-                "café",
-
-            "café":
-                "café",
-
+            "maize crop": "maïs",
+            "finger millet": "mil",
+            "sweet potato": "patate douce",
+            "groundnut": "arachide",
+            "cashew nut": "anacarde",
+            "soybeans": "soja",
+            "plantain": "banane plantain",
+            "potato": "pomme de terre",
+            "maize": "maïs",
+            "corn": "maïs",
+            "maïs": "maïs",
+            "rice": "riz",
+            "riz": "riz",
+            "cassava": "manioc",
+            "manioc": "manioc",
+            "yam": "igname",
+            "igname": "igname",
+            "soybean": "soja",
+            "soya": "soja",
+            "soja": "soja",
+            "cotton": "coton",
+            "coton": "coton",
+            "tomatoes": "tomate",
+            "tomato": "tomate",
+            "tomate": "tomate",
+            "carrots": "carotte",
+            "carrot": "carotte",
+            "carotte": "carotte",
+            "millet": "mil",
+            "sorghum": "sorgho",
+            "sorgho": "sorgho",
+            "wheat": "blé",
+            "einkorn": "blé",
+            "emmer": "blé",
+            "blé": "blé",
+            "peanut": "arachide",
+            "arachide": "arachide",
+            "cowpea": "niébé",
+            "niébé": "niébé",
+            "niebe": "niébé",
+            "cashew": "anacarde",
+            "anacardier": "anacarde",
+            "anacarde": "anacarde",
+            "pineapple": "ananas",
+            "ananas": "ananas",
+            "banana": "banane",
+            "cocoa": "cacao",
+            "cacao": "cacao",
+            "coffee": "café",
+            "café": "café",
         }
-
 
         # -----------------------------------------------------
         # LES MOTS-CLÉS SONT PRIORITAIRES
@@ -1333,7 +828,6 @@ class FAODatasetParser:
             keywords or []
         ).lower()
 
-
         # -----------------------------------------------------
         # TITRE ENSUITE
         # -----------------------------------------------------
@@ -1341,7 +835,6 @@ class FAODatasetParser:
         title_text = (
             title or ""
         ).lower()
-
 
         # -----------------------------------------------------
         # DESCRIPTION EN DERNIER
@@ -1351,46 +844,28 @@ class FAODatasetParser:
             description or ""
         ).lower()
 
-
         search_areas = [
-
             keyword_text,
             title_text,
             description_text,
-
         ]
 
-
-        # Les expressions longues doivent passer
-        # avant les expressions courtes.
-
+        # Les expressions longues passent avant les courtes.
         ordered_crops = sorted(
-
             crop_names.items(),
-
-            key=lambda item: len(
-                item[0]
-            ),
-
-            reverse=True
-
+            key=lambda item: len(item[0]),
+            reverse=True,
         )
 
-
         for text in search_areas:
-
             for name, normalized in ordered_crops:
-
                 if self._contains_word(
                     text,
-                    name
+                    name,
                 ):
-
                     return normalized
 
-
         return None
-
 
     # =========================================================
     # NORMALISER LANGUE
@@ -1398,82 +873,39 @@ class FAODatasetParser:
 
     def _normalize_language(
         self,
-        language
+        language,
     ):
-
         if not language:
-
             return None
 
-
-        value = (
-            str(language)
-            .strip()
-            .lower()
-        )
-
+        value = str(
+            language
+        ).strip().lower()
 
         mapping = {
-
-            "en":
-                "en",
-
-            "eng":
-                "en",
-
-            "english":
-                "en",
-
-            "fr":
-                "fr",
-
-            "fra":
-                "fr",
-
-            "fre":
-                "fr",
-
-            "french":
-                "fr",
-
-            "français":
-                "fr",
-
-            "pt":
-                "pt",
-
-            "por":
-                "pt",
-
-            "portuguese":
-                "pt",
-
-            "es":
-                "es",
-
-            "spa":
-                "es",
-
-            "spanish":
-                "es",
-
-            "de":
-                "de",
-
-            "deu":
-                "de",
-
-            "ger":
-                "de",
-
+            "en": "en",
+            "eng": "en",
+            "english": "en",
+            "fr": "fr",
+            "fra": "fr",
+            "fre": "fr",
+            "french": "fr",
+            "français": "fr",
+            "pt": "pt",
+            "por": "pt",
+            "portuguese": "pt",
+            "es": "es",
+            "spa": "es",
+            "spanish": "es",
+            "de": "de",
+            "deu": "de",
+            "ger": "de",
         }
-
 
         return mapping.get(
             value,
-            value[:10]
+            value[:10],
         )
-
 
     # =========================================================
     # EXTRAIRE IDENTIFIANT AGRIS
@@ -1482,59 +914,42 @@ class FAODatasetParser:
     def _get_agris_id(
         self,
         element,
-        namespaces
+        namespaces,
     ):
-
         xml_id = element.attrib.get(
             "{http://www.w3.org/XML/1998/namespace}id"
         )
 
-
         if xml_id:
-
-            return (
-                xml_id.strip()
-            )
-
+            return xml_id.strip()
 
         try:
-
             identifiers = element.findall(
                 "dc:identifier",
-                namespaces
+                namespaces,
             )
 
-
             for identifier in identifiers:
-
                 identifier_type = (
                     identifier.attrib.get(
                         "type",
-                        ""
+                        "",
                     )
                     .strip()
                     .lower()
                 )
-
 
                 if (
                     identifier_type == "agris"
                     and identifier.text
                     and identifier.text.strip()
                 ):
-
-                    return (
-                        identifier.text.strip()
-                    )
-
+                    return identifier.text.strip()
 
         except Exception:
-
             pass
 
-
         return None
-
 
     # =========================================================
     # EXTRAIRE URL
@@ -1543,25 +958,20 @@ class FAODatasetParser:
     def _get_document_url(
         self,
         element,
-        namespaces
+        namespaces,
     ):
-
         # -----------------------------------------------------
         # DC IDENTIFIER
         # -----------------------------------------------------
 
         try:
-
             identifiers = element.findall(
                 "dc:identifier",
-                namespaces
+                namespaces,
             )
 
-
             # Priorité à type URL
-
             for identifier in identifiers:
-
                 value = (
                     identifier.text.strip()
                     if (
@@ -1571,146 +981,93 @@ class FAODatasetParser:
                     else None
                 )
 
-
                 if not value:
-
                     continue
-
 
                 identifier_type = (
                     identifier.attrib.get(
                         "type",
-                        ""
+                        "",
                     )
                     .strip()
                     .lower()
                 )
 
-
                 if (
                     identifier_type == "url"
-                    and self._is_url(
-                        value
-                    )
+                    and self._is_url(value)
                 ):
-
                     return value
 
-
             # Ensuite n'importe quelle URL
-
             for identifier in identifiers:
-
                 if (
                     identifier.text
                     and identifier.text.strip()
                 ):
+                    value = identifier.text.strip()
 
-                    value = (
-                        identifier.text.strip()
-                    )
-
-
-                    if self._is_url(
-                        value
-                    ):
-
+                    if self._is_url(value):
                         return value
 
-
         except Exception:
-
             pass
-
 
         # -----------------------------------------------------
         # DCT IDENTIFIER
         # -----------------------------------------------------
 
         try:
-
             identifiers = element.findall(
                 "dct:identifier",
-                namespaces
+                namespaces,
             )
 
-
             for identifier in identifiers:
-
                 if (
                     identifier.text
                     and identifier.text.strip()
                 ):
+                    value = identifier.text.strip()
 
-                    value = (
-                        identifier.text.strip()
-                    )
-
-
-                    if self._is_url(
-                        value
-                    ):
-
+                    if self._is_url(value):
                         return value
 
-
         except Exception:
-
             pass
-
 
         # -----------------------------------------------------
         # FALLBACK
         # -----------------------------------------------------
 
         allowed_names = {
-
             "identifier",
             "url",
             "landingpage",
             "accessurl",
             "downloadurl",
-
         }
 
-
         for child in element.iter():
-
             if (
                 not child.text
                 or not child.text.strip()
             ):
-
                 continue
 
+            value = child.text.strip()
 
-            value = (
-                child.text.strip()
-            )
-
-
-            if not self._is_url(
-                value
-            ):
-
+            if not self._is_url(value):
                 continue
 
-
-            local_name = (
-                self._local_name(
-                    child.tag
-                )
-                .lower()
-            )
-
+            local_name = self._local_name(
+                child.tag
+            ).lower()
 
             if local_name in allowed_names:
-
                 return value
 
-
         return None
-
 
     # =========================================================
     # PARSER DATE
@@ -1718,18 +1075,14 @@ class FAODatasetParser:
 
     def _parse_date(
         self,
-        value
+        value,
     ):
-
         if not value:
-
             return None
-
 
         value = str(
             value
         ).strip()
-
 
         # -----------------------------------------------------
         # YYYY-MM-DD
@@ -1737,51 +1090,36 @@ class FAODatasetParser:
 
         match = re.search(
             r"\b(\d{4})-(\d{2})-(\d{2})\b",
-            value
+            value,
         )
 
-
         if match:
-
             try:
-
                 return date(
                     int(match.group(1)),
                     int(match.group(2)),
-                    int(match.group(3))
+                    int(match.group(3)),
                 )
-
             except ValueError:
-
                 pass
-
 
         # -----------------------------------------------------
         # YYYY
         # -----------------------------------------------------
 
-        year = self._extract_year(
-            value
-        )
-
+        year = self._extract_year(value)
 
         if year:
-
             try:
-
                 return date(
                     int(year),
                     1,
-                    1
+                    1,
                 )
-
             except ValueError:
-
                 pass
 
-
         return None
-
 
     # =========================================================
     # EXTRAIRE ANNÉE
@@ -1789,29 +1127,20 @@ class FAODatasetParser:
 
     def _extract_year(
         self,
-        value
+        value,
     ):
-
         if not value:
-
             return None
-
 
         match = re.search(
             r"\b(19|20)\d{2}\b",
-            str(value)
+            str(value),
         )
 
-
         if match:
-
-            return match.group(
-                0
-            )
-
+            return match.group(0)
 
         return None
-
 
     # =========================================================
     # NETTOYER TEXTE
@@ -1819,59 +1148,34 @@ class FAODatasetParser:
 
     def _clean_text(
         self,
-        value
+        value,
     ):
-
         if not value:
-
             return None
 
-
-        value = str(
-            value
-        )
-
-
-        # Quelques entités HTML fréquentes.
+        value = str(value)
 
         replacements = {
-
-            "&nbsp;":
-                " ",
-
-            "&#160;":
-                " ",
-
-            "\xa0":
-                " ",
-
+            "&nbsp;": " ",
+            "&#160;": " ",
+            "\xa0": " ",
         }
 
-
         for old, new in replacements.items():
-
             value = value.replace(
                 old,
-                new
+                new,
             )
-
 
         value = re.sub(
             r"\s+",
             " ",
-            value
+            value,
         )
-
 
         value = value.strip()
 
-
-        return (
-            value
-            if value
-            else None
-        )
-
+        return value if value else None
 
     # =========================================================
     # NETTOYER LISTE
@@ -1879,35 +1183,20 @@ class FAODatasetParser:
 
     def _clean_list(
         self,
-        values
+        values,
     ):
-
         cleaned = []
 
-
-        for value in (
-            values or []
-        ):
-
-            value = (
-                self._clean_text(
-                    value
-                )
-            )
-
+        for value in values or []:
+            value = self._clean_text(value)
 
             if (
                 value
                 and value not in cleaned
             ):
-
-                cleaned.append(
-                    value
-                )
-
+                cleaned.append(value)
 
         return cleaned
-
 
     # =========================================================
     # VÉRIFIER URL
@@ -1915,23 +1204,19 @@ class FAODatasetParser:
 
     def _is_url(
         self,
-        value
+        value,
     ):
-
         if not value:
-
             return False
-
 
         return str(
             value
         ).strip().startswith(
             (
                 "http://",
-                "https://"
+                "https://",
             )
         )
-
 
     # =========================================================
     # RECHERCHE MOT / EXPRESSION
@@ -1940,35 +1225,28 @@ class FAODatasetParser:
     def _contains_word(
         self,
         text,
-        expression
+        expression,
     ):
-
         if (
             not text
             or not expression
         ):
-
             return False
 
-
         pattern = (
-
             r"(?<!\w)"
             + re.escape(
                 expression.lower()
             )
             + r"(?!\w)"
-
         )
-
 
         return bool(
             re.search(
                 pattern,
-                text.lower()
+                text.lower(),
             )
         )
-
 
     # =========================================================
     # NOM LOCAL TAG XML
@@ -1976,31 +1254,21 @@ class FAODatasetParser:
 
     def _local_name(
         self,
-        tag
+        tag,
     ):
-
-        if not isinstance(
-            tag,
-            str
-        ):
-
+        if not isinstance(tag, str):
             return ""
 
-
         if "}" in tag:
-
             return tag.split(
                 "}",
-                1
+                1,
             )[1]
-
 
         if ":" in tag:
-
             return tag.split(
                 ":",
-                1
+                1,
             )[1]
-
 
         return tag
