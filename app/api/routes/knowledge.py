@@ -58,14 +58,8 @@ def chroma_debug():
 
     return {
         "count": repo.count(),
-        "path": str(
-            repo.vectorstore.client
-        ),
-        "collection": (
-            repo.vectorstore.COLLECTION_NAME
-        ),
+        "store": type(repo.vectorstore).__name__,
     }
-
 
 @router.get("/count")
 def count_documents():

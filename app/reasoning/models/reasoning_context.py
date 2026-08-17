@@ -31,3 +31,5 @@ class ReasoningContext:
     weather: dict = field(
         default_factory=dict
     )
+
+    confidence: float = 0.0

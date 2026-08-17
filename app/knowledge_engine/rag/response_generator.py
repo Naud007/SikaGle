@@ -46,6 +46,53 @@ class ResponseGenerator:
             contents=prompt,
         )
 
+        # Récupération explicite uniquement des
+        # parties textuelles de la réponse Gemini.
+        text_parts = []
+
+        try:
+            candidates = response.candidates or []
+
+            for candidate in candidates:
+
+                content = getattr(
+                    candidate,
+                    "content",
+                    None,
+                )
+
+                if content is None:
+                    continue
+
+                parts = getattr(
+                    content,
+                    "parts",
+                    [],
+                )
+
+                for part in parts:
+
+                    text = getattr(
+                        part,
+                        "text",
+                        None,
+                    )
+
+                    if text:
+                        text_parts.append(
+                            text
+                        )
+
+        except Exception:
+            text_parts = []
+
+        if text_parts:
+
+            return "\n".join(
+                text_parts
+            ).strip()
+
+        # Fallback standard
         if response.text:
 
             return response.text.strip()

@@ -1,6 +1,15 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
+
+
+class MessageSource(BaseModel):
+
+    title: str = ""
+
+    url: str = ""
 
 
 class MessageResponse(BaseModel):
@@ -13,10 +22,10 @@ class MessageResponse(BaseModel):
 
     confidence: float
 
-    sources: list[str] = Field(
+    sources: list[MessageSource] = Field(
         default_factory=list,
     )
 
-    metadata: dict = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
     )

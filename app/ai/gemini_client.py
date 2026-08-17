@@ -1,6 +1,10 @@
 import os
 
+from dotenv import load_dotenv
 from google import genai
+
+
+load_dotenv()
 
 
 # =========================================================
@@ -20,7 +24,7 @@ class GeminiClient:
 
         self.api_key = os.getenv(
             "GEMINI_API_KEY",
-            ""
+            "",
         )
 
         if not self.api_key:
@@ -39,14 +43,13 @@ class GeminiClient:
             f"🔥 GEMINI MODEL ACTUEL : {self.model}"
         )
 
-
-    # =========================================================
+    # =====================================================
     # GÉNÉRATION DE TEXTE
-    # =========================================================
+    # =====================================================
 
     def generate_text(
         self,
-        prompt: str
+        prompt: str,
     ) -> str:
 
         print(
@@ -60,36 +63,73 @@ class GeminiClient:
         try:
 
             response = (
-
                 self.client
                 .models
                 .generate_content(
-
                     model=self.model,
-
-                    contents=prompt
-
+                    contents=prompt,
                 )
-
             )
 
-            if not response.text:
+            # -------------------------------------------------
+            # Récupération uniquement des parties texte.
+            # Les thought_signature ne sont pas utilisées.
+            # -------------------------------------------------
 
-                raise ValueError(
+            text_parts = []
 
-                    "Gemini n'a retourné "
-                    "aucune réponse."
+            candidates = (
+                response.candidates
+                or []
+            )
 
+            for candidate in candidates:
+
+                content = getattr(
+                    candidate,
+                    "content",
+                    None,
                 )
 
-            result = response.text.strip()
+                if content is None:
+                    continue
+
+                parts = getattr(
+                    content,
+                    "parts",
+                    [],
+                )
+
+                for part in parts:
+
+                    text = getattr(
+                        part,
+                        "text",
+                        None,
+                    )
+
+                    if text:
+
+                        text_parts.append(
+                            text
+                        )
+
+            if not text_parts:
+
+                raise ValueError(
+                    "Gemini n'a retourné "
+                    "aucune réponse texte."
+                )
+
+            result = "\n".join(
+                text_parts
+            ).strip()
 
             print(
                 "✅ Gemini a répondu avec succès."
             )
 
             return result
-
 
         except Exception as e:
 
@@ -118,14 +158,11 @@ def test_gemini():
         "=================================================="
     )
 
-
     try:
 
         gemini = GeminiClient()
 
-
         response = gemini.generate_text(
-
             """
 Tu es SikaGlé, un assistant agricole intelligent
 destiné aux producteurs agricoles du Bénin.
@@ -135,28 +172,17 @@ Réponds simplement et brièvement à la question suivante :
 Dis bonjour au cultivateur et présente-toi
 en une seule phrase.
 """
-
         )
-
 
         print(
             "✅ TEST GEMINI RÉUSSI"
         )
 
-
         return {
-
-            "status":
-                "success",
-
-            "model":
-                gemini.model,
-
-            "response":
-                response
-
+            "status": "success",
+            "model": gemini.model,
+            "response": response,
         }
-
 
     except Exception as e:
 
@@ -164,18 +190,10 @@ en une seule phrase.
             f"❌ TEST GEMINI ÉCHOUÉ : {str(e)}"
         )
 
-
         return {
-
-            "status":
-                "error",
-
-            "model":
-                GEMINI_MODEL,
-
-            "message":
-                str(e)
-
+            "status": "error",
+            "model": GEMINI_MODEL,
+            "message": str(e),
         }
 
 
@@ -187,75 +205,45 @@ def list_gemini_models():
 
     api_key = os.getenv(
         "GEMINI_API_KEY",
-        ""
+        "",
     )
-
 
     if not api_key:
 
         return {
-
-            "status":
-                "error",
-
-            "message":
-                "GEMINI_API_KEY manquante"
-
+            "status": "error",
+            "message": "GEMINI_API_KEY manquante",
         }
-
 
     try:
 
         client = genai.Client(
-
             api_key=api_key
-
         )
-
 
         models = []
 
-
         for model in client.models.list():
 
-            models.append({
-
-                "name":
-                    model.name,
-
-                "display_name":
-                    getattr(
-
+            models.append(
+                {
+                    "name": model.name,
+                    "display_name": getattr(
                         model,
-
                         "display_name",
-
-                        None
-
-                    )
-
-            })
-
+                        None,
+                    ),
+                }
+            )
 
         return {
-
-            "status":
-                "success",
-
-            "models":
-                models
-
+            "status": "success",
+            "models": models,
         }
-
 
     except Exception as e:
 
         return {
-
-            "status":
-                "error",
-
-            "message":
-                str(e)
-
+            "status": "error",
+            "message": str(e),
         }

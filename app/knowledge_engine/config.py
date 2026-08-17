@@ -26,7 +26,6 @@ class KnowledgeEngineConfig:
     # Sources activées
     enabled_sources: list[str] = field(default_factory=lambda: [
         "brab",
-        "inrab",
         "maep",
         "fao",
         "iita",

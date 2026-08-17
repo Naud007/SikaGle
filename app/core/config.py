@@ -49,7 +49,7 @@ class Settings:
 
         self.GEMINI_GENERATION_MODEL = EnvironmentLoader.get(
             "GEMINI_GENERATION_MODEL",
-            "gemini-2.5-flash",
+            "gemini-3.6-flash",
         )
 
         self.GEMINI_EMBEDDING_MODEL = EnvironmentLoader.get(

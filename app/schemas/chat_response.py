@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field
+
+from app.schemas.message_response import MessageSource
 
 
 class ChatResponse(BaseModel):
@@ -11,12 +15,12 @@ class ChatResponse(BaseModel):
 
     response: str
 
-    sources: list[str] = Field(
+    sources: list[MessageSource] = Field(
         default_factory=list,
     )
 
     confidence: float
 
-    metadata: dict = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
     )

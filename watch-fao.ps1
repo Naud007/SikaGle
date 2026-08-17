@@ -1,214 +1,145 @@
+$ErrorActionPreference = "Continue"
+
 $BASE_URL = "https://sikagle-backend.onrender.com"
 
-$RAG_LIMIT = 20
+$RAG_LIMIT = 10
+$MAX_BATCHES = 1
+$CHECK_INTERVAL_SECONDS = 30
 
-$WAIT_SECONDS = 30
+function Get-FaoStatus {
+
+    try {
+        $response = Invoke-WebRequest `
+            "$BASE_URL/knowledge/fao-dataset-status" `
+            -TimeoutSec 30
+
+        return ($response.Content | ConvertFrom-Json)
+    }
+    catch {
+        Write-Host ""
+        Write-Host "[FAO WATCH] Erreur de connexion :" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
+        return $null
+    }
+}
+
+function Start-FaoBatch {
+
+    try {
+        Write-Host ""
+        Write-Host "[FAO AUTO] Lancement d'un batch de $RAG_LIMIT documents..." -ForegroundColor Cyan
+
+        $url = "$BASE_URL/knowledge/fao-dataset-pipeline-auto?rag_limit=$RAG_LIMIT&max_batches=$MAX_BATCHES"
+
+        $response = Invoke-WebRequest `
+            $url `
+            -TimeoutSec 120
+
+        return ($response.Content | ConvertFrom-Json)
+    }
+    catch {
+        Write-Host ""
+        Write-Host "[FAO AUTO] Erreur lors du lancement :" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
+        return $null
+    }
+}
 
 Write-Host ""
-Write-Host "=================================================="
-Write-Host " SikaGlé - Pipeline FAO automatique"
-Write-Host "=================================================="
+Write-Host "============================================================"
+Write-Host " SikaGle - FAO AGRIS WATCHER"
+Write-Host "============================================================"
 Write-Host ""
-Write-Host "Batch automatique : $RAG_LIMIT documents"
-Write-Host "Vérification toutes les $WAIT_SECONDS secondes"
+Write-Host "URL : $BASE_URL"
+Write-Host "Batch : $RAG_LIMIT documents"
+Write-Host "Intervalle : $CHECK_INTERVAL_SECONDS secondes"
 Write-Host ""
-Write-Host "CTRL+C pour arrêter."
+Write-Host "Watcher demarre. CTRL+C pour arreter."
 Write-Host ""
-
-$lastOffset = -1
 
 while ($true) {
 
-    try {
+    $statusBefore = Get-FaoStatus
 
-        # ==================================================
-        # 1. LIRE L'ETAT ACTUEL
-        # ==================================================
-
-        $statusUrl = "$BASE_URL/knowledge/fao-dataset-status"
-
-        $response = Invoke-WebRequest `
-            $statusUrl `
-            -TimeoutSec 30
-
-        $state = $response.Content | ConvertFrom-Json
-
-        $datasetOffset = [int]($state.dataset_offset)
-        $documentOffset = [int]($state.document_offset)
-        $documentsProcessed = [int]($state.documents_processed)
-        $datasetsCompleted = [int]($state.datasets_completed)
-        $pipelineStatus = $state.pipeline_status
-        $lastError = $state.last_error
-
+    if ($null -eq $statusBefore) {
         Write-Host ""
-        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Etat FAO"
-        Write-Host "  Datasets terminés : $datasetsCompleted"
-        Write-Host "  Dataset actuel    : $datasetOffset"
-        Write-Host "  Document offset   : $documentOffset"
-        Write-Host "  Documents traités : $documentsProcessed"
-        Write-Host "  Statut            : $pipelineStatus"
-
-        # ==================================================
-        # 2. ERREUR
-        # ==================================================
-
-        if ($pipelineStatus -eq "error") {
-
-            Write-Host ""
-            Write-Host "ERREUR DU PIPELINE :" -ForegroundColor Red
-            Write-Host $lastError -ForegroundColor Red
-
-            break
-        }
-
-        # ==================================================
-        # 3. FIN
-        # ==================================================
-
-        if ($pipelineStatus -eq "completed") {
-
-            Write-Host ""
-            Write-Host "=================================================="
-            Write-Host " FAO TERMINÉ"
-            Write-Host "=================================================="
-
-            break
-        }
-
-        # ==================================================
-        # 4. PIPELINE IDLE = LANCER UN BATCH
-        # ==================================================
-
-        if ($pipelineStatus -eq "idle") {
-
-            Write-Host ""
-            Write-Host "[FAO AUTO] Lancement d'un batch de $RAG_LIMIT documents..." `
-                -ForegroundColor Cyan
-
-            $pipelineUrl = "$BASE_URL/knowledge/fao-dataset-pipeline-auto?rag_limit=$RAG_LIMIT&max_batches=1"
-
-            try {
-
-                $launch = Invoke-WebRequest `
-                    $pipelineUrl `
-                    -TimeoutSec 30
-
-                $launchData = (
-                    $launch.Content |
-                    ConvertFrom-Json
-                )
-
-                Write-Host ""
-                Write-Host "[FAO AUTO] $($launchData.message)" `
-                    -ForegroundColor Green
-
-            }
-            catch {
-
-                Write-Host ""
-                Write-Host "[FAO AUTO] Erreur lors du lancement :" `
-                    -ForegroundColor Red
-
-                Write-Host $_.Exception.Message `
-                    -ForegroundColor Red
-            }
-
-            # ==================================================
-            # 5. ATTENDRE LE TRAITEMENT
-            # ==================================================
-
-            Write-Host ""
-            Write-Host "Attente de la fin du batch..."
-
-            Start-Sleep -Seconds $WAIT_SECONDS
-
-            # ==================================================
-            # 6. VERIFIER LA PROGRESSION
-            # ==================================================
-
-            try {
-
-                $check = Invoke-WebRequest `
-                    $statusUrl `
-                    -TimeoutSec 30
-
-                $newState = (
-                    $check.Content |
-                    ConvertFrom-Json
-                )
-
-                $newOffset = [int](
-                    $newState.document_offset
-                )
-
-                $newDocumentsProcessed = [int](
-                    $newState.documents_processed
-                )
-
-                $newStatus = $newState.pipeline_status
-
-                Write-Host ""
-                Write-Host "[FAO AUTO] Vérification après batch"
-                Write-Host "  Ancien offset : $documentOffset"
-                Write-Host "  Nouvel offset : $newOffset"
-                Write-Host "  Documents     : $newDocumentsProcessed"
-                Write-Host "  Statut        : $newStatus"
-
-                # ==================================================
-                # 7. VERIFIER QUE LE BATCH A VRAIMENT AVANCE
-                # ==================================================
-
-                if ($newOffset -gt $documentOffset) {
-
-                    Write-Host ""
-                    Write-Host "[FAO AUTO] PROGRESSION CONFIRMÉE : +$($newOffset - $documentOffset) documents" `
-                        -ForegroundColor Green
-                }
-                else {
-
-                    Write-Host ""
-                    Write-Host "[FAO AUTO] ATTENTION : aucune progression détectée." `
-                        -ForegroundColor Yellow
-
-                    Write-Host "Le prochain cycle relancera automatiquement le batch." `
-                        -ForegroundColor Yellow
-                }
-
-            }
-            catch {
-
-                Write-Host ""
-                Write-Host "[FAO AUTO] Erreur pendant la vérification :" `
-                    -ForegroundColor Yellow
-
-                Write-Host $_.Exception.Message `
-                    -ForegroundColor Yellow
-            }
-
-            continue
-        }
-
-        # ==================================================
-        # 8. AUTRE STATUT
-        # ==================================================
-
-        Write-Host ""
-        Write-Host "Pipeline actuellement : $pipelineStatus"
-        Write-Host "Attente avant nouvelle vérification..."
-
-    }
-    catch {
-
-        Write-Host ""
-        Write-Host "[FAO WATCH] Erreur de connexion :" `
-            -ForegroundColor Red
-
-        Write-Host $_.Exception.Message `
-            -ForegroundColor Red
+        Write-Host "[FAO WATCH] Impossible de recuperer l'etat." -ForegroundColor Yellow
+        Write-Host "Prochaine verification dans $CHECK_INTERVAL_SECONDS secondes..."
+        Start-Sleep -Seconds $CHECK_INTERVAL_SECONDS
+        continue
     }
 
     Write-Host ""
-    Write-Host "Prochaine vérification dans $WAIT_SECONDS secondes..."
+    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Etat FAO"
 
-    Start-Sleep -Seconds $WAIT_SECONDS
+    Write-Host "  Datasets termines : $($statusBefore.datasets_completed)"
+    Write-Host "  Dataset actuel    : $($statusBefore.dataset_offset)"
+    Write-Host "  Document offset   : $($statusBefore.document_offset)"
+    Write-Host "  Documents traites : $($statusBefore.documents_processed)"
+    Write-Host "  Statut             : $($statusBefore.pipeline_status)"
+
+    $oldOffset = $statusBefore.document_offset
+
+    $batchResult = Start-FaoBatch
+
+    if ($null -eq $batchResult) {
+        Write-Host ""
+        Write-Host "[FAO AUTO] Batch non lance ou timeout." -ForegroundColor Yellow
+        Write-Host "Le prochain cycle reessaiera automatiquement."
+        Write-Host ""
+
+        Start-Sleep -Seconds $CHECK_INTERVAL_SECONDS
+        continue
+    }
+
+    Write-Host ""
+    Write-Host "[FAO AUTO] Batch termine." -ForegroundColor Green
+
+    if ($null -ne $batchResult.result) {
+
+        $result = $batchResult.result
+
+        Write-Host "  Documents traites : $($result.documents_processed)"
+        Write-Host "  Inseres            : $($result.inserted)"
+        Write-Host "  Mis a jour         : $($result.updated)"
+        Write-Host "  Filtres            : $($result.skipped)"
+        Write-Host "  Erreurs            : $($result.errors)"
+        Write-Host "  Nouvel offset      : $($result.next_document_offset)"
+        Write-Host "  Datasets termines  : $($result.datasets_completed)"
+        Write-Host "  Statut             : $($result.pipeline_status)"
+
+        $newOffset = $result.next_document_offset
+
+        if ($newOffset -eq $oldOffset) {
+
+            Write-Host ""
+            Write-Host "[FAO AUTO] ATTENTION : aucune progression detectee." -ForegroundColor Yellow
+
+        }
+        else {
+
+            Write-Host ""
+            Write-Host "[FAO AUTO] Progression : $oldOffset -> $newOffset" -ForegroundColor Green
+
+        }
+
+        if ($result.has_more_datasets -eq $false) {
+
+            Write-Host ""
+            Write-Host "============================================================"
+            Write-Host " FAO AGRIS TERMINE"
+            Write-Host "============================================================"
+            Write-Host ""
+            Write-Host "Tous les datasets disponibles ont ete traites." -ForegroundColor Green
+            Write-Host ""
+
+            break
+        }
+    }
+
+    Write-Host ""
+    Write-Host "Prochaine verification dans $CHECK_INTERVAL_SECONDS secondes..."
+    Write-Host ""
+
+    Start-Sleep -Seconds $CHECK_INTERVAL_SECONDS
 }

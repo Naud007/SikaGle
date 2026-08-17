@@ -5,12 +5,11 @@ from app.conversation.models.conversation import (
 
 class ConversationRepository:
 
-    def __init__(self):
-
-        self._conversations: dict[
-            str,
-            Conversation,
-        ] = {}
+    # Repository partagé par toutes les instances
+    _conversations: dict[
+        str,
+        Conversation,
+    ] = {}
 
     def save(
         self,
