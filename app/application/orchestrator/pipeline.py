@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.schemas.message_response import MessageSource
+
 
 @dataclass
 class PipelineResult:
@@ -12,7 +14,9 @@ class PipelineResult:
 
     response: str
 
-    sources: list[str] = field(default_factory=list)
+    sources: list[MessageSource] = field(
+        default_factory=list
+    )
 
     confidence: float = 0.0
 
@@ -25,15 +29,21 @@ class ConversationPipeline:
     """
     Pipeline principal de traitement d'une question SikaGlé.
 
-    Responsabilités :
+    Flux :
 
-    1. Construire le contexte conversationnel
-    2. Analyser le contexte agricole
-    3. Rechercher les connaissances
-    4. Construire le prompt
-    5. Générer la réponse avec Gemini
-
-    Ce pipeline ne gère pas HTTP.
+    utilisateur
+        ↓
+    conversation
+        ↓
+    contexte
+        ↓
+    raisonnement
+        ↓
+    RAG
+        ↓
+    Gemini
+        ↓
+    réponse
     """
 
     def __init__(
@@ -44,28 +54,15 @@ class ConversationPipeline:
         knowledge_service,
         llm,
     ):
-
-        self.conversation = (
-            conversation_service
-        )
-
+        self.conversation = conversation_service
         self.conversation_context = (
             conversation_context_service
         )
-
         self.reasoning_context = (
             reasoning_context_service
         )
-
-        self.knowledge = (
-            knowledge_service
-        )
-
+        self.knowledge = knowledge_service
         self.llm = llm
-
-    # =========================================================
-    # EXECUTION
-    # =========================================================
 
     def run(
         self,
@@ -75,30 +72,21 @@ class ConversationPipeline:
         channel: str = "api",
     ) -> PipelineResult:
 
-        # -----------------------------------------------------
-        # 1. Sauvegarder le message utilisateur
-        # -----------------------------------------------------
-
+        # 1. Message utilisateur
         self.conversation.add_message(
             user_id=user_id,
             author="user",
             content=message,
         )
 
-        # -----------------------------------------------------
-        # 2. Construire le contexte conversationnel
-        # -----------------------------------------------------
-
+        # 2. Contexte conversationnel
         conversation_context = (
             self.conversation_context.build(
                 user_id
             )
         )
 
-        # -----------------------------------------------------
-        # 3. Analyser le contexte agricole
-        # -----------------------------------------------------
-
+        # 3. Contexte agricole
         reasoning_context = (
             self.reasoning_context.analyze(
                 user_id=user_id,
@@ -106,19 +94,13 @@ class ConversationPipeline:
             )
         )
 
-        # -----------------------------------------------------
-        # 4. Recherche RAG
-        # -----------------------------------------------------
-
+        # 4. RAG
         rag_result = self.knowledge.ask(
             question=message,
             top_k=5,
         )
 
-        # -----------------------------------------------------
-        # 5. Construire le prompt
-        # -----------------------------------------------------
-
+        # 5. Prompt
         prompt = self._build_prompt(
             user_message=message,
             language=language,
@@ -128,35 +110,20 @@ class ConversationPipeline:
             rag_result=rag_result,
         )
 
-        # -----------------------------------------------------
-        # 6. Générer avec Gemini
-        # -----------------------------------------------------
+        # 6. Gemini
+        answer = self.llm.generate_text(prompt)
 
-        answer = self.llm.generate_text(
-            prompt
+        # 7. Sources
+        sources = self._normalize_sources(
+            rag_result.get("sources", [])
         )
 
-        # -----------------------------------------------------
-        # 7. Récupérer les sources
-        # -----------------------------------------------------
-
-        sources = rag_result.get(
-            "sources",
-            [],
-        )
-
-        # -----------------------------------------------------
-        # 8. Estimation initiale de confiance
-        # -----------------------------------------------------
-
+        # 8. Confiance
         confidence = self._extract_confidence(
             reasoning_context
         )
 
-        # -----------------------------------------------------
-        # 9. Sauvegarder la réponse
-        # -----------------------------------------------------
-
+        # 9. Sauvegarde réponse
         self.conversation.add_message(
             user_id=user_id,
             author="assistant",
@@ -180,6 +147,61 @@ class ConversationPipeline:
                 ),
             },
         )
+
+    # =========================================================
+    # SOURCES
+    # =========================================================
+
+    def _normalize_sources(
+        self,
+        sources,
+    ) -> list[MessageSource]:
+
+        if not sources:
+            return []
+
+        normalized: list[MessageSource] = []
+
+        for source in sources:
+
+            if isinstance(
+                source,
+                MessageSource,
+            ):
+                normalized.append(source)
+                continue
+
+            if isinstance(source, str):
+                normalized.append(
+                    MessageSource(
+                        title=source,
+                        url="",
+                    )
+                )
+                continue
+
+            if isinstance(source, dict):
+                normalized.append(
+                    MessageSource(
+                        title=str(
+                            source.get(
+                                "title",
+                                source.get(
+                                    "name",
+                                    "",
+                                ),
+                            )
+                        ),
+                        url=str(
+                            source.get(
+                                "url",
+                                "",
+                            )
+                        ),
+                    )
+                )
+
+        return normalized
 
     # =========================================================
     # PROMPT
@@ -284,7 +306,6 @@ Réponds maintenant à l'agriculteur.
         if reasoning_context is None:
             return 0.0
 
-        # Objet avec attribut confidence
         confidence = getattr(
             reasoning_context,
             "confidence",
@@ -292,12 +313,8 @@ Réponds maintenant à l'agriculteur.
         )
 
         if confidence is not None:
-
             try:
-
-                value = float(
-                    confidence
-                )
+                value = float(confidence)
 
                 return max(
                     0.0,
@@ -313,7 +330,6 @@ Réponds maintenant à l'agriculteur.
             ):
                 pass
 
-        # Objet/dict contenant confidence
         if isinstance(
             reasoning_context,
             dict,
@@ -324,12 +340,8 @@ Réponds maintenant à l'agriculteur.
             )
 
             if confidence is not None:
-
                 try:
-
-                    value = float(
-                        confidence
-                    )
+                    value = float(confidence)
 
                     return max(
                         0.0,
