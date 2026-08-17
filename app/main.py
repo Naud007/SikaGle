@@ -5,7 +5,7 @@ ConfigurationValidator.validate(settings)
 from app.services.agricultural_assistant_service import (
     AgriculturalAssistantService,
 )
-
+from app.api.routes.ai import router as ai_router
 from datetime import date, datetime
 import os
 
@@ -26,18 +26,7 @@ from supabase import create_client, Client
 
 import requests
 
-from app.ai.gemini_client import (
-    test_gemini,
-    list_gemini_models,
-)
 
-from app.ai.embeddings import (
-    test_embedding,
-)
-
-from app.ai.rag_service import (
-    test_rag,
-)
 
 from app.integrations.whatsapp.sender import (
     send_whatsapp_message,
@@ -145,7 +134,9 @@ if SUPABASE_URL and SUPABASE_KEY:
 app.include_router(
     knowledge_router,
 )
-
+app.include_router(
+    ai_router,
+)
 # =========================================================
 # ASSISTANT AGRICOLE
 # =========================================================
@@ -264,54 +255,6 @@ def db_status():
                 str(e)
 
         }
-
-
-# =========================================================
-# TEST GEMINI
-# =========================================================
-
-@app.get(
-    "/ai/gemini-test"
-)
-def gemini_test():
-
-    return test_gemini()
-
-
-# =========================================================
-# LISTE DES MODÈLES GEMINI
-# =========================================================
-
-@app.get(
-    "/ai/models"
-)
-def gemini_models():
-
-    return list_gemini_models()
-
-
-# =========================================================
-# TEST EMBEDDING GEMINI
-# =========================================================
-
-@app.get(
-    "/ai/embedding-test"
-)
-def embedding_test():
-
-    return test_embedding()
-
-
-# =========================================================
-# TEST RAG
-# =========================================================
-
-@app.get(
-    "/ai/rag-test"
-)
-def rag_test():
-
-    return test_rag()
 
 
 # =========================================================
