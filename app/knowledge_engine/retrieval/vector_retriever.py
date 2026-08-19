@@ -94,7 +94,7 @@ class VectorRetriever:
                 )
 
             #
-            # Conversion de la distance Chroma
+            # Conversion de la distance vectorielle
             # en score de similarité.
             #
 

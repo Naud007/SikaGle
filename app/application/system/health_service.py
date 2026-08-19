@@ -17,6 +17,7 @@ class HealthService:
             status="healthy",
             service="SikaGlé API",
             version=self.VERSION,
+            environment="development",
             timestamp=(
                 datetime.now(
                     UTC
@@ -32,6 +33,7 @@ class HealthService:
             status="ready",
             service="SikaGlé API",
             version=self.VERSION,
+            environment="development",
             timestamp=(
                 datetime.now(
                     UTC
@@ -47,6 +49,7 @@ class HealthService:
             status="alive",
             service="SikaGlé API",
             version=self.VERSION,
+            environment="development",
             timestamp=(
                 datetime.now(
                     UTC

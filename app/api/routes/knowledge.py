@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-
+from app.knowledge_engine.manager import run
 from app.knowledge_engine.resolvers import OJSPDFResolver
 from app.services.knowledge_service import KnowledgeService
 
@@ -304,3 +304,25 @@ def ask(
             status_code=500,
             detail=str(e),
         )
+# ==========================================================
+# TEST KNOWLEDGE ENGINE
+# ==========================================================
+
+@router.get("/test")
+def test_knowledge_engine():
+
+    try:
+
+        run()
+
+        return {
+            "status": "success",
+            "message": "Knowledge Engine exécuté",
+        }
+
+    except Exception as e:
+
+        return {
+            "status": "error",
+            "message": str(e),
+        }

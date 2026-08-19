@@ -52,15 +52,6 @@ class Settings:
             "gemini-3.6-flash",
         )
 
-        self.GEMINI_EMBEDDING_MODEL = EnvironmentLoader.get(
-            "GEMINI_EMBEDDING_MODEL",
-            "gemini-embedding-001",
-        )
-
-        self.EMBEDDING_DIMENSION = EnvironmentLoader.get_int(
-            "EMBEDDING_DIMENSION",
-            1536,
-        )
         # =====================================================
         # Jina Embeddings
         # =====================================================
@@ -78,20 +69,7 @@ class Settings:
             "JINA_EMBEDDING_DIMENSION",
             1024,
         )
-        # =====================================================
-        # ChromaDB
-        # =====================================================
-
-        self.CHROMA_PATH = EnvironmentLoader.get(
-            "CHROMA_PATH",
-            "data/chroma",
-        )
-
-        self.CHROMA_COLLECTION_NAME = EnvironmentLoader.get(
-            "CHROMA_COLLECTION_NAME",
-            "knowledge",
-        )
-
+        
         # =====================================================
         # Données
         # =====================================================

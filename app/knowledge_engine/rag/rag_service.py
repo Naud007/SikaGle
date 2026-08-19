@@ -14,9 +14,7 @@ class RAGService:
 
     def __init__(self):
 
-        self.retriever = (
-            HybridRetriever()
-        )
+        self.retriever = HybridRetriever()
 
         self.response_generator = (
             ResponseGenerator()
@@ -31,23 +29,18 @@ class RAGService:
         question: str,
         top_k: int = 5,
         source: str | None = None,
-        language: str | None = None,
+        language: str = "fr",
+        input_type: str = "text",
         publication_type: str | None = None,
         publication_year: int | None = None,
     ) -> dict:
 
         search_query = SearchQuery(
-
             question=question,
-
             top_k=top_k,
-
             source=source,
-
             language=language,
-
             publication_type=publication_type,
-
             publication_year=publication_year,
         )
 
@@ -58,31 +51,31 @@ class RAGService:
         if not results:
 
             return {
-
                 "success": False,
-
                 "question": question,
-
-                "answer": "Je n'ai trouvé aucun document pertinent.",
-
+                "answer": (
+                    "Je n'ai trouvé aucun "
+                    "document pertinent."
+                ),
                 "sources": [],
-
                 "chunks_used": 0,
             }
 
         contexts = [
-            r.document
-            for r in results
+            result.document
+            for result in results
         ]
 
         metadatas = [
-            r.metadata
-            for r in results
+            result.metadata
+            for result in results
         ]
 
         answer = self.response_generator.generate(
             question=question,
             contexts=contexts,
+            language=language,
+            input_type=input_type,
         )
 
         sources = self.source_formatter.format(
@@ -90,14 +83,9 @@ class RAGService:
         )
 
         return {
-
             "success": True,
-
             "question": question,
-
             "answer": answer,
-
             "sources": sources,
-
             "chunks_used": len(contexts),
         }

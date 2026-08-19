@@ -1,4 +1,5 @@
 from google import genai
+import re
 
 from app.core import settings
 from app.knowledge_engine.rag.prompt_builder import (
@@ -30,28 +31,261 @@ class ResponseGenerator:
 
         self.prompt_builder = PromptBuilder()
 
+    # =========================================================
+    # NETTOYAGE DE LA RÉPONSE
+    # =========================================================
+
+    def _clean_response(
+        self,
+        text: str,
+        input_type: str,
+    ) -> str:
+
+        if not text:
+            return ""
+
+        text = text.strip()
+
+        input_type = (
+            input_type or "text"
+        ).lower().strip()
+
+        # =====================================================
+        # AUDIO
+        # =====================================================
+
+        if input_type == "audio":
+
+            # -------------------------------------------------
+            # Gras Markdown
+            # **texte** -> texte
+            # -------------------------------------------------
+
+            text = re.sub(
+                r"\*\*(.*?)\*\*",
+                r"\1",
+                text,
+                flags=re.DOTALL,
+            )
+
+            # -------------------------------------------------
+            # Italique Markdown
+            # *texte* -> texte
+            # -------------------------------------------------
+
+            text = re.sub(
+                r"(?<!\*)\*(?!\*)(.*?)\*(?!\*)",
+                r"\1",
+                text,
+                flags=re.DOTALL,
+            )
+
+            # -------------------------------------------------
+            # Titres Markdown
+            # ## Titre -> Titre
+            # -------------------------------------------------
+
+            text = re.sub(
+                r"^\s*#{1,6}\s*",
+                "",
+                text,
+                flags=re.MULTILINE,
+            )
+
+            # -------------------------------------------------
+            # Puces
+            # -------------------------------------------------
+
+            text = re.sub(
+                r"^\s*[-•]\s+",
+                "",
+                text,
+                flags=re.MULTILINE,
+            )
+
+            text = re.sub(
+                r"^\s*\*\s+",
+                "",
+                text,
+                flags=re.MULTILINE,
+            )
+
+            # -------------------------------------------------
+            # Listes numérotées
+            # -------------------------------------------------
+
+            text = re.sub(
+                r"^\s*\d+[\.\)]\s+",
+                "",
+                text,
+                flags=re.MULTILINE,
+            )
+
+            # -------------------------------------------------
+            # Blocs de code
+            # -------------------------------------------------
+
+            text = re.sub(
+                r"```.*?```",
+                "",
+                text,
+                flags=re.DOTALL,
+            )
+
+            # -------------------------------------------------
+            # Symboles Markdown inutiles pour la voix
+            # -------------------------------------------------
+
+            text = text.replace("[", "")
+            text = text.replace("]", "")
+            text = text.replace("{", "")
+            text = text.replace("}", "")
+
+            # -------------------------------------------------
+            # Nettoyage des espaces
+            # -------------------------------------------------
+
+            text = re.sub(
+                r"[ \t]+",
+                " ",
+                text,
+            )
+
+            text = re.sub(
+                r"\n{3,}",
+                "\n\n",
+                text,
+            )
+
+            return text.strip()
+
+        # =====================================================
+        # TEXTE / WHATSAPP
+        # =====================================================
+
+        # -----------------------------------------------------
+        # Transformer **texte** en *texte*
+        # -----------------------------------------------------
+
+        text = re.sub(
+            r"\*\*(.*?)\*\*",
+            r"*\1*",
+            text,
+            flags=re.DOTALL,
+        )
+
+        # -----------------------------------------------------
+        # Supprimer les titres Markdown
+        #
+        # ## Titre
+        # devient
+        # Titre
+        # -----------------------------------------------------
+
+        text = re.sub(
+            r"^\s*#{1,6}\s*",
+            "",
+            text,
+            flags=re.MULTILINE,
+        )
+
+        # -----------------------------------------------------
+        # Supprimer les tableaux Markdown
+        # -----------------------------------------------------
+
+        lines = text.splitlines()
+
+        cleaned_lines = []
+
+        for line in lines:
+
+            stripped = line.strip()
+
+            # Ligne de tableau
+            if (
+                stripped.startswith("|")
+                and stripped.endswith("|")
+            ):
+                continue
+
+            # Séparateur de tableau
+            if re.match(
+                r"^\|?\s*:?-{3,}:?\s*"
+                r"(\|\s*:?-{3,}:?\s*)+\|?$",
+                stripped,
+            ):
+                continue
+
+            cleaned_lines.append(line)
+
+        text = "\n".join(
+            cleaned_lines
+        )
+
+        # -----------------------------------------------------
+        # Nettoyage des espaces excessifs
+        # -----------------------------------------------------
+
+        text = re.sub(
+            r"[ \t]+",
+            " ",
+            text,
+        )
+
+        text = re.sub(
+            r"\n{3,}",
+            "\n\n",
+            text,
+        )
+
+        return text.strip()
+
+    # =========================================================
+    # GÉNÉRATION
+    # =========================================================
+
     def generate(
         self,
         question: str,
         contexts: list[str],
+        language: str = "fr",
+        input_type: str = "text",
     ) -> str:
+
+        # -----------------------------------------------------
+        # Construction du prompt
+        # -----------------------------------------------------
 
         prompt = self.prompt_builder.build(
             question=question,
             contexts=contexts,
+            language=language,
+            input_type=input_type,
         )
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
+        # -----------------------------------------------------
+        # Appel Gemini
+        # -----------------------------------------------------
+
+        response = (
+            self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+            )
         )
 
-        # Récupération explicite uniquement des
-        # parties textuelles de la réponse Gemini.
+        # =====================================================
+        # RÉCUPÉRATION EXPLICITE DU TEXTE GEMINI
+        # =====================================================
+
         text_parts = []
 
         try:
-            candidates = response.candidates or []
+
+            candidates = (
+                response.candidates
+                or []
+            )
 
             for candidate in candidates:
 
@@ -79,23 +313,40 @@ class ResponseGenerator:
                     )
 
                     if text:
+
                         text_parts.append(
                             text
                         )
 
         except Exception:
+
             text_parts = []
+
+        # =====================================================
+        # RÉPONSE PRINCIPALE
+        # =====================================================
 
         if text_parts:
 
-            return "\n".join(
+            answer = "\n".join(
                 text_parts
             ).strip()
 
-        # Fallback standard
+            return self._clean_response(
+                text=answer,
+                input_type=input_type,
+            )
+
+        # =====================================================
+        # FALLBACK
+        # =====================================================
+
         if response.text:
 
-            return response.text.strip()
+            return self._clean_response(
+                text=response.text.strip(),
+                input_type=input_type,
+            )
 
         return (
             "Je n'ai pas pu générer une réponse."
