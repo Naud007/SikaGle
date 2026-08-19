@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 from app.schemas.health_response import (
     HealthResponse,
@@ -20,7 +20,7 @@ class HealthService:
             environment="development",
             timestamp=(
                 datetime.now(
-                    UTC
+                    timezone.utc
                 ).isoformat()
             ),
         )
