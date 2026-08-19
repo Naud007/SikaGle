@@ -36,7 +36,7 @@ class HealthService:
             environment="development",
             timestamp=(
                 datetime.now(
-                    UTC
+                    timezone.utc
                 ).isoformat()
             ),
         )
@@ -52,7 +52,7 @@ class HealthService:
             environment="development",
             timestamp=(
                 datetime.now(
-                    UTC
+                    timezone.utc
                 ).isoformat()
             ),
         )
