@@ -1,10 +1,17 @@
 import os
+import tempfile
 from datetime import date, datetime
 
 from fastapi import APIRouter, Request, Response
 
+from app.integrations.media.media_service import (
+    MediaService,
+)
 from app.integrations.whatsapp.sender import (
     send_whatsapp_message,
+)
+from app.multimodal.speech.speech_service import (
+    SpeechService,
 )
 from app.services.agricultural_assistant_service import (
     AgriculturalAssistantService,
@@ -18,18 +25,36 @@ VERIFY_TOKEN = os.getenv(
     "WHATSAPP_VERIFY_TOKEN",
     "sikagle_secret_token_2026",
 )
+print(
+    "🔐 WHATSAPP_VERIFY_TOKEN: PRESENT=",
+    bool(VERIFY_TOKEN),
+    "LENGTH=",
+    len(VERIFY_TOKEN),
+    "LAST4=",
+    VERIFY_TOKEN[-4:] if VERIFY_TOKEN else "",
+)
 
 TRIAL_PERIOD_DAYS = 31
 TRIAL_DAILY_LIMIT = 15
 REGULAR_DAILY_LIMIT = 5
 
+
 assistant = AgriculturalAssistantService()
 
+media_service = MediaService()
+
+speech_service = SpeechService()
+
+
+# =========================================================
+# VÉRIFICATION DU WEBHOOK WHATSAPP
+# =========================================================
 
 @router.get("/webhook")
 def verify_webhook(
     request: Request,
 ):
+
     mode = request.query_params.get(
         "hub.mode"
     )
@@ -46,7 +71,10 @@ def verify_webhook(
         mode == "subscribe"
         and token == VERIFY_TOKEN
     ):
-        print("WEBHOOK_VERIFIED")
+
+        print(
+            "WEBHOOK_VERIFIED"
+        )
 
         return Response(
             content=str(challenge),
@@ -60,10 +88,15 @@ def verify_webhook(
     )
 
 
+# =========================================================
+# RÉCEPTION DES MESSAGES WHATSAPP
+# =========================================================
+
 @router.post("/webhook")
 async def receive_webhook(
     request: Request,
 ):
+
     from app.main import supabase
 
     data = await request.json()
@@ -74,6 +107,7 @@ async def receive_webhook(
     )
 
     try:
+
         entries = data.get(
             "entry",
             [],
@@ -139,6 +173,12 @@ async def receive_webhook(
 
                 content = ""
 
+                media_id = None
+
+                # =================================================
+                # MESSAGE TEXTE
+                # =================================================
+
                 if msg_type == "text":
 
                     content = (
@@ -153,10 +193,33 @@ async def receive_webhook(
                         )
                     )
 
+                # =================================================
+                # MESSAGE AUDIO / VOCAL
+                # =================================================
+
                 elif msg_type in [
-                    "image",
                     "audio",
                     "voice",
+                ]:
+
+                    media_id = (
+                        msg
+                        .get(
+                            msg_type,
+                            {},
+                        )
+                        .get(
+                            "id",
+                            "",
+                        )
+                    )
+
+                # =================================================
+                # IMAGE / DOCUMENT
+                # =================================================
+
+                elif msg_type in [
+                    "image",
                     "document",
                 ]:
 
@@ -175,6 +238,10 @@ async def receive_webhook(
                             )
                         )
                     )
+
+                # =================================================
+                # DATE / QUOTA UTILISATEUR
+                # =================================================
 
                 today_date = date.today()
 
@@ -248,6 +315,7 @@ async def receive_webhook(
                         last_active != today_str
                         or user_credits is None
                     ):
+
                         user_credits = daily_limit
 
                 else:
@@ -282,6 +350,10 @@ async def receive_webhook(
                     user_credits = (
                         daily_limit
                     )
+
+                # =================================================
+                # QUOTA ÉPUISÉ
+                # =================================================
 
                 if user_credits <= 0:
 
@@ -327,6 +399,10 @@ async def receive_webhook(
 
                     continue
 
+                # =================================================
+                # DÉCRÉMENT DU CRÉDIT
+                # =================================================
+
                 remaining_credits = (
                     user_credits - 1
                 )
@@ -346,6 +422,87 @@ async def receive_webhook(
                     )
                     .execute()
                 )
+
+                # =================================================
+                # TRAITEMENT AUDIO
+                # =================================================
+
+                if (
+                    msg_type in [
+                        "audio",
+                        "voice",
+                    ]
+                    and media_id
+                ):
+
+                    try:
+
+                        with tempfile.TemporaryDirectory() as temp_dir:
+
+                            audio_path = os.path.join(
+                                temp_dir,
+                                f"{media_id}.ogg",
+                            )
+
+                            media_file = (
+                                media_service.download(
+                                    media_id=media_id,
+                                    destination=audio_path,
+                                    media_type="audio",
+                                    mime_type=(
+                                        msg
+                                        .get(
+                                            msg_type,
+                                            {},
+                                        )
+                                        .get(
+                                            "mime_type",
+                                            "audio/ogg",
+                                        )
+                                    ),
+                                )
+                            )
+
+                            if not media_file.downloaded:
+
+                                raise RuntimeError(
+                                    "Le fichier audio WhatsApp "
+                                    "n'a pas été téléchargé."
+                                )
+
+                            transcription = (
+                                speech_service.transcribe(
+                                    media_file.file_path
+                                )
+                            )
+
+                            content = (
+                                transcription.text
+                            )
+
+                            print(
+                                "🎙️ Audio transcrit :",
+                                content,
+                            )
+
+                    except Exception as e:
+
+                        print(
+                            f"❌ Erreur traitement audio : {e}"
+                        )
+
+                        send_whatsapp_message(
+                            sender_phone,
+                            "Je n'ai pas pu comprendre "
+                            "votre message vocal. "
+                            "Veuillez réessayer.",
+                        )
+
+                        continue
+
+                # =================================================
+                # ENREGISTREMENT DU MESSAGE
+                # =================================================
 
                 (
                     supabase
@@ -371,6 +528,10 @@ async def receive_webhook(
                     f"{daily_limit}"
                 )
 
+                # =================================================
+                # ASSISTANT AGRICOLE
+                # =================================================
+
                 try:
 
                     answer = assistant.process(
@@ -392,6 +553,10 @@ async def receive_webhook(
                         "Veuillez réessayer dans "
                         "quelques instants."
                     )
+
+                # =================================================
+                # RÉPONSE WHATSAPP
+                # =================================================
 
                 send_whatsapp_message(
                     sender_phone,
