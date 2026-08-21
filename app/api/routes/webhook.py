@@ -152,7 +152,32 @@ async def receive_webhook(
                 msg_id = msg.get(
                     "id"
                 )
+                # =================================================
+                # PROTECTION CONTRE LES DOUBLONS WHATSAPP
+                # =================================================
 
+                if msg_id:
+
+                    existing_message = (
+                        supabase
+                        .table("messages")
+                        .select("id")
+                        .eq(
+                            "whatsapp_message_id",
+                            msg_id,
+                        )
+                        .limit(1)
+                        .execute()
+                    )
+
+                    if existing_message.data:
+
+                        print(
+                            "ℹ️ Message WhatsApp déjà traité : "
+                            f"{msg_id}"
+                        )
+
+                        continue
                 msg_type = msg.get(
                     "type",
                     "text",
