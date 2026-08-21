@@ -154,7 +154,7 @@ class RAGService:
 
             .rpc(
 
-                "match_documents",
+                "match_knowledge_embeddings",
 
                 {
 
