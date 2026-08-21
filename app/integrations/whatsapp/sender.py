@@ -17,7 +17,7 @@ WHATSAPP_TOKEN = os.getenv(
 )
 
 WHATSAPP_PHONE_ID = os.getenv(
-    "WHATSAPP_PHONE_ID",
+    "WHATSAPP_PHONE_NUMBER_ID",
     "",
 )
 
@@ -35,7 +35,7 @@ def send_whatsapp_message(
         or not WHATSAPP_PHONE_ID
     ):
         logger.warning(
-            "Variables WHATSAPP_TOKEN ou WHATSAPP_PHONE_ID manquantes."
+            "Variables WHATSAPP_TOKEN ou WHATSAPP_PHONE_NUMBER_ID manquantes."
         )
         return False
 
