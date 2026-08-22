@@ -32,13 +32,11 @@ class RAGService:
         )
 
         if not supabase_url:
-
             raise ValueError(
                 "SUPABASE_URL est manquante."
             )
 
         if not supabase_key:
-
             raise ValueError(
                 "SUPABASE_KEY est manquante."
             )
@@ -47,11 +45,9 @@ class RAGService:
         # CONNEXION SUPABASE
         # =====================================================
 
-        self.supabase: Client = (
-            create_client(
-                supabase_url,
-                supabase_key
-            )
+        self.supabase: Client = create_client(
+            supabase_url,
+            supabase_key
         )
 
         print(
@@ -73,10 +69,7 @@ class RAGService:
         # CLIENT GEMINI
         # =====================================================
 
-        self.gemini = (
-            GeminiClient()
-        )
-
+        self.gemini = GeminiClient()
 
     # =========================================================
     # RECHERCHE VECTORIELLE
@@ -89,12 +82,7 @@ class RAGService:
         match_count: int = 5
     ):
 
-        # =====================================================
-        # VALIDATION
-        # =====================================================
-
         if not query or not query.strip():
-
             raise ValueError(
                 "La question de recherche est vide."
             )
@@ -102,12 +90,7 @@ class RAGService:
         query = query.strip()
 
         print("=" * 60)
-
-        print(
-            "[RAG] Question :",
-            query
-        )
-
+        print("[RAG] Question :", query)
         print("=" * 60)
 
         # =====================================================
@@ -115,22 +98,17 @@ class RAGService:
         # =====================================================
 
         print(
-            "[RAG] Génération embedding "
-            "de la question..."
+            "[RAG] Génération embedding de la question..."
         )
 
         query_embedding = (
             self.embedding_service
-            .generate_query_embedding(
-                query
-            )
+            .generate_query_embedding(query)
         )
 
         if not query_embedding:
-
             raise RuntimeError(
-                "Impossible de générer "
-                "l'embedding de la question."
+                "Impossible de générer l'embedding de la question."
             )
 
         print(
@@ -144,41 +122,23 @@ class RAGService:
         # =====================================================
 
         print(
-            "[RAG] Recherche vectorielle "
-            "dans Supabase..."
+            "[RAG] Recherche vectorielle dans Supabase..."
         )
 
         response = (
-
             self.supabase
-
             .rpc(
-
                 "match_knowledge_embeddings",
-
                 {
-
-                    "query_embedding":
-                        query_embedding,
-
-                    "match_threshold":
-                        match_threshold,
-
-                    "match_count":
-                        match_count
-
+                    "query_embedding": query_embedding,
+                    "match_threshold": match_threshold,
+                    "match_count": match_count
                 }
-
             )
-
             .execute()
-
         )
 
-        documents = (
-            response.data
-            or []
-        )
+        documents = response.data or []
 
         print(
             "[RAG] Documents trouvés :",
@@ -192,20 +152,15 @@ class RAGService:
 
             print(
                 f"[RAG] Résultat {index} :",
-                document.get(
-                    "titre"
-                )
+                document.get("title")
             )
 
             print(
                 "[RAG] Similarité :",
-                document.get(
-                    "similarity"
-                )
+                document.get("similarity")
             )
 
         return documents
-
 
     # =========================================================
     # CONSTRUIRE LE CONTEXTE POUR GEMINI
@@ -224,61 +179,43 @@ class RAGService:
         ):
 
             title = (
-                document.get(
-                    "titre"
-                )
-                or
-                "Document sans titre"
+                document.get("title")
+                or "Document sans titre"
             )
 
             source = (
-                document.get(
-                    "organisme"
-                )
-                or
-                "Source inconnue"
+                document.get("source")
+                or "Source inconnue"
             )
 
-            source_path = (
-                document.get(
-                    "source_path"
-                )
-                or
-                ""
+            url = (
+                document.get("url")
+                or ""
             )
 
             content = (
-                document.get(
-                    "content"
-                )
-                or
-                ""
+                document.get("content")
+                or ""
             )
 
-            # Limiter la taille d'un document
-            # envoyé à Gemini
+            # Limiter la taille du document
             content = content[:6000]
 
             part = (
                 f"DOCUMENT {index}\n"
                 f"Titre : {title}\n"
                 f"Source : {source}\n"
-                f"URL : {source_path}\n\n"
+                f"URL : {url}\n\n"
                 f"{content}"
             )
 
-            context_parts.append(
-                part
-            )
+            context_parts.append(part)
 
         return (
             "\n\n"
             "========================================\n\n"
-            .join(
-                context_parts
-            )
+            .join(context_parts)
         )
-
 
     # =========================================================
     # GÉNÉRER UNE RÉPONSE À PARTIR DES SOURCES
@@ -291,7 +228,6 @@ class RAGService:
     ):
 
         if not documents:
-
             return (
                 "Je n'ai pas trouvé suffisamment "
                 "d'informations fiables dans ma base "
@@ -299,11 +235,7 @@ class RAGService:
                 "à cette question."
             )
 
-        context = (
-            self.build_context(
-                documents
-            )
-        )
+        context = self.build_context(documents)
 
         prompt = f"""
 Tu es SikaGlé, un assistant agricole intelligent.
@@ -388,18 +320,12 @@ Réponds maintenant à la question.
 """
 
         print(
-            "[RAG] Génération de la réponse "
-            "avec Gemini..."
+            "[RAG] Génération de la réponse avec Gemini..."
         )
 
-        answer = (
-            self.gemini.generate_text(
-                prompt
-            )
-        )
+        answer = self.gemini.generate_text(prompt)
 
         return answer
-
 
     # =========================================================
     # QUESTION COMPLÈTE :
@@ -417,29 +343,19 @@ Réponds maintenant à la question.
         # 1. RECHERCHE DOCUMENTAIRE
         # =====================================================
 
-        documents = (
-            self.search_documents(
-
-                query=query,
-
-                match_threshold=
-                    match_threshold,
-
-                match_count=
-                    match_count
-
-            )
+        documents = self.search_documents(
+            query=query,
+            match_threshold=match_threshold,
+            match_count=match_count
         )
 
         # =====================================================
         # 2. GÉNÉRATION DE LA RÉPONSE
         # =====================================================
 
-        answer = (
-            self.generate_answer(
-                query=query,
-                documents=documents
-            )
+        answer = self.generate_answer(
+            query=query,
+            documents=documents
         )
 
         # =====================================================
@@ -452,67 +368,37 @@ Réponds maintenant à la question.
 
         for document in documents:
 
-            source_path = (
-                document.get(
-                    "source_path"
-                )
+            source_url = (
+                document.get("url")
+                or document.get("document_id")
             )
 
             if (
-                source_path
-                and
-                source_path not in seen_sources
+                source_url
+                and source_url not in seen_sources
             ):
 
-                seen_sources.add(
-                    source_path
+                seen_sources.add(source_url)
+
+                sources.append(
+                    {
+                        "title": document.get("title"),
+                        "organization": document.get("source"),
+                        "url": source_url,
+                        "similarity": document.get("similarity")
+                    }
                 )
-
-                sources.append({
-
-                    "title":
-                        document.get(
-                            "titre"
-                        ),
-
-                    "organization":
-                        document.get(
-                            "organisme"
-                        ),
-
-                    "url":
-                        source_path,
-
-                    "similarity":
-                        document.get(
-                            "similarity"
-                        )
-
-                })
 
         # =====================================================
         # 4. RÉSULTAT
         # =====================================================
 
         return {
-
-            "status":
-                "success",
-
-            "query":
-                query,
-
-            "answer":
-                answer,
-
-            "documents_found":
-                len(
-                    documents
-                ),
-
-            "sources":
-                sources
-
+            "status": "success",
+            "query": query,
+            "answer": answer,
+            "documents_found": len(documents),
+            "sources": sources
         }
 
 
@@ -524,13 +410,7 @@ def test_rag():
 
     try:
 
-        rag = (
-            RAGService()
-        )
-
-        # =====================================================
-        # QUESTION DE TEST
-        # =====================================================
+        rag = RAGService()
 
         question = (
             "Quel est l'effet de la matière organique "
@@ -538,20 +418,10 @@ def test_rag():
             "des sols ?"
         )
 
-        # =====================================================
-        # RAG COMPLET
-        # =====================================================
-
-        result = (
-            rag.answer(
-
-                query=question,
-
-                match_threshold=0.20,
-
-                match_count=5
-
-            )
+        result = rag.answer(
+            query=question,
+            match_threshold=0.20,
+            match_count=5
         )
 
         return result
@@ -564,13 +434,6 @@ def test_rag():
         )
 
         return {
-
-            "status":
-                "error",
-
-            "message":
-                str(
-                    e
-                )
-
+            "status": "error",
+            "message": str(e)
         }

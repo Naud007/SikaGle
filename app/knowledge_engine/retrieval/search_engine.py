@@ -20,10 +20,6 @@ class SearchEngine:
         - classement final
     """
 
-    # =========================================================
-    # FUSION DES RÉSULTATS
-    # =========================================================
-
     def merge(
         self,
         vector_results: list[SearchResult],
@@ -38,10 +34,7 @@ class SearchEngine:
         # =====================================================
 
         for result in vector_results:
-
-            merged[
-                self._key(result)
-            ] = result
+            merged[self._key(result)] = result
 
         # =====================================================
         # RÉSULTATS KEYWORD
@@ -61,9 +54,7 @@ class SearchEngine:
 
                 merged[key] = result
 
-        results = list(
-            merged.values()
-        )
+        results = list(merged.values())
 
         # =====================================================
         # FILTRES
@@ -79,7 +70,8 @@ class SearchEngine:
         # =====================================================
 
         results = self.rerank(
-            results
+            results,
+            query,
         )
 
         # =====================================================
@@ -91,9 +83,7 @@ class SearchEngine:
             reverse=True,
         )
 
-        return results[
-            :query.top_k
-        ]
+        return results[:query.top_k]
 
     # =========================================================
     # FILTRES
@@ -109,14 +99,9 @@ class SearchEngine:
 
         for result in results:
 
-            metadata = (
-                result.metadata or {}
-            )
+            metadata = result.metadata or {}
 
-            # =================================================
             # SOURCE
-            # =================================================
-
             if query.source:
 
                 source = str(
@@ -126,17 +111,10 @@ class SearchEngine:
                     )
                 )
 
-                if (
-                    source.lower()
-                    != query.source.lower()
-                ):
-
+                if source.lower() != query.source.lower():
                     continue
 
-            # =================================================
             # LANGUE
-            # =================================================
-
             if query.language:
 
                 language = str(
@@ -146,17 +124,10 @@ class SearchEngine:
                     )
                 )
 
-                if (
-                    language.lower()
-                    != query.language.lower()
-                ):
-
+                if language.lower() != query.language.lower():
                     continue
 
-            # =================================================
             # TYPE DOCUMENT
-            # =================================================
-
             if query.publication_type:
 
                 publication_type = str(
@@ -173,43 +144,35 @@ class SearchEngine:
                     publication_type.lower()
                     != query.publication_type.lower()
                 ):
-
                     continue
 
-            # =================================================
             # ANNÉE
-            # =================================================
-
-            if (
-                query.publication_year
-                is not None
-            ):
+            if query.publication_year is not None:
 
                 try:
 
-                    year = int(
-                        metadata.get(
-                            "publication_year",
-                            metadata.get(
-                                "published_at"
-                            ),
+                    year_value = metadata.get(
+                        "publication_year"
+                    )
+
+                    if year_value is None:
+
+                        year_value = metadata.get(
+                            "published_at"
                         )
+
+                    year = int(
+                        str(year_value)[:4]
                     )
 
                 except Exception:
 
                     continue
 
-                if (
-                    year
-                    != query.publication_year
-                ):
-
+                if year != query.publication_year:
                     continue
 
-            filtered.append(
-                result
-            )
+            filtered.append(result)
 
         return filtered
 
@@ -220,17 +183,14 @@ class SearchEngine:
     def rerank(
         self,
         results: list[SearchResult],
+        query: SearchQuery,
     ) -> list[SearchResult]:
-        """
-        Recalcule le score global de chaque résultat.
-        """
 
         for result in results:
 
-            result.score = (
-                self.compute_score(
-                    result
-                )
+            result.score = self.compute_score(
+                result,
+                query,
             )
 
         return results
@@ -242,35 +202,158 @@ class SearchEngine:
     def compute_score(
         self,
         result: SearchResult,
+        query: SearchQuery,
     ) -> float:
         """
-        Calcule le score final d'un document/chunk.
+        Calcule le score final.
+
+        Priorité :
+        1. pertinence vectorielle
+        2. correspondance avec la culture
+        3. titre
+        4. mots-clés
+        5. contenu
         """
 
-        metadata = (
-            result.metadata or {}
-        )
+        metadata = result.metadata or {}
+
+        question = query.question.lower()
+
+        # =====================================================
+        # TEXTE DU DOCUMENT
+        # =====================================================
+
+        title = str(
+            metadata.get(
+                "title",
+                "",
+            )
+        ).lower()
+
+        crop = str(
+            metadata.get(
+                "crop",
+                "",
+            )
+        ).lower()
+
+        culture = str(
+            metadata.get(
+                "culture",
+                "",
+            )
+        ).lower()
+
+        keywords = str(
+            metadata.get(
+                "keywords",
+                "",
+            )
+        ).lower()
+
+        document = str(
+            result.document or ""
+        ).lower()
+
+        # =====================================================
+        # MOTS IMPORTANTS
+        # =====================================================
+
+        important_words = [
+            word.strip(
+                ".,;:!?()[]{}'\""
+            )
+            for word in question.split()
+            if len(
+                word.strip(
+                    ".,;:!?()[]{}'\""
+                )
+            ) >= 4
+        ]
+
+        # =====================================================
+        # SCORE DE BASE
+        # =====================================================
 
         score = 0.0
 
+        # Le vectoriel reste la base principale.
+        score += result.vector_score * 10
+
+        # Le keyword intervient beaucoup moins.
+        score += result.keyword_score * 0.75
+
         # =====================================================
-        # SIMILARITÉ VECTORIELLE
+        # CULTURE / PIMENT
         # =====================================================
 
-        score += (
-            result.vector_score * 10
+        culture_match = False
+
+        if "piment" in question:
+
+            culture_match = (
+                "piment" in crop
+                or "piment" in culture
+                or "pepper" in title
+                or "capsicum" in title
+                or "capsicum" in keywords
+                or "capsicum" in document
+                or "chilli" in title
+                or "chilli" in document
+            )
+
+            if culture_match:
+                score += 5.0
+            else:
+                score -= 3.0
+
+        # =====================================================
+        # TITRE
+        # =====================================================
+
+        title_matches = sum(
+            1
+            for word in important_words
+            if word in title
+        )
+
+        score += min(
+            title_matches * 1.5,
+            4.5,
         )
 
         # =====================================================
-        # RECHERCHE LEXICALE
+        # MOTS-CLÉS
         # =====================================================
 
-        score += (
-            result.keyword_score * 2
+        keyword_matches = sum(
+            1
+            for word in important_words
+            if word in keywords
+        )
+
+        score += min(
+            keyword_matches * 1.0,
+            3.0,
         )
 
         # =====================================================
-        # BONUS LANGUE FRANÇAISE
+        # CONTENU
+        # =====================================================
+
+        content_matches = sum(
+            1
+            for word in important_words
+            if word in document
+        )
+
+        score += min(
+            content_matches * 0.25,
+            2.0,
+        )
+
+        # =====================================================
+        # LANGUE
         # =====================================================
 
         language = str(
@@ -280,20 +363,24 @@ class SearchEngine:
             )
         ).lower()
 
+        language_bonus = 0.0
+
         if language == "fr":
 
-            score += 1
+            language_bonus = 1.0
+
+            score += language_bonus
 
         # =====================================================
-        # BONUS RÉCENCE
+        # RÉCENCE
         # =====================================================
+
+        recency_bonus = 0.0
 
         try:
 
-            publication_year = (
-                metadata.get(
-                    "publication_year"
-                )
+            publication_year = metadata.get(
+                "publication_year"
             )
 
             if publication_year is None:
@@ -304,42 +391,37 @@ class SearchEngine:
 
                 if published_at:
 
-                    publication_year = (
-                        str(
-                            published_at
-                        )[:4]
-                    )
+                    publication_year = str(
+                        published_at
+                    )[:4]
 
             year = int(
-                publication_year
+                str(publication_year)[:4]
             )
 
-            current_year = (
-                datetime.now().year
-            )
+            current_year = datetime.now().year
 
-            age = (
-                current_year - year
-            )
+            age = current_year - year
 
             if age <= 2:
 
-                score += 3
+                recency_bonus = 3.0
 
             elif age <= 5:
 
-                score += 2
+                recency_bonus = 2.0
 
             elif age <= 10:
 
-                score += 1
+                recency_bonus = 1.0
+
+            score += recency_bonus
 
         except Exception:
-
             pass
 
         # =====================================================
-        # DÉTAILS DU CLASSEMENT
+        # DEBUG
         # =====================================================
 
         result.ranking_details = {
@@ -350,16 +432,26 @@ class SearchEngine:
             "keyword_score":
                 result.keyword_score,
 
+            "title_matches":
+                title_matches,
+
+            "keyword_matches":
+                keyword_matches,
+
+            "content_matches":
+                content_matches,
+
+            "culture_match":
+                culture_match,
+
             "language_bonus":
-                (
-                    1
-                    if language == "fr"
-                    else 0
-                ),
+                language_bonus,
+
+            "recency_bonus":
+                recency_bonus,
 
             "final_score":
                 score,
-
         }
 
         return score
@@ -374,40 +466,19 @@ class SearchEngine:
     ) -> str:
         """
         Génère une clé unique pour un chunk.
-
-        IMPORTANT :
-        Un même document peut contenir plusieurs chunks.
-        L'identifiant du document seul ne doit donc PAS
-        être utilisé comme clé.
-
-        La combinaison :
-
-            document + chunk_index
-
-        permet de conserver chaque chunk séparément.
         """
 
-        metadata = (
-            result.metadata or {}
-        )
+        metadata = result.metadata or {}
 
         document_id = (
-            metadata.get(
-                "document"
-            )
-            or metadata.get(
-                "document_id"
-            )
-            or metadata.get(
-                "identifier"
-            )
+            metadata.get("document")
+            or metadata.get("document_id")
+            or metadata.get("identifier")
             or result.document[:80]
         )
 
-        chunk_index = (
-            metadata.get(
-                "chunk_index"
-            )
+        chunk_index = metadata.get(
+            "chunk_index"
         )
 
         if chunk_index is not None:
