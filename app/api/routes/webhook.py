@@ -23,7 +23,7 @@ router = APIRouter()
 
 VERIFY_TOKEN = os.getenv(
     "WHATSAPP_VERIFY_TOKEN",
-    "sikagle_secret_token_2026",
+    "sikagle_webhook_2026",
 )
 print(
     "🔐 WHATSAPP_VERIFY_TOKEN: PRESENT=",
@@ -558,6 +558,10 @@ async def receive_webhook(
                 # =================================================
 
                 try:
+                    print(
+                        "🧪 DEBUG WHATSAPP → ASSISTANT :",
+                        repr(content),
+                    )
 
                     answer = assistant.process(
                         user_id=str(
