@@ -10,38 +10,61 @@ from app.reasoning.context.context_service import (
 from app.services.knowledge_service import (
     KnowledgeService,
 )
-from app.ai.gemini_client import (
-    GeminiClient,
-)
 
 
 class AgriculturalAssistantService:
     """
     Point d'entrée principal de SikaGlé.
 
-    Ce service orchestre tous les moteurs du système.
+    Ce service orchestre les différents moteurs du système.
 
     Il ne contient aucune logique agricole.
-    Il coordonne uniquement les différents moteurs.
+    Il coordonne uniquement :
+
+    - la conversation ;
+    - le contexte conversationnel ;
+    - le contexte de raisonnement ;
+    - le moteur de connaissances / RAG.
+
+    La génération Gemini est réalisée à l'intérieur
+    du RAG via ResponseGenerator.
     """
 
     def __init__(self):
 
+        # =====================================================
+        # CONVERSATION
+        # =====================================================
+
         self.conversation = ConversationService()
+
+        # =====================================================
+        # CONTEXTE CONVERSATIONNEL
+        # =====================================================
 
         self.conversation_context = (
             ContextService()
         )
 
+        # =====================================================
+        # CONTEXTE DE RAISONNEMENT
+        # =====================================================
+
         self.reasoning_context = (
             ReasoningContextService()
         )
+
+        # =====================================================
+        # MOTEUR DE CONNAISSANCES / RAG
+        # =====================================================
 
         self.knowledge = (
             KnowledgeService()
         )
 
-        self.llm = GeminiClient()
+    # =========================================================
+    # TRAITEMENT PRINCIPAL
+    # =========================================================
 
     def process(
         self,
@@ -52,7 +75,7 @@ class AgriculturalAssistantService:
     ) -> str:
 
         # =====================================================
-        # 1. SAUVEGARDE DU MESSAGE
+        # 1. SAUVEGARDE DU MESSAGE UTILISATEUR
         # =====================================================
 
         self.conversation.add_message(
@@ -72,7 +95,7 @@ class AgriculturalAssistantService:
         )
 
         # =====================================================
-        # 3. CONTEXTE AGRICOLE
+        # 3. CONTEXTE AGRICOLE / RAISONNEMENT
         # =====================================================
 
         reasoning_context = (
@@ -83,34 +106,53 @@ class AgriculturalAssistantService:
         )
 
         # =====================================================
-        # 4. RECHERCHE DOCUMENTAIRE
+        # 4. RECHERCHE + GÉNÉRATION RAG
         # =====================================================
+        #
+        # IMPORTANT :
+        #
+        # Le RAG réalise maintenant tout le parcours :
+        #
+        # question
+        #    ↓
+        # HybridRetriever
+        #    ↓
+        # documents pertinents
+        #    ↓
+        # ResponseGenerator
+        #    ↓
+        # Gemini
+        #    ↓
+        # réponse finale
+        #
+        # Il ne faut donc PAS appeler Gemini une deuxième fois
+        # ici.
+        #
 
         rag_result = self.knowledge.ask(
             question=message,
-            top_k=5,
-        )
-
-        # =====================================================
-        # 5. CONSTRUCTION DU PROMPT FINAL
-        # =====================================================
-
-        prompt = self.build_prompt(
-            conversation_context=conversation_context,
-            reasoning_context=reasoning_context,
-            rag_result=rag_result,
-            user_message=message,
+            top_k=20,
             language=language,
-            input_type=input_type,
         )
 
         # =====================================================
-        # 6. GÉNÉRATION GEMINI
+        # 5. RÉCUPÉRATION DE LA RÉPONSE RAG
         # =====================================================
 
-        answer = self.llm.generate_text(
-            prompt
+        answer = rag_result.get(
+            "answer",
+            "",
         )
+
+        # =====================================================
+        # 6. FALLBACK
+        # =====================================================
+
+        if not answer:
+
+            answer = (
+                "Je n'ai pas pu générer une réponse."
+            )
 
         # =====================================================
         # 7. SAUVEGARDE DE LA RÉPONSE
@@ -122,277 +164,8 @@ class AgriculturalAssistantService:
             content=answer,
         )
 
+        # =====================================================
+        # 8. RETOUR
+        # =====================================================
+
         return answer
-
-    def build_prompt(
-        self,
-        conversation_context,
-        reasoning_context,
-        rag_result,
-        user_message: str,
-        language: str = "fr",
-        input_type: str = "text",
-    ) -> str:
-
-        language = (
-            language or "fr"
-        ).lower().strip()
-
-        input_type = (
-            input_type or "text"
-        ).lower().strip()
-
-        language_names = {
-            "fr": "français",
-            "fon": "fon",
-            "yo": "yoruba",
-            "dendi": "dendi",
-        }
-
-        # =====================================================
-        # VALIDATION LANGUE
-        # =====================================================
-
-        if language not in language_names:
-            language = "fr"
-
-        language_name = language_names[language]
-
-        # =====================================================
-        # LANGUE DE RÉPONSE
-        # =====================================================
-
-        if language == "fr":
-
-            language_instruction = """
-Réponds uniquement en français.
-
-Si l'utilisateur a envoyé un message texte,
-réponds en français sous forme de texte.
-
-Si l'utilisateur a envoyé un message audio,
-réponds en français avec un texte naturel destiné
-à être transformé en audio.
-
-Ne réponds jamais dans plusieurs langues.
-"""
-
-        elif language == "fon":
-
-            language_instruction = """
-Réponds uniquement en fon.
-
-L'utilisateur utilise une langue locale prise en charge.
-
-La réponse est destinée à être produite en audio fon
-lorsque le canal audio est utilisé.
-
-Ne produis pas de traduction française.
-Ne produis pas de réponse en français.
-Ne réponds jamais dans plusieurs langues.
-"""
-
-        elif language == "yo":
-
-            language_instruction = """
-Réponds uniquement en yoruba.
-
-L'utilisateur utilise une langue locale prise en charge.
-
-La réponse est destinée à être produite en audio yoruba
-lorsque le canal audio est utilisé.
-
-Ne produis pas de traduction française.
-Ne produis pas de réponse en français.
-Ne réponds jamais dans plusieurs langues.
-"""
-
-        else:
-
-            language_instruction = """
-Réponds uniquement en dendi.
-
-L'utilisateur utilise une langue locale prise en charge.
-
-La réponse est destinée à être produite en audio dendi
-lorsque le canal audio est utilisé.
-
-Ne produis pas de traduction française.
-Ne produis pas de réponse en français.
-Ne réponds jamais dans plusieurs langues.
-"""
-
-        # =====================================================
-        # FORMAT AUDIO
-        # =====================================================
-
-        if input_type == "audio":
-
-            format_instruction = """
-La réponse sera transformée en audio et lue à voix haute.
-
-Écris uniquement du langage naturel parlé.
-
-INTERDICTIONS ABSOLUES :
-
-Ne mets aucun astérisque.
-Ne mets aucun dièse.
-Ne mets aucun tiret de liste.
-Ne mets aucune puce.
-Ne mets aucun tableau.
-Ne mets aucun emoji.
-Ne mets aucun symbole Markdown.
-Ne mets aucun titre Markdown.
-Ne mets aucune numérotation comme « 1. », « 2. » ou « 3. ».
-Ne mets pas de parenthèses inutiles.
-Ne mets pas de crochets.
-Ne mets pas d'accolades.
-Ne mets pas de caractères décoratifs.
-
-Ne commence pas par un titre.
-
-Transforme les informations en phrases naturelles,
-comme si SikaGlé parlait directement à un agriculteur.
-
-Utilise des phrases courtes et faciles à comprendre.
-
-Pour les nombres, utilise une formulation naturelle
-à l'oral lorsque cela améliore la compréhension.
-
-Par exemple, écris « vingt et un jours »
-plutôt que « 21 DAS ».
-
-La réponse finale ne doit contenir aucun élément
-de mise en forme Markdown.
-"""
-
-        # =====================================================
-        # FORMAT TEXTE / WHATSAPP
-        # =====================================================
-
-        else:
-
-            format_instruction = """
-La réponse sera affichée sous forme de texte,
-notamment sur WhatsApp.
-
-Réponds de façon courte, directe, naturelle et humaine.
-
-Parle comme un conseiller agricole qui échange directement
-avec un agriculteur, pas comme un professeur.
-
-Va droit au problème et donne la réponse utile.
-
-Évite les longues explications, les introductions inutiles,
-les définitions et le style académique.
-
-Utilise des phrases simples et faciles à comprendre.
-
-Ne donne une liste que si elle est vraiment nécessaire.
-
-Pour une question simple, réponds en quelques phrases seulement.
-
-La réponse doit rester pratique, claire et naturelle.
-
-Utilise uniquement une mise en forme simple compatible avec WhatsApp.
-
-N'utilise jamais de dièse.
-N'utilise jamais ##.
-N'utilise jamais ###.
-N'utilise jamais **.
-N'utilise jamais de tableau.
-N'utilise jamais de décoration Markdown complexe.
-
-La réponse doit être claire, courte et facile
-à lire sur WhatsApp.
-"""
-
-        # =====================================================
-        # SOURCES
-        # =====================================================
-
-        sources = "\n".join(
-            f"- {source}"
-            for source in rag_result.get(
-                "sources",
-                [],
-            )
-        )
-
-        # =====================================================
-        # RÉPONSE RAG
-        # =====================================================
-
-        documents = rag_result.get(
-            "answer",
-            "",
-        )
-
-        # =====================================================
-        # PROMPT FINAL
-        # =====================================================
-
-        return f"""
-Tu es SikaGlé.
-
-Tu es un conseiller agricole intelligent spécialisé
-dans l'agriculture africaine.
-
-Tu dois :
-
-- raisonner avant de répondre ;
-- utiliser les connaissances fournies ;
-- ne jamais inventer une information ;
-- expliquer simplement ;
-- rester fidèle aux documents scientifiques ;
-- ne pas transformer automatiquement une étude étrangère
-  en recommandation spécifique au Bénin ;
-- signaler clairement lorsqu'une information importante
-  manque.
-
-========================
-LANGUE
-========================
-
-Langue demandée : {language_name}
-
-{language_instruction}
-
-========================
-FORMAT
-========================
-
-Type d'entrée : {input_type}
-
-{format_instruction}
-
-========================
-QUESTION DE L'UTILISATEUR
-========================
-
-{user_message}
-
-========================
-CONNAISSANCES RETROUVÉES
-========================
-
-{documents}
-
-========================
-SOURCES
-========================
-
-{sources}
-
-========================
-RÉPONSE
-========================
-
-Rédige maintenant la réponse finale.
-
-Respecte strictement la langue demandée.
-
-Respecte strictement le format demandé.
-
-Ne réponds que par la réponse destinée à l'utilisateur.
-"""

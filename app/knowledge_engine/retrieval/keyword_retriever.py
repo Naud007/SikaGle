@@ -25,7 +25,9 @@ class KeywordRetriever:
     SYNONYMS = {
         "piment": [
             "piment",
+            "piments",
             "pepper",
+            "peppers",
             "chilli",
             "chili",
             "capsicum",
@@ -36,6 +38,11 @@ class KeywordRetriever:
             "aphid",
             "aphids",
             "aphis",
+            "aphididae",
+            "pulgão",
+            "pulgões",
+            "pulgon",
+            "pulgones",
         ],
         "ravageur": [
             "ravageur",
@@ -52,10 +59,7 @@ class KeywordRetriever:
     }
 
     def __init__(self):
-
-        self.repository = (
-            KnowledgeRepository()
-        )
+        self.repository = KnowledgeRepository()
 
     def search(
         self,
@@ -73,25 +77,54 @@ class KeywordRetriever:
         if not keywords:
             return []
 
-        response = (
-            self.repository.vectorstore.client
-            .table(
-                self.repository.vectorstore.TABLE_NAME
+        # -------------------------------------------------
+        # Récupération paginée de tous les documents
+        # -------------------------------------------------
+
+        rows = []
+
+        page_size = 1000
+        offset = 0
+
+        while True:
+            response = (
+                self.repository.vectorstore.client
+                .table(
+                    self.repository.vectorstore.TABLE_NAME
+                )
+                .select(
+                    "document_id, chunk_index, chunk_count, "
+                    "title, source, identifier, url, author, "
+                    "published_at, language, document_type, "
+                    "publisher, crop, culture, keywords, "
+                    "country, zone_geographique, content"
+                )
+                .range(
+                    offset,
+                    offset + page_size - 1,
+                )
+                .execute()
             )
-            .select(
-                "document_id, chunk_index, chunk_count, "
-                "title, source, identifier, url, author, "
-                "published_at, language, document_type, "
-                "publisher, crop, culture, keywords, "
-                "country, zone_geographique, content"
-            )
-            .limit(1000)
-            .execute()
-        )
+
+            batch = response.data or []
+
+            if not batch:
+                break
+
+            rows.extend(batch)
+
+            if len(batch) < page_size:
+                break
+
+            offset += page_size
+
+        # -------------------------------------------------
+        # Calcul des résultats
+        # -------------------------------------------------
 
         results: list[SearchResult] = []
 
-        for row in response.data or []:
+        for row in rows:
 
             content = str(
                 row.get("content") or ""
@@ -114,6 +147,7 @@ class KeywordRetriever:
             score = self._keyword_score(
                 searchable_text,
                 keywords,
+                query.question,
             )
 
             if score <= 0:
@@ -194,22 +228,21 @@ class KeywordRetriever:
             reverse=True,
         )
 
-        return results[
-            :query.top_k
-        ]
+        return results[:query.top_k]
 
     def _extract_keywords(
         self,
         question: str,
     ) -> list[str]:
         """
-        Extrait les mots importants et leurs
-        équivalents documentaires.
+        Extrait les mots importants de la question
+        et ajoute automatiquement les synonymes
+        correspondant aux concepts connus.
         """
 
         words = [
             word.lower().strip(
-                ".,;:!?()[]{}"
+                ".,;:!?()[]{}'\""
             )
             for word in question.split()
             if len(word) >= 3
@@ -221,18 +254,51 @@ class KeywordRetriever:
 
             keywords.append(word)
 
+            # Forme singulière simple
             if word.endswith("s"):
                 keywords.append(
                     word[:-1]
                 )
 
-            synonyms = self.SYNONYMS.get(
-                word
-            )
+            # -------------------------------------------------
+            # Trouver le concept auquel appartient le mot
+            # -------------------------------------------------
 
-            if synonyms:
+            matched_concept = None
+
+            for concept, aliases in self.SYNONYMS.items():
+
+                normalized_aliases = [
+                    alias.lower()
+                    for alias in aliases
+                ]
+
+                if (
+                    word == concept
+                    or word in normalized_aliases
+                    or (
+                        word.endswith("s")
+                        and word[:-1]
+                        in normalized_aliases
+                    )
+                ):
+                    matched_concept = concept
+                    break
+
+            # -------------------------------------------------
+            # Ajouter tous les synonymes du concept
+            # -------------------------------------------------
+
+            if matched_concept:
+
+                keywords.append(
+                    matched_concept
+                )
+
                 keywords.extend(
-                    synonyms
+                    self.SYNONYMS[
+                        matched_concept
+                    ]
                 )
 
         return list(
@@ -245,13 +311,17 @@ class KeywordRetriever:
         self,
         text: str,
         keywords: list[str],
+        question: str,
     ) -> int:
         """
         Calcule un score lexical pondéré.
 
-        Les mots génériques sont ignorés afin
-        d'éviter qu'ils dominent les résultats.
+        Les mots génériques sont ignorés.
+        Les correspondances utilisent des mots entiers
+        afin d'éviter les faux positifs par sous-chaînes.
         """
+
+        import re
 
         lower = text.lower()
 
@@ -304,14 +374,23 @@ class KeywordRetriever:
             if len(keyword) < 4:
                 continue
 
-            count = lower.count(
-                keyword
-            )
+            if " " in keyword:
+
+                count = lower.count(
+                    keyword
+                )
+
+            else:
+
+                count = len(
+                    re.findall(
+                        rf"\b{re.escape(keyword)}\b",
+                        lower,
+                    )
+                )
 
             if count > 0:
 
-                # Limiter l'effet des répétitions
-                # dans un même document.
                 score += min(
                     count,
                     3,

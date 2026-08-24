@@ -163,10 +163,7 @@ class ResponseGenerator:
         # TEXTE / WHATSAPP
         # =====================================================
 
-        # -----------------------------------------------------
-        # Transformer **texte** en *texte*
-        # -----------------------------------------------------
-
+        # Gras Markdown -> italique WhatsApp
         text = re.sub(
             r"\*\*(.*?)\*\*",
             r"*\1*",
@@ -174,14 +171,7 @@ class ResponseGenerator:
             flags=re.DOTALL,
         )
 
-        # -----------------------------------------------------
-        # Supprimer les titres Markdown
-        #
-        # ## Titre
-        # devient
-        # Titre
-        # -----------------------------------------------------
-
+        # Titres Markdown
         text = re.sub(
             r"^\s*#{1,6}\s*",
             "",
@@ -189,26 +179,36 @@ class ResponseGenerator:
             flags=re.MULTILINE,
         )
 
-        # -----------------------------------------------------
+        # Tirets de liste -> liste WhatsApp
+        text = re.sub(
+            r"^\s*[-•]\s+",
+            "* ",
+            text,
+            flags=re.MULTILINE,
+        )
+
+        # Listes numérotées -> liste WhatsApp
+        text = re.sub(
+            r"^\s*\d+[\.\)]\s+",
+            "* ",
+            text,
+            flags=re.MULTILINE,
+        )
+
         # Supprimer les tableaux Markdown
-        # -----------------------------------------------------
-
         lines = text.splitlines()
-
         cleaned_lines = []
 
         for line in lines:
 
             stripped = line.strip()
 
-            # Ligne de tableau
             if (
                 stripped.startswith("|")
                 and stripped.endswith("|")
             ):
                 continue
 
-            # Séparateur de tableau
             if re.match(
                 r"^\|?\s*:?-{3,}:?\s*"
                 r"(\|\s*:?-{3,}:?\s*)+\|?$",
@@ -218,14 +218,9 @@ class ResponseGenerator:
 
             cleaned_lines.append(line)
 
-        text = "\n".join(
-            cleaned_lines
-        )
+        text = "\n".join(cleaned_lines)
 
-        # -----------------------------------------------------
-        # Nettoyage des espaces excessifs
-        # -----------------------------------------------------
-
+        # Espaces
         text = re.sub(
             r"[ \t]+",
             " ",
@@ -237,6 +232,44 @@ class ResponseGenerator:
             "\n\n",
             text,
         )
+
+        # Espaces avant/après les paragraphes
+        text = re.sub(
+            r"\n\s+\* ",
+            "\n* ",
+            text,
+        )
+                # -----------------------------------------------------
+        # Réparer les astérisques Markdown mal fermés
+        # -----------------------------------------------------
+
+        lines = text.splitlines()
+        repaired_lines = []
+
+        for line in lines:
+
+            # Une ligne de liste doit commencer par "* "
+            if line.strip().startswith("* "):
+
+                content = line.strip()[2:].strip()
+
+                # Supprimer les astérisques isolés
+                content = content.replace("*", "")
+
+                repaired_lines.append(
+                    "* " + content
+                )
+
+            else:
+
+                # Pour les autres lignes, conserver uniquement
+                # les astérisques correctement utilisés.
+                if line.count("*") % 2 != 0:
+                    line = line.replace("*", "")
+
+                repaired_lines.append(line)
+
+        text = "\n".join(repaired_lines)
 
         return text.strip()
 

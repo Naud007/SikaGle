@@ -72,6 +72,106 @@ class RAGService:
         self.gemini = GeminiClient()
 
     # =========================================================
+    # ENRICHIR LA REQUÊTE AGRICOLE
+    # =========================================================
+
+    def enrich_query(
+        self,
+        query: str
+    ) -> str:
+
+        query_lower = query.lower()
+
+        agricultural_terms = []
+
+        # =====================================================
+        # CULTURE
+        # =====================================================
+
+        if any(
+            term in query_lower
+            for term in [
+                "piment",
+                "poivron",
+                "capsicum"
+            ]
+        ):
+
+            agricultural_terms.extend([
+                "Capsicum annuum",
+                "pepper",
+                "chilli"
+            ])
+
+        # =====================================================
+        # JAUNISSEMENT
+        # =====================================================
+
+        if any(
+            term in query_lower
+            for term in [
+                "jaun",
+                "jaunissement",
+                "jaunes",
+                "jaune"
+            ]
+        ):
+
+            agricultural_terms.extend([
+                "yellowing leaves",
+                "leaf yellowing",
+                "chlorosis"
+            ])
+
+        # =====================================================
+        # CAUSES POSSIBLES
+        # =====================================================
+
+        if any(
+            term in query_lower
+            for term in [
+                "jaun",
+                "maladie",
+                "feuille",
+                "feuilles"
+            ]
+        ):
+
+            agricultural_terms.extend([
+                "nutrient deficiency",
+                "nitrogen",
+                "iron",
+                "magnesium",
+                "potassium",
+                "phosphorus",
+                "disease",
+                "pest"
+            ])
+
+        # =====================================================
+        # AUCUN ENRICHISSEMENT NÉCESSAIRE
+        # =====================================================
+
+        if not agricultural_terms:
+            return query
+
+        # =====================================================
+        # REQUÊTE FINALE
+        # =====================================================
+
+        enriched_query = (
+            f"{query} "
+            + " ".join(agricultural_terms)
+        )
+
+        print(
+            "[RAG] Requête enrichie :",
+            enriched_query
+        )
+
+        return enriched_query
+
+    # =========================================================
     # RECHERCHE VECTORIELLE
     # =========================================================
 
@@ -79,7 +179,7 @@ class RAGService:
         self,
         query: str,
         match_threshold: float = 0.20,
-        match_count: int = 5
+        match_count: int = 10
     ):
 
         if not query or not query.strip():
@@ -89,8 +189,17 @@ class RAGService:
 
         query = query.strip()
 
+        # =====================================================
+        # ENRICHISSEMENT DE LA REQUÊTE
+        # =====================================================
+
+        search_query = self.enrich_query(
+            query
+        )
+
         print("=" * 60)
         print("[RAG] Question :", query)
+        print("[RAG] Recherche :", search_query)
         print("=" * 60)
 
         # =====================================================
@@ -103,7 +212,9 @@ class RAGService:
 
         query_embedding = (
             self.embedding_service
-            .generate_query_embedding(query)
+            .generate_query_embedding(
+                search_query
+            )
         )
 
         if not query_embedding:
@@ -235,7 +346,9 @@ class RAGService:
                 "à cette question."
             )
 
-        context = self.build_context(documents)
+        context = self.build_context(
+            documents
+        )
 
         prompt = f"""
 Tu es SikaGlé, un assistant agricole intelligent.
@@ -323,7 +436,9 @@ Réponds maintenant à la question.
             "[RAG] Génération de la réponse avec Gemini..."
         )
 
-        answer = self.gemini.generate_text(prompt)
+        answer = self.gemini.generate_text(
+            prompt
+        )
 
         return answer
 
@@ -378,7 +493,9 @@ Réponds maintenant à la question.
                 and source_url not in seen_sources
             ):
 
-                seen_sources.add(source_url)
+                seen_sources.add(
+                    source_url
+                )
 
                 sources.append(
                     {

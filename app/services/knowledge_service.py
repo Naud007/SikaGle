@@ -159,6 +159,7 @@ class KnowledgeService:
         top_k: int = 5,
         source: str | None = None,
         language: str | None = None,
+        input_type: str = "text",
         publication_type: str | None = None,
         publication_year: int | None = None,
     ) -> dict:
@@ -168,6 +169,7 @@ class KnowledgeService:
             top_k=top_k,
             source=source,
             language=language,
+            input_type=input_type,
             publication_type=publication_type,
             publication_year=publication_year,
         )
