@@ -329,6 +329,56 @@ class RAGService:
         )
 
     # =========================================================
+    # FILTRE DE SÉCURITÉ PHYTOSANITAIRE
+    # =========================================================
+
+    def sanitize_answer(
+        self,
+        answer: str
+    ) -> str:
+
+        if not answer:
+            return answer
+
+        forbidden_terms = [
+            "imidaclopride",
+            "imidacloprid",
+            "glyphosate",
+            "paraquat",
+            "chlorpyrifos",
+            "cyperméthrine",
+            "cypermethrin",
+            "lambda-cyhalothrine",
+            "lambda-cyhalothrin",
+            "acétamipride",
+            "acetamiprid",
+            "thiaméthoxame",
+            "thiamethoxam",
+        ]
+
+        lines = answer.splitlines()
+
+        cleaned_lines = []
+
+        for line in lines:
+
+            line_lower = line.lower()
+
+            if any(
+                term in line_lower
+                for term in forbidden_terms
+            ):
+                continue
+
+            cleaned_lines.append(line)
+
+        cleaned_answer = "\n".join(
+            cleaned_lines
+        ).strip()
+
+        return cleaned_answer
+
+    # =========================================================
     # GÉNÉRER UNE RÉPONSE À PARTIR DES SOURCES
     # =========================================================
 
@@ -409,24 +459,49 @@ INSTRUCTIONS IMPORTANTES :
 14. Ne donne pas de longues explications si une réponse
     courte suffit.
 
-15. N'invente jamais de dosage d'engrais,
-    de pesticide, de médicament vétérinaire
-    ou de produit phytosanitaire.
+15. SÉCURITÉ PHYTOSANITAIRE :
 
-16. Si une recommandation dépend du type de sol,
+    Ne recommande jamais de pesticide, insecticide,
+    herbicide, fongicide ou autre produit phytosanitaire
+    chimique.
+
+    Ne donne jamais de dosage, concentration,
+    fréquence d'application ou quantité précise.
+
+    Même si un document fourni contient un pesticide
+    ou une dose précise, ne reproduis pas cette information.
+
+    Si les documents contiennent des traitements chimiques,
+    ignore ces traitements dans ta réponse.
+
+16. PRIORITÉ AUX MÉTHODES À FAIBLE RISQUE :
+
+    Lorsqu'elles sont disponibles dans les documents,
+    privilégie dans cet ordre :
+
+    - prévention et surveillance ;
+    - méthodes culturales ;
+    - méthodes mécaniques ;
+    - prédateurs naturels et lutte biologique ;
+    - extraits végétaux ou solutions biologiques.
+
+17. Si une recommandation dépend du type de sol,
     de la culture, de la région ou d'une autre information
     manquante, pose une question courte pour obtenir
     cette information.
 
-17. La réponse doit être facile à lire sur WhatsApp.
+18. En cas de conflit entre une information documentaire
+    et ces règles de sécurité, ces règles de sécurité
+    sont prioritaires.
 
-18. Évite les listes longues.
-    Utilise au maximum quelques points lorsque c'est utile.
+19. La réponse doit être facile à lire sur WhatsApp.
 
-19. Ne mets pas de bibliographie ou de longue liste
+20. Utilise au maximum quelques points lorsque c'est utile.
+
+21. Ne mets pas de bibliographie ou de longue liste
     de sources dans le corps de la réponse.
 
-20. Ton objectif est d'être utile immédiatement,
+22. Ton objectif est d'être utile immédiatement,
     pas de donner un cours.
 
 Réponds maintenant à la question.
@@ -438,6 +513,14 @@ Réponds maintenant à la question.
 
         answer = self.gemini.generate_text(
             prompt
+        )
+
+        # =====================================================
+        # FILTRE FINAL DE SÉCURITÉ
+        # =====================================================
+
+        answer = self.sanitize_answer(
+            answer
         )
 
         return answer

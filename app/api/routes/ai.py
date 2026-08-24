@@ -7,7 +7,7 @@ from app.ai.gemini_client import (
 )
 
 from app.ai.embeddings import test_embedding
-from app.ai.rag_service import test_rag
+from app.ai.rag_service import RAGService
 
 from app.services.agricultural_assistant_service import (
     AgriculturalAssistantService,
@@ -81,9 +81,38 @@ def embedding_test():
 # =========================================================
 
 @router.get("/rag-test")
-def rag_test():
+def rag_test(
+    question: str = (
+        "Quel est l'effet de la matière organique "
+        "et de la fertilisation sur la fertilité "
+        "des sols ?"
+    ),
+    top_k: int = 5,
+):
 
-    return test_rag()
+    try:
+
+        rag = RAGService()
+
+        result = rag.answer(
+            query=question,
+            match_threshold=0.20,
+            match_count=top_k,
+        )
+
+        return result
+
+    except Exception as e:
+
+        print(
+            "[RAG] Erreur :",
+            e,
+        )
+
+        return {
+            "status": "error",
+            "message": str(e),
+        }
 
 
 # =========================================================
