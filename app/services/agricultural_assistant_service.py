@@ -143,7 +143,7 @@ class AgriculturalAssistantService:
 
         rag_result = self.knowledge.ask(
             question=message,
-            top_k=8,
+            top_k=15,
             language=language,
         )
 

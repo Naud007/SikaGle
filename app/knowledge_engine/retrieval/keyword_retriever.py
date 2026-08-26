@@ -189,6 +189,19 @@ class KeywordRetriever:
 
         # =====================================================
         # REQUÊTE CIBLÉE
+        #
+        # NOTE (limite connue) :
+        #
+        # websearch_to_tsquery (utilisé côté Supabase) ne
+        # comprend pas les parenthèses ni le mot AND — cette
+        # requête agit donc en pratique comme un simple OR
+        # géant côté PostgreSQL. C'est volontaire : on élargit
+        # large ici, puis on FILTRE strictement en Python
+        # ci-dessous (voir section "FILTRE STRICT PEST+CROP")
+        # pour ne garder que les documents qui contiennent
+        # réellement les deux concepts, sans dépendre d'une
+        # syntaxe booléenne que websearch_to_tsquery n'applique
+        # pas.
         # =====================================================
 
         concept_query = []
@@ -300,16 +313,31 @@ class KeywordRetriever:
                 row.get("rank") or 0.0
             )
 
+            row_pest_match = any(
+                term in combined_text
+                for term in pest_terms
+            )
+
+            row_crop_match = any(
+                term in (
+                    title
+                    + " "
+                    + crop
+                    + " "
+                    + culture
+                    + " "
+                    + combined_text
+                )
+                for term in crop_terms
+            )
+
             # -------------------------------------------------
             # PRIORITÉ RAVAGEUR
             # -------------------------------------------------
 
             if has_pest:
 
-                if any(
-                    term in combined_text
-                    for term in pest_terms
-                ):
+                if row_pest_match:
                     score += 2.0
 
             # -------------------------------------------------
@@ -318,28 +346,8 @@ class KeywordRetriever:
 
             if has_crop:
 
-                crop_match = any(
-                    term in (
-                        title
-                        + " "
-                        + crop
-                        + " "
-                        + culture
-                    )
-                    for term in crop_terms
-                )
-
-                if crop_match:
+                if row_crop_match:
                     score += 4.0
-
-                # Recherche également dans le contenu
-                content_crop_match = any(
-                    term in combined_text
-                    for term in crop_terms
-                )
-
-                if content_crop_match:
-                    score += 1.0
 
             # -------------------------------------------------
             # BONUS SI RAVAGEUR + CULTURE
@@ -347,25 +355,49 @@ class KeywordRetriever:
 
             if has_pest and has_crop:
 
-                pest_match = any(
-                    term in combined_text
-                    for term in pest_terms
-                )
-
-                crop_match = any(
-                    term in combined_text
-                    for term in crop_terms
-                )
-
-                if pest_match and crop_match:
+                if row_pest_match and row_crop_match:
                     score += 3.0
 
             reranked.append(
                 (
                     score,
-                    row
+                    row,
+                    row_pest_match,
+                    row_crop_match,
                 )
             )
+
+        # =====================================================
+        # FILTRE STRICT PEST+CROP
+        #
+        # NOTE (correctif pertinence) :
+        #
+        # Quand la question mentionne à la fois un ravageur et
+        # une culture (ex : "pucerons sur le piment"), Postgres
+        # ne peut pas exiger les deux (voir note plus haut). On
+        # filtre donc ici en Python : on ne garde que les lignes
+        # qui contiennent réellement les deux concepts, ce qui
+        # élimine les faux positifs comme les documents sur le
+        # poivre noir (Piper nigrum) qui ne contiennent que le
+        # mot "pepper" sans aucun rapport avec les pucerons.
+        #
+        # Si le filtre strict ne laisse aucun résultat (cas
+        # rare où la base ne contient vraiment rien sur les deux
+        # concepts à la fois), on retombe sur le classement
+        # normal plutôt que de renvoyer une liste vide.
+        # =====================================================
+
+        if has_pest and has_crop:
+
+            strict_matches = [
+                item
+                for item in reranked
+                if item[2] and item[3]
+            ]
+
+            if strict_matches:
+
+                reranked = strict_matches
 
         # =====================================================
         # TRI
@@ -382,7 +414,7 @@ class KeywordRetriever:
 
         results: list[SearchResult] = []
 
-        for score, row in reranked:
+        for score, row, _, _ in reranked:
 
             content = str(
                 row.get("content") or ""
