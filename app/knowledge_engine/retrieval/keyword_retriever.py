@@ -124,6 +124,23 @@ class KeywordRetriever:
             "cette",
             "plant",
             "plants",
+            # =================================================
+            # AJOUT (correctif généralisation) :
+            #
+            # "mais" est ambigu : c'est à la fois la conjonction
+            # française "mais" ET, une fois l'accent retiré, le
+            # mot "maïs" (culture) ET un mot portugais très
+            # courant signifiant "plus". Comme une partie de la
+            # base contient des documents en portugais, ce mot
+            # faisait remonter beaucoup de bruit hors sujet.
+            # On l'exclut des mots-clés de recherche ; le filtre
+            # de chevauchement générique ci-dessous protège
+            # quand même les vraies questions sur le maïs, tant
+            # qu'un autre mot-clé pertinent (ex: "epis",
+            # "chenilles") est présent.
+            #
+            "mais",
+            "puis",
         }
 
         search_terms = [
@@ -138,7 +155,14 @@ class KeywordRetriever:
             return []
 
         # =====================================================
-        # TERMES AGRICOLES
+        # TERMES AGRICOLES (piment / pucerons)
+        #
+        # NOTE : ces listes restent utilisées pour le bonus de
+        # reranking existant, spécifique au cas piment/pucerons
+        # déjà validé. Le nouveau filtre générique plus bas
+        # complète cette protection pour toutes les autres
+        # cultures et ravageurs, sans avoir besoin de connaître
+        # leurs noms à l'avance.
         # =====================================================
 
         pest_terms = {
@@ -197,11 +221,10 @@ class KeywordRetriever:
         # requête agit donc en pratique comme un simple OR
         # géant côté PostgreSQL. C'est volontaire : on élargit
         # large ici, puis on FILTRE strictement en Python
-        # ci-dessous (voir section "FILTRE STRICT PEST+CROP")
-        # pour ne garder que les documents qui contiennent
-        # réellement les deux concepts, sans dépendre d'une
-        # syntaxe booléenne que websearch_to_tsquery n'applique
-        # pas.
+        # ci-dessous pour ne garder que les documents qui
+        # contiennent réellement les concepts importants de la
+        # question, sans dépendre d'une syntaxe booléenne que
+        # websearch_to_tsquery n'applique pas.
         # =====================================================
 
         concept_query = []
@@ -274,7 +297,7 @@ class KeywordRetriever:
         rows = response.data or []
 
         # =====================================================
-        # RERANKING AGRICOLE
+        # RERANKING AGRICOLE (piment / pucerons)
         # =====================================================
 
         reranked = []
@@ -307,6 +330,10 @@ class KeywordRetriever:
                 + content
                 + " "
                 + keywords_text
+                + " "
+                + crop
+                + " "
+                + culture
             )
 
             score = float(
@@ -319,15 +346,7 @@ class KeywordRetriever:
             )
 
             row_crop_match = any(
-                term in (
-                    title
-                    + " "
-                    + crop
-                    + " "
-                    + culture
-                    + " "
-                    + combined_text
-                )
+                term in combined_text
                 for term in crop_terms
             )
 
@@ -358,33 +377,41 @@ class KeywordRetriever:
                 if row_pest_match and row_crop_match:
                     score += 3.0
 
+            # -------------------------------------------------
+            # CHEVAUCHEMENT GÉNÉRIQUE AVEC LES MOTS-CLÉS
+            # DE LA QUESTION
+            #
+            # NOTE (correctif généralisation) :
+            #
+            # Compte combien des mots-clés extraits de la
+            # question de l'agriculteur (search_terms) sont
+            # réellement présents dans ce document, quel que
+            # soit le sujet (culture, ravageur, maladie...).
+            # Ce compte sert au filtre strict générique
+            # ci-dessous, applicable à TOUTE culture ou
+            # ravageur, sans liste figée à maintenir.
+            # -------------------------------------------------
+
+            keyword_overlap_count = sum(
+                1
+                for term in normalized_terms
+                if term in combined_text
+            )
+
+            score += keyword_overlap_count * 0.5
+
             reranked.append(
                 (
                     score,
                     row,
                     row_pest_match,
                     row_crop_match,
+                    keyword_overlap_count,
                 )
             )
 
         # =====================================================
-        # FILTRE STRICT PEST+CROP
-        #
-        # NOTE (correctif pertinence) :
-        #
-        # Quand la question mentionne à la fois un ravageur et
-        # une culture (ex : "pucerons sur le piment"), Postgres
-        # ne peut pas exiger les deux (voir note plus haut). On
-        # filtre donc ici en Python : on ne garde que les lignes
-        # qui contiennent réellement les deux concepts, ce qui
-        # élimine les faux positifs comme les documents sur le
-        # poivre noir (Piper nigrum) qui ne contiennent que le
-        # mot "pepper" sans aucun rapport avec les pucerons.
-        #
-        # Si le filtre strict ne laisse aucun résultat (cas
-        # rare où la base ne contient vraiment rien sur les deux
-        # concepts à la fois), on retombe sur le classement
-        # normal plutôt que de renvoyer une liste vide.
+        # FILTRE STRICT PEST+CROP (piment / pucerons)
         # =====================================================
 
         if has_pest and has_crop:
@@ -398,6 +425,39 @@ class KeywordRetriever:
             if strict_matches:
 
                 reranked = strict_matches
+
+        # =====================================================
+        # FILTRE STRICT GÉNÉRIQUE (toute culture / ravageur)
+        #
+        # NOTE (correctif généralisation) :
+        #
+        # Quand la question contient plusieurs mots-clés
+        # significatifs (au moins 2, après retrait des mots
+        # vides), on exige qu'un document en contienne au
+        # moins 2 pour être conservé. Ça élimine les faux
+        # positifs qui ne partagent qu'un seul mot ambigu
+        # avec la question (par exemple des documents en
+        # portugais qui contiennent seulement "mais" = "plus",
+        # sans aucun autre mot lié à la question), sans avoir
+        # besoin de connaître à l'avance le nom de la culture
+        # ou du ravageur concerné.
+        #
+        # Comme pour le filtre pest+crop, si ce filtre ne
+        # laisse aucun résultat, on retombe sur le classement
+        # normal plutôt que de renvoyer une liste vide.
+        # =====================================================
+
+        if len(normalized_terms) >= 2:
+
+            generic_matches = [
+                item
+                for item in reranked
+                if item[4] >= 2
+            ]
+
+            if generic_matches:
+
+                reranked = generic_matches
 
         # =====================================================
         # TRI
@@ -414,7 +474,7 @@ class KeywordRetriever:
 
         results: list[SearchResult] = []
 
-        for score, row, _, _ in reranked:
+        for score, row, _, _, _ in reranked:
 
             content = str(
                 row.get("content") or ""
