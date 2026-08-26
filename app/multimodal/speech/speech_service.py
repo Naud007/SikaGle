@@ -17,8 +17,10 @@ class SpeechService:
     def transcribe(
         self,
         audio_path: str | Path,
+        mime_type: str = "audio/ogg",
     ) -> Transcription:
 
         return self.engine.transcribe(
-            audio_path
+            audio_path,
+            mime_type=mime_type,
         )

@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from google import genai
+from google.genai import types
 
 from app.multimodal.models.transcription import (
     Transcription,
@@ -18,6 +19,7 @@ class SpeechToText:
     def transcribe(
         self,
         audio_path: str | Path,
+        mime_type: str = "audio/ogg",
     ) -> Transcription:
 
         audio_path = Path(audio_path)
@@ -28,8 +30,23 @@ class SpeechToText:
                 f"Fichier introuvable : {audio_path}"
             )
 
+        # =====================================================
+        # CORRECTIF : préciser explicitement le mime_type
+        #
+        # NOTE :
+        #
+        # Sans cela, la librairie google-genai essaie de
+        # deviner le type du fichier uniquement à partir de
+        # son extension, et échoue pour les fichiers audio
+        # WhatsApp (.ogg), provoquant une erreur
+        # "Unknown mime type" à chaque message vocal.
+        # =====================================================
+
         uploaded_file = self.client.files.upload(
-            file=str(audio_path)
+            file=str(audio_path),
+            config=types.UploadFileConfig(
+                mime_type=mime_type
+            ),
         )
 
         response = self.client.models.generate_content(
