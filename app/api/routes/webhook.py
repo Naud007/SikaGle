@@ -1,3 +1,4 @@
+import asyncio
 import os
 import tempfile
 from datetime import date, datetime
@@ -558,6 +559,21 @@ async def receive_webhook(
 
                 # =================================================
                 # ASSISTANT AGRICOLE
+                #
+                # NOTE (correctif fiabilité) :
+                #
+                # assistant.process() effectue des appels réseau
+                # bloquants (Jina, Supabase, Gemini) qui peuvent
+                # prendre plusieurs dizaines de secondes. Comme
+                # cette route est "async def", un appel bloquant
+                # direct gèlerait tout l'event loop FastAPI,
+                # empêchant même la route /health de répondre à
+                # temps — ce qui amène Render à croire le service
+                # mort et à le redémarrer en pleine génération de
+                # réponse. On délègue donc ce traitement à un fil
+                # d'exécution séparé via asyncio.to_thread, pour
+                # que /health continue de répondre pendant que
+                # Gemini travaille. Aucune logique métier ne change.
                 # =================================================
 
                 try:
@@ -567,7 +583,8 @@ async def receive_webhook(
                         repr(content),
                     )
 
-                    answer = assistant.process(
+                    answer = await asyncio.to_thread(
+                        assistant.process,
                         user_id=str(
                             user_id
                         ),
