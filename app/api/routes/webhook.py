@@ -25,6 +25,7 @@ VERIFY_TOKEN = os.getenv(
     "WHATSAPP_VERIFY_TOKEN",
     "sikagle_webhook_2026",
 )
+
 print(
     "🔐 WHATSAPP_VERIFY_TOKEN: PRESENT=",
     bool(VERIFY_TOKEN),
@@ -152,6 +153,7 @@ async def receive_webhook(
                 msg_id = msg.get(
                     "id"
                 )
+
                 # =================================================
                 # PROTECTION CONTRE LES DOUBLONS WHATSAPP
                 # =================================================
@@ -178,6 +180,7 @@ async def receive_webhook(
                         )
 
                         continue
+
                 msg_type = msg.get(
                     "type",
                     "text",
@@ -558,6 +561,7 @@ async def receive_webhook(
                 # =================================================
 
                 try:
+
                     print(
                         "🧪 DEBUG WHATSAPP → ASSISTANT :",
                         repr(content),

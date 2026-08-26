@@ -1,3 +1,5 @@
+import time
+
 from app.knowledge_engine.rag.response_generator import (
     ResponseGenerator,
 )
@@ -71,11 +73,29 @@ class RAGService:
             for result in results
         ]
 
+        total_context_chars = sum(
+            len(c) for c in contexts
+        )
+
+        print(
+            "⏱️ [TIMING] Nombre de passages envoyés à Gemini : "
+            f"{len(contexts)} "
+            "| Taille totale du contexte : "
+            f"{total_context_chars} caractères"
+        )
+
+        start_generation = time.time()
+
         answer = self.response_generator.generate(
             question=question,
             contexts=contexts,
             language=language,
             input_type=input_type,
+        )
+
+        print(
+            "⏱️ [TIMING] Génération Gemini : "
+            f"{time.time() - start_generation:.2f}s"
         )
 
         sources = self.source_formatter.format(

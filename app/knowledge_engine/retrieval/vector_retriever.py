@@ -1,3 +1,5 @@
+import time
+
 from app.knowledge_engine.embeddings.embedding_service import (
     GeminiEmbeddingService,
 )
@@ -39,15 +41,29 @@ class VectorRetriever:
         de la question.
         """
 
+        start_embedding = time.time()
+
         embedding = (
             self.embedding_service.generate_query_embedding(
                 query.question
             )
         )
 
+        print(
+            "⏱️ [TIMING] Embedding Jina (recherche vectorielle) : "
+            f"{time.time() - start_embedding:.2f}s"
+        )
+
+        start_supabase = time.time()
+
         results = self.repository.search(
             embedding=embedding,
             top_k=query.top_k,
+        )
+
+        print(
+            "⏱️ [TIMING] Requête Supabase vectorielle : "
+            f"{time.time() - start_supabase:.2f}s"
         )
 
         documents = results.get(

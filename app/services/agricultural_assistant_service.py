@@ -128,10 +128,22 @@ class AgriculturalAssistantService:
         # Il ne faut donc PAS appeler Gemini une deuxième fois
         # ici.
         #
+        # NOTE (correctif performance) :
+        #
+        # top_k a été réduit de 20 à 8 : un prompt Gemini
+        # construit à partir de 20 passages complets atteignait
+        # ~60 000 caractères, ce qui provoquait des temps de
+        # génération de 10 à 70 secondes et un risque accru
+        # d'erreurs 429 (quota Gemini). Réduire à 8 passages
+        # garde largement assez de contexte pertinent (les
+        # résultats sont déjà classés par pertinence par
+        # SearchEngine.merge()) tout en réduisant fortement
+        # la taille du prompt.
+        #
 
         rag_result = self.knowledge.ask(
             question=message,
-            top_k=20,
+            top_k=8,
             language=language,
         )
 

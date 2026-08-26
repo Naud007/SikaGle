@@ -33,6 +33,16 @@ class JinaEmbeddingService:
     INITIAL_DELAY_SECONDS = 2.0
 
     # Délai minimum entre deux appels Jina.
+    #
+    # NOTE (correctif performance) :
+    #
+    # Ce délai n'est utile que lors de l'indexation de documents
+    # en lot (retrieval.passage), pour respecter le quota Jina
+    # sur plusieurs appels consécutifs. Il est désormais appliqué
+    # uniquement pour ce cas, et plus pour les requêtes agricoles
+    # ponctuelles (retrieval.query), qui n'ont pas besoin de cette
+    # protection puisqu'il n'y a qu'un seul appel à la fois.
+    #
     REQUEST_DELAY_SECONDS = 2.0
 
     def __init__(
@@ -216,11 +226,20 @@ class JinaEmbeddingService:
 
                 # =========================================
                 # PETITE PAUSE ENTRE LES REQUÊTES
+                #
+                # NOTE (correctif performance) :
+                #
+                # Uniquement nécessaire pour les appels en
+                # lot lors de l'indexation (retrieval.passage).
+                # Une requête agricole ponctuelle
+                # (retrieval.query) n'a pas besoin d'attendre.
                 # =========================================
 
-                time.sleep(
-                    self.REQUEST_DELAY_SECONDS
-                )
+                if task == "retrieval.passage":
+
+                    time.sleep(
+                        self.REQUEST_DELAY_SECONDS
+                    )
 
                 return vectors
 

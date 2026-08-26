@@ -1,74 +1,76 @@
-from app.knowledge_engine.repositories import (
-    KnowledgeRepository,
-)
-from app.knowledge_engine.retrieval.search_query import (
-    SearchQuery,
-)
-from app.knowledge_engine.retrieval.search_result import (
-    SearchResult,
-)
+from app.knowledge_engine.retrieval.search_query import SearchQuery
+from app.knowledge_engine.retrieval.search_result import SearchResult
 
 
 class KeywordRetriever:
     """
-    Recherche lexicale dans les documents stockés
-    dans Supabase.
+    Recherche lexicale PostgreSQL pour SikaGlé.
 
-    La recherche utilise :
-        - les mots de la question
-        - quelques équivalences agricoles multilingues
-        - le titre
-        - le contenu
-        - les mots-clés
+    La recherche est exécutée côté Supabase afin d'éviter
+    de récupérer toute la table knowledge_embeddings dans Python.
     """
 
-    SYNONYMS = {
-        "piment": [
-            "piment",
-            "piments",
-            "pepper",
-            "peppers",
-            "chilli",
-            "chili",
-            "capsicum",
-        ],
-        "puceron": [
-            "puceron",
-            "pucerons",
-            "aphid",
-            "aphids",
-            "aphis",
-            "aphididae",
-            "pulgão",
-            "pulgões",
-            "pulgon",
-            "pulgones",
-        ],
-        "ravageur": [
-            "ravageur",
-            "ravageurs",
-            "pest",
-            "pests",
-        ],
-        "insecte": [
-            "insecte",
-            "insectes",
-            "insect",
-            "insects",
-        ],
-    }
+    def __init__(self, repository=None):
+        if repository is None:
+            from app.knowledge_engine.repositories import KnowledgeRepository
 
-    def __init__(self):
-        self.repository = KnowledgeRepository()
+            repository = KnowledgeRepository()
+
+        self.repository = repository
+
+    # =========================================================
+    # EXTRACTION DES MOTS-CLÉS
+    # =========================================================
+
+    def _extract_keywords(self, question: str) -> list[str]:
+
+        if not question:
+            return []
+
+        import re
+
+        text = question.lower()
+
+        # Suppression des accents simples
+        replacements = {
+            "à": "a",
+            "â": "a",
+            "ä": "a",
+            "é": "e",
+            "è": "e",
+            "ê": "e",
+            "ë": "e",
+            "î": "i",
+            "ï": "i",
+            "ô": "o",
+            "ö": "o",
+            "ù": "u",
+            "û": "u",
+            "ü": "u",
+            "ÿ": "y",
+            "ç": "c",
+        }
+
+        for old, new in replacements.items():
+            text = text.replace(old, new)
+
+        words = re.findall(
+            r"[a-zA-ZÀ-ÿ]+",
+            text
+        )
+
+        return list(
+            dict.fromkeys(words)
+        )
+
+    # =========================================================
+    # RECHERCHE
+    # =========================================================
 
     def search(
         self,
         query: SearchQuery,
     ) -> list[SearchResult]:
-        """
-        Recherche les documents contenant les mots
-        ou équivalents importants de la question.
-        """
 
         keywords = self._extract_keywords(
             query.question
@@ -77,134 +79,337 @@ class KeywordRetriever:
         if not keywords:
             return []
 
-        # -------------------------------------------------
-        # Récupération paginée de tous les documents
-        # -------------------------------------------------
+        # =====================================================
+        # MOTS VIDES
+        # =====================================================
 
-        rows = []
+        stopwords = {
+            "quel",
+            "quelle",
+            "quels",
+            "quelles",
+            "est",
+            "sont",
+            "avec",
+            "pour",
+            "comment",
+            "faire",
+            "avoir",
+            "jai",
+            "j",
+            "des",
+            "de",
+            "du",
+            "sur",
+            "mes",
+            "mon",
+            "ma",
+            "me",
+            "moi",
+            "que",
+            "dois",
+            "doit",
+            "doivent",
+            "les",
+            "le",
+            "la",
+            "un",
+            "une",
+            "et",
+            "ou",
+            "dans",
+            "ce",
+            "ces",
+            "cet",
+            "cette",
+            "plant",
+            "plants",
+        }
 
-        page_size = 1000
-        offset = 0
+        search_terms = [
+            keyword.strip()
+            for keyword in keywords
+            if keyword
+            and len(keyword.strip()) >= 4
+            and keyword.strip() not in stopwords
+        ]
 
-        while True:
-            response = (
-                self.repository.vectorstore.client
-                .table(
-                    self.repository.vectorstore.TABLE_NAME
-                )
-                .select(
-                    "document_id, chunk_index, chunk_count, "
-                    "title, source, identifier, url, author, "
-                    "published_at, language, document_type, "
-                    "publisher, crop, culture, keywords, "
-                    "country, zone_geographique, content"
-                )
-                .range(
-                    offset,
-                    offset + page_size - 1,
-                )
-                .execute()
+        if not search_terms:
+            return []
+
+        # =====================================================
+        # TERMES AGRICOLES
+        # =====================================================
+
+        pest_terms = {
+            "puceron",
+            "pucerons",
+            "aphid",
+            "aphids",
+            "aphis",
+            "aphididae",
+            "ravageur",
+            "ravageurs",
+            "insecte",
+            "insectes",
+        }
+
+        crop_terms = {
+            "piment",
+            "piments",
+            "pepper",
+            "peppers",
+            "chilli",
+            "chili",
+            "capsicum",
+            "poivron",
+            "poivrons",
+        }
+
+        # =====================================================
+        # NORMALISATION
+        # =====================================================
+
+        normalized_terms = {
+            term.lower().strip()
+            for term in search_terms
+        }
+
+        has_pest = bool(
+            normalized_terms.intersection(
+                pest_terms
+            )
+        )
+
+        has_crop = bool(
+            normalized_terms.intersection(
+                crop_terms
+            )
+        )
+
+        # =====================================================
+        # REQUÊTE CIBLÉE
+        # =====================================================
+
+        concept_query = []
+
+        if has_pest:
+
+            concept_query.append(
+                "("
+                "puceron OR pucerons OR "
+                "aphid OR aphids OR aphis OR aphididae"
+                ")"
             )
 
-            batch = response.data or []
+        if has_crop:
 
-            if not batch:
-                break
+            concept_query.append(
+                "("
+                "piment OR piments OR "
+                "pepper OR peppers OR "
+                "chilli OR chili OR capsicum OR "
+                "poivron OR poivrons"
+                ")"
+            )
 
-            rows.extend(batch)
+        if len(concept_query) == 2:
 
-            if len(batch) < page_size:
-                break
+            search_query = (
+                f"{concept_query[0]} AND "
+                f"{concept_query[1]}"
+            )
 
-            offset += page_size
+        elif len(concept_query) == 1:
 
-        # -------------------------------------------------
-        # Calcul des résultats
-        # -------------------------------------------------
+            search_query = concept_query[0]
+
+        else:
+
+            search_query = " OR ".join(
+                dict.fromkeys(
+                    search_terms
+                )
+            )
+
+        print(
+            "[KEYWORD] Requête PostgreSQL :",
+            search_query
+        )
+
+        # =====================================================
+        # SUPABASE
+        # =====================================================
+
+        response = (
+            self.repository
+            .vectorstore
+            .client
+            .rpc(
+                "search_knowledge_keywords",
+                {
+                    "search_query": search_query,
+                    "result_limit": max(
+                        query.top_k,
+                        20
+                    ),
+                },
+            )
+            .execute()
+        )
+
+        rows = response.data or []
+
+        # =====================================================
+        # RERANKING AGRICOLE
+        # =====================================================
+
+        reranked = []
+
+        for row in rows:
+
+            title = str(
+                row.get("title") or ""
+            ).lower()
+
+            content = str(
+                row.get("content") or ""
+            ).lower()
+
+            keywords_text = str(
+                row.get("keywords") or ""
+            ).lower()
+
+            crop = str(
+                row.get("crop") or ""
+            ).lower()
+
+            culture = str(
+                row.get("culture") or ""
+            ).lower()
+
+            combined_text = (
+                title
+                + " "
+                + content
+                + " "
+                + keywords_text
+            )
+
+            score = float(
+                row.get("rank") or 0.0
+            )
+
+            # -------------------------------------------------
+            # PRIORITÉ RAVAGEUR
+            # -------------------------------------------------
+
+            if has_pest:
+
+                if any(
+                    term in combined_text
+                    for term in pest_terms
+                ):
+                    score += 2.0
+
+            # -------------------------------------------------
+            # PRIORITÉ CULTURE
+            # -------------------------------------------------
+
+            if has_crop:
+
+                crop_match = any(
+                    term in (
+                        title
+                        + " "
+                        + crop
+                        + " "
+                        + culture
+                    )
+                    for term in crop_terms
+                )
+
+                if crop_match:
+                    score += 4.0
+
+                # Recherche également dans le contenu
+                content_crop_match = any(
+                    term in combined_text
+                    for term in crop_terms
+                )
+
+                if content_crop_match:
+                    score += 1.0
+
+            # -------------------------------------------------
+            # BONUS SI RAVAGEUR + CULTURE
+            # -------------------------------------------------
+
+            if has_pest and has_crop:
+
+                pest_match = any(
+                    term in combined_text
+                    for term in pest_terms
+                )
+
+                crop_match = any(
+                    term in combined_text
+                    for term in crop_terms
+                )
+
+                if pest_match and crop_match:
+                    score += 3.0
+
+            reranked.append(
+                (
+                    score,
+                    row
+                )
+            )
+
+        # =====================================================
+        # TRI
+        # =====================================================
+
+        reranked.sort(
+            key=lambda item: item[0],
+            reverse=True
+        )
+
+        # =====================================================
+        # CONVERSION → SearchResult
+        # =====================================================
 
         results: list[SearchResult] = []
 
-        for row in rows:
+        for score, row in reranked:
 
             content = str(
                 row.get("content") or ""
             )
 
-            title = str(
-                row.get("title") or ""
-            )
-
-            keywords_metadata = str(
-                row.get("keywords") or ""
-            )
-
-            searchable_text = (
-                f"{title} "
-                f"{content} "
-                f"{keywords_metadata}"
-            )
-
-            score = self._keyword_score(
-                searchable_text,
-                keywords,
-                query.question,
-            )
-
-            if score <= 0:
-                continue
-
             metadata = {
-                "document": row.get(
-                    "document_id"
-                ),
-                "chunk_index": row.get(
-                    "chunk_index"
-                ),
-                "chunk_count": row.get(
-                    "chunk_count"
-                ),
-                "title": row.get(
-                    "title"
-                ),
-                "source": row.get(
-                    "source"
-                ),
-                "identifier": row.get(
-                    "identifier"
-                ),
-                "url": row.get(
-                    "url"
-                ),
-                "author": row.get(
-                    "author"
-                ),
-                "published_at": row.get(
-                    "published_at"
-                ),
-                "language": row.get(
-                    "language"
-                ),
-                "document_type": row.get(
-                    "document_type"
-                ),
-                "publisher": row.get(
-                    "publisher"
-                ),
-                "crop": row.get(
-                    "crop"
-                ),
-                "culture": row.get(
-                    "culture"
-                ),
-                "keywords": row.get(
-                    "keywords"
-                ),
-                "country": row.get(
-                    "country"
-                ),
+                "id": row.get("id"),
+                "document": row.get("document_id"),
+                "chunk_index": row.get("chunk_index"),
+                "chunk_count": row.get("chunk_count"),
+                "title": row.get("title"),
+                "source": row.get("source"),
+                "identifier": row.get("identifier"),
+                "url": row.get("url"),
+                "author": row.get("author"),
+                "published_at": row.get("published_at"),
+                "language": row.get("language"),
+                "document_type": row.get("document_type"),
+                "publisher": row.get("publisher"),
+                "crop": row.get("crop"),
+                "culture": row.get("culture"),
+                "keywords": row.get("keywords"),
+                "country": row.get("country"),
                 "zone_geographique": row.get(
                     "zone_geographique"
                 ),
+                "content": content,
             }
 
             metadata = {
@@ -217,183 +422,10 @@ class KeywordRetriever:
                 SearchResult(
                     document=content,
                     metadata=metadata,
-                    keyword_score=float(score),
-                    score=float(score),
+                    keyword_score=score,
+                    score=score,
                     source="keyword",
                 )
             )
 
-        results.sort(
-            key=lambda result: result.keyword_score,
-            reverse=True,
-        )
-
         return results[:query.top_k]
-
-    def _extract_keywords(
-        self,
-        question: str,
-    ) -> list[str]:
-        """
-        Extrait les mots importants de la question
-        et ajoute automatiquement les synonymes
-        correspondant aux concepts connus.
-        """
-
-        words = [
-            word.lower().strip(
-                ".,;:!?()[]{}'\""
-            )
-            for word in question.split()
-            if len(word) >= 3
-        ]
-
-        keywords = []
-
-        for word in words:
-
-            keywords.append(word)
-
-            # Forme singulière simple
-            if word.endswith("s"):
-                keywords.append(
-                    word[:-1]
-                )
-
-            # -------------------------------------------------
-            # Trouver le concept auquel appartient le mot
-            # -------------------------------------------------
-
-            matched_concept = None
-
-            for concept, aliases in self.SYNONYMS.items():
-
-                normalized_aliases = [
-                    alias.lower()
-                    for alias in aliases
-                ]
-
-                if (
-                    word == concept
-                    or word in normalized_aliases
-                    or (
-                        word.endswith("s")
-                        and word[:-1]
-                        in normalized_aliases
-                    )
-                ):
-                    matched_concept = concept
-                    break
-
-            # -------------------------------------------------
-            # Ajouter tous les synonymes du concept
-            # -------------------------------------------------
-
-            if matched_concept:
-
-                keywords.append(
-                    matched_concept
-                )
-
-                keywords.extend(
-                    self.SYNONYMS[
-                        matched_concept
-                    ]
-                )
-
-        return list(
-            dict.fromkeys(
-                keywords
-            )
-        )
-
-    def _keyword_score(
-        self,
-        text: str,
-        keywords: list[str],
-        question: str,
-    ) -> int:
-        """
-        Calcule un score lexical pondéré.
-
-        Les mots génériques sont ignorés.
-        Les correspondances utilisent des mots entiers
-        afin d'éviter les faux positifs par sous-chaînes.
-        """
-
-        import re
-
-        lower = text.lower()
-
-        stopwords = {
-            "quel",
-            "quelle",
-            "quels",
-            "quelles",
-            "est",
-            "sont",
-            "les",
-            "des",
-            "du",
-            "de",
-            "la",
-            "le",
-            "un",
-            "une",
-            "et",
-            "ou",
-            "sur",
-            "dans",
-            "avec",
-            "pour",
-            "comment",
-            "reconnaître",
-            "reconnaitre",
-            "faire",
-            "avoir",
-            "mon",
-            "ma",
-            "mes",
-            "son",
-            "sa",
-            "ses",
-        }
-
-        score = 0
-
-        for keyword in keywords:
-
-            keyword = keyword.lower().strip()
-
-            if not keyword:
-                continue
-
-            if keyword in stopwords:
-                continue
-
-            if len(keyword) < 4:
-                continue
-
-            if " " in keyword:
-
-                count = lower.count(
-                    keyword
-                )
-
-            else:
-
-                count = len(
-                    re.findall(
-                        rf"\b{re.escape(keyword)}\b",
-                        lower,
-                    )
-                )
-
-            if count > 0:
-
-                score += min(
-                    count,
-                    3,
-                )
-
-        return score

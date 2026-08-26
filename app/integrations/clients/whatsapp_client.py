@@ -44,7 +44,10 @@ class WhatsAppClient:
                 "WHATSAPP_TOKEN est manquante."
             )
 
-        # 1. Récupérer l'URL temporaire du média
+        # =========================================================
+        # 1. RÉCUPÉRER L'URL TEMPORAIRE DU MÉDIA
+        # =========================================================
+
         media_response = requests.get(
             f"{self.graph_url}/{media_id}",
             headers={
@@ -64,7 +67,36 @@ class WhatsAppClient:
                 "WhatsApp n'a retourné aucune URL média."
             )
 
-        # 2. Télécharger réellement le fichier
+        # =========================================================
+        # 2. RÉCUPÉRER LE MIME TYPE
+        # =========================================================
+
+        whatsapp_mime_type = media_data.get(
+            "mime_type",
+            mime_type,
+        )
+
+        # WhatsApp peut retourner :
+        # audio/ogg; codecs=opus
+        #
+        # Pour Gemini, on conserve uniquement :
+        # audio/ogg
+
+        if whatsapp_mime_type:
+            whatsapp_mime_type = (
+                whatsapp_mime_type
+                .split(";")[0]
+                .strip()
+                .lower()
+            )
+
+        if not whatsapp_mime_type:
+            whatsapp_mime_type = "audio/ogg"
+
+        # =========================================================
+        # 3. TÉLÉCHARGER RÉELLEMENT LE FICHIER
+        # =========================================================
+
         destination.parent.mkdir(
             parents=True,
             exist_ok=True,
@@ -84,15 +116,24 @@ class WhatsAppClient:
             file_response.content
         )
 
+        print(
+            "🎧 Média WhatsApp téléchargé :",
+            destination,
+        )
+
+        print(
+            "🎧 MIME type :",
+            whatsapp_mime_type,
+        )
+
+        # =========================================================
+        # 4. RETOURNER LE MÉDIA
+        # =========================================================
+
         return MediaFile(
             media_id=media_id,
             media_type=media_type,
             file_path=destination,
-            mime_type=(
-                media_data.get(
-                    "mime_type",
-                    mime_type,
-                )
-            ),
+            mime_type=whatsapp_mime_type,
             downloaded=True,
         )

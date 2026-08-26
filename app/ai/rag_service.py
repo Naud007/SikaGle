@@ -1,3 +1,6 @@
+from app.knowledge_engine.retrieval.keyword_retriever import KeywordRetriever
+from app.knowledge_engine.retrieval.search_query import SearchQuery
+
 import os
 
 from supabase import create_client, Client
@@ -23,13 +26,8 @@ class RAGService:
         # CONFIGURATION SUPABASE
         # =====================================================
 
-        supabase_url = os.getenv(
-            "SUPABASE_URL"
-        )
-
-        supabase_key = os.getenv(
-            "SUPABASE_KEY"
-        )
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
 
         if not supabase_url:
             raise ValueError(
@@ -71,6 +69,12 @@ class RAGService:
 
         self.gemini = GeminiClient()
 
+        # =====================================================
+        # RETRIEVER KEYWORD
+        # =====================================================
+
+        self.keyword_retriever = KeywordRetriever()
+
     # =========================================================
     # ENRICHIR LA REQUÊTE AGRICOLE
     # =========================================================
@@ -85,7 +89,7 @@ class RAGService:
         agricultural_terms = []
 
         # =====================================================
-        # CULTURE
+        # CULTURE : PIMENT
         # =====================================================
 
         if any(
@@ -101,6 +105,28 @@ class RAGService:
                 "Capsicum annuum",
                 "pepper",
                 "chilli"
+            ])
+
+        # =====================================================
+        # PUCERONS
+        # =====================================================
+
+        if any(
+            term in query_lower
+            for term in [
+                "puceron",
+                "pucerons",
+                "aphid",
+                "aphids",
+                "aphis"
+            ]
+        ):
+
+            agricultural_terms.extend([
+                "aphid",
+                "Aphis",
+                "Aphididae",
+                "puceron"
             ])
 
         # =====================================================
@@ -124,7 +150,7 @@ class RAGService:
             ])
 
         # =====================================================
-        # CAUSES POSSIBLES
+        # MALADIE / FEUILLES
         # =====================================================
 
         if any(
@@ -149,15 +175,21 @@ class RAGService:
             ])
 
         # =====================================================
-        # AUCUN ENRICHISSEMENT NÉCESSAIRE
+        # AUCUN ENRICHISSEMENT
         # =====================================================
 
         if not agricultural_terms:
             return query
 
         # =====================================================
-        # REQUÊTE FINALE
+        # SUPPRESSION DES DOUBLONS
         # =====================================================
+
+        agricultural_terms = list(
+            dict.fromkeys(
+                agricultural_terms
+            )
+        )
 
         enriched_query = (
             f"{query} "
@@ -175,7 +207,7 @@ class RAGService:
     # RECHERCHE VECTORIELLE
     # =========================================================
 
-    def search_documents(
+    def search_vector_documents(
         self,
         query: str,
         match_threshold: float = 0.20,
@@ -189,21 +221,17 @@ class RAGService:
 
         query = query.strip()
 
-        # =====================================================
-        # ENRICHISSEMENT DE LA REQUÊTE
-        # =====================================================
-
         search_query = self.enrich_query(
             query
         )
 
         print("=" * 60)
         print("[RAG] Question :", query)
-        print("[RAG] Recherche :", search_query)
+        print("[RAG] Recherche vectorielle :", search_query)
         print("=" * 60)
 
         # =====================================================
-        # 1. EMBEDDING DE LA QUESTION
+        # EMBEDDING
         # =====================================================
 
         print(
@@ -229,7 +257,7 @@ class RAGService:
         )
 
         # =====================================================
-        # 2. RECHERCHE VECTORIELLE SUPABASE
+        # RECHERCHE SUPABASE
         # =====================================================
 
         print(
@@ -252,7 +280,7 @@ class RAGService:
         documents = response.data or []
 
         print(
-            "[RAG] Documents trouvés :",
+            "[RAG] Documents vectoriels trouvés :",
             len(documents)
         )
 
@@ -262,13 +290,277 @@ class RAGService:
         ):
 
             print(
-                f"[RAG] Résultat {index} :",
+                f"[RAG] Vectoriel {index} :",
                 document.get("title")
             )
 
             print(
                 "[RAG] Similarité :",
                 document.get("similarity")
+            )
+
+        return documents
+
+    # =========================================================
+    # RECHERCHE KEYWORD
+    # =========================================================
+
+    def search_keyword_documents(
+        self,
+        query: str,
+        top_k: int = 10
+    ):
+
+        print("=" * 60)
+        print("[RAG] Recherche keyword :", query)
+        print("=" * 60)
+
+        try:
+
+            search_query = SearchQuery(
+                question=query,
+                top_k=top_k,
+                language="fr"
+            )
+
+            documents = self.keyword_retriever.search(
+                search_query
+            )
+
+            print(
+                "[RAG] Documents keyword trouvés :",
+                len(documents)
+            )
+
+            for index, document in enumerate(
+                documents,
+                start=1
+            ):
+
+                print(
+                    f"[RAG] Keyword {index} :",
+                    document.metadata.get("title")
+                )
+
+                print(
+                    "[RAG] Keyword score :",
+                    document.keyword_score
+                )
+
+            return documents
+
+        except Exception as e:
+
+            print(
+                "[RAG] Erreur recherche keyword :",
+                e
+            )
+
+            return []
+
+    # =========================================================
+    # CONVERSION DOCUMENT KEYWORD → DOCUMENT RAG
+    # =========================================================
+
+    def keyword_to_document(
+        self,
+        keyword_document
+    ):
+
+        metadata = (
+            keyword_document.metadata
+            or {}
+        )
+
+        return {
+            "id": metadata.get("id"),
+            "title": metadata.get("title"),
+            "source": metadata.get("source"),
+            "url": metadata.get("url"),
+            "content": (
+                metadata.get("content")
+                or getattr(
+                    keyword_document,
+                    "content",
+                    ""
+                )
+            ),
+            "similarity": None,
+            "keyword_score": getattr(
+                keyword_document,
+                "keyword_score",
+                0
+            )
+        }
+
+    # =========================================================
+    # FUSION VECTORIEL + KEYWORD
+    # =========================================================
+
+    def merge_documents(
+        self,
+        vector_documents,
+        keyword_documents,
+        match_count=5
+    ):
+
+        merged = []
+        seen_ids = set()
+
+        # =====================================================
+        # 1. DOCUMENTS KEYWORD PERTINENTS
+        # =====================================================
+
+        for document in keyword_documents:
+
+            converted = self.keyword_to_document(
+                document
+            )
+
+            document_id = converted.get("id")
+
+            if document_id is not None:
+
+                if document_id in seen_ids:
+                    continue
+
+                seen_ids.add(
+                    document_id
+                )
+
+            merged.append(
+                converted
+            )
+
+        # =====================================================
+        # 2. DOCUMENTS VECTORIELS
+        # =====================================================
+
+        for document in vector_documents:
+
+            document_id = document.get("id")
+
+            if document_id is not None:
+
+                if document_id in seen_ids:
+                    continue
+
+                seen_ids.add(
+                    document_id
+                )
+
+            merged.append(
+                document
+            )
+
+        # =====================================================
+        # LIMITATION
+        # =====================================================
+
+        return merged[:match_count]
+
+    # =========================================================
+    # RECHERCHE DOCUMENTAIRE COMPLÈTE
+    # =========================================================
+
+    def search_documents(
+        self,
+        query: str,
+        match_threshold: float = 0.20,
+        match_count: int = 5
+    ):
+
+        if not query or not query.strip():
+            raise ValueError(
+                "La question de recherche est vide."
+            )
+
+        query = query.strip()
+
+        # =====================================================
+        # RECHERCHE VECTORIELLE
+        # =====================================================
+
+        vector_documents = (
+            self.search_vector_documents(
+                query=query,
+                match_threshold=match_threshold,
+                match_count=match_count
+            )
+        )
+
+        # =====================================================
+        # DÉTECTION QUESTION RAVAGEUR
+        # =====================================================
+
+        query_lower = query.lower()
+
+        pest_question = any(
+            term in query_lower
+            for term in [
+                "puceron",
+                "pucerons",
+                "aphid",
+                "aphids",
+                "aphis",
+                "ravageur",
+                "insecte",
+                "insectes"
+            ]
+        )
+
+        # =====================================================
+        # RECHERCHE KEYWORD SI QUESTION SPÉCIFIQUE
+        # =====================================================
+
+        keyword_documents = []
+
+        if pest_question:
+
+            print(
+                "[RAG] Question ravageur détectée."
+            )
+
+            keyword_documents = (
+                self.search_keyword_documents(
+                    query=query,
+                    top_k=max(
+                        match_count,
+                        10
+                    )
+                )
+            )
+
+        # =====================================================
+        # SI KEYWORD DISPONIBLE :
+        # PRIORITÉ AUX DOCUMENTS KEYWORD
+        # =====================================================
+
+        if keyword_documents:
+
+            documents = self.merge_documents(
+                vector_documents=vector_documents,
+                keyword_documents=keyword_documents,
+                match_count=match_count
+            )
+
+        else:
+
+            documents = vector_documents[:match_count]
+
+        print(
+            "[RAG] Documents finaux :",
+            len(documents)
+        )
+
+        for index, document in enumerate(
+            documents,
+            start=1
+        ):
+
+            print(
+                f"[RAG] Document final {index} :",
+                document.get("title")
             )
 
         return documents
@@ -309,7 +601,6 @@ class RAGService:
                 or ""
             )
 
-            # Limiter la taille du document
             content = content[:6000]
 
             part = (
@@ -320,7 +611,9 @@ class RAGService:
                 f"{content}"
             )
 
-            context_parts.append(part)
+            context_parts.append(
+                part
+            )
 
         return (
             "\n\n"
@@ -335,7 +628,7 @@ class RAGService:
     def sanitize_answer(
         self,
         answer: str
-    ) -> str:
+    ):
 
         if not answer:
             return answer
@@ -370,16 +663,16 @@ class RAGService:
             ):
                 continue
 
-            cleaned_lines.append(line)
+            cleaned_lines.append(
+                line
+            )
 
-        cleaned_answer = "\n".join(
+        return "\n".join(
             cleaned_lines
         ).strip()
 
-        return cleaned_answer
-
     # =========================================================
-    # GÉNÉRER UNE RÉPONSE À PARTIR DES SOURCES
+    # GÉNÉRER LA RÉPONSE
     # =========================================================
 
     def generate_answer(
@@ -389,6 +682,7 @@ class RAGService:
     ):
 
         if not documents:
+
             return (
                 "Je n'ai pas trouvé suffisamment "
                 "d'informations fiables dans ma base "
@@ -403,8 +697,7 @@ class RAGService:
         prompt = f"""
 Tu es SikaGlé, un assistant agricole intelligent.
 
-Ta mission est d'aider les agriculteurs, producteurs,
-éleveurs et acteurs du monde rural avec des réponses
+Ta mission est d'aider les agriculteurs avec des réponses
 simples, pratiques, compréhensibles et fiables.
 
 QUESTION DE L'UTILISATEUR :
@@ -417,49 +710,33 @@ INFORMATIONS DOCUMENTAIRES DISPONIBLES :
 {context}
 
 
-INSTRUCTIONS IMPORTANTES :
+RÈGLES IMPORTANTES :
 
-1. Réponds principalement à partir des informations
-   présentes dans les documents fournis.
+1. Réponds principalement à partir des documents fournis.
 
-2. Ne prétends jamais qu'une information provient
-   des documents si elle n'y apparaît pas.
+2. Si les documents ne permettent pas de répondre,
+   dis-le clairement.
 
-3. Si les documents ne permettent pas de répondre
-   complètement, dis-le simplement.
+3. Ne présente jamais une information absente des documents
+   comme venant des documents.
 
-4. Ne transforme pas automatiquement une étude réalisée
-   dans un autre pays en recommandation spécifique
-   pour le Bénin.
+4. Ne transforme pas une étude étrangère en recommandation
+   spécifique au Bénin.
 
-5. Si une étude concerne une région ou un pays précis,
-   indique-le seulement si c'est important pour la réponse.
+5. Si les documents sont hors sujet ou insuffisants,
+   reconnais-le.
 
-6. Parle comme un conseiller agricole qui aide
-   directement un agriculteur.
+6. Réponds en français simple et naturel.
 
-7. Utilise un français simple, naturel et humain.
+7. Réponds directement à la question.
 
-8. Réponds directement à la question.
-   Ne commence pas par une longue introduction.
+8. Fais une réponse courte et pratique.
 
-9. Fais des réponses COURTES et PRATIQUES.
+9. Ne recopie pas les documents.
 
-10. Évite le style scolaire, universitaire ou académique.
+10. Évite le jargon scientifique inutile.
 
-11. N'utilise pas de jargon scientifique inutile.
-    Si un terme technique est nécessaire, explique-le
-    avec des mots simples.
-
-12. Ne répète pas inutilement la question de l'utilisateur.
-
-13. Ne recopie jamais les documents.
-    Résume uniquement ce qui est utile.
-
-14. Ne donne pas de longues explications si une réponse
-    courte suffit.
-
-15. SÉCURITÉ PHYTOSANITAIRE :
+11. SÉCURITÉ PHYTOSANITAIRE :
 
     Ne recommande jamais de pesticide, insecticide,
     herbicide, fongicide ou autre produit phytosanitaire
@@ -468,41 +745,33 @@ INSTRUCTIONS IMPORTANTES :
     Ne donne jamais de dosage, concentration,
     fréquence d'application ou quantité précise.
 
-    Même si un document fourni contient un pesticide
-    ou une dose précise, ne reproduis pas cette information.
+    Si un document contient un traitement chimique,
+    ignore cette partie.
 
-    Si les documents contiennent des traitements chimiques,
-    ignore ces traitements dans ta réponse.
+12. PRIORITÉ AUX MÉTHODES À FAIBLE RISQUE :
 
-16. PRIORITÉ AUX MÉTHODES À FAIBLE RISQUE :
-
-    Lorsqu'elles sont disponibles dans les documents,
-    privilégie dans cet ordre :
-
-    - prévention et surveillance ;
+    - surveillance ;
+    - prévention ;
     - méthodes culturales ;
     - méthodes mécaniques ;
-    - prédateurs naturels et lutte biologique ;
-    - extraits végétaux ou solutions biologiques.
+    - lutte biologique ;
+    - solutions végétales ou biologiques,
+      uniquement lorsqu'elles sont réellement
+      soutenues par les documents.
 
-17. Si une recommandation dépend du type de sol,
-    de la culture, de la région ou d'une autre information
-    manquante, pose une question courte pour obtenir
-    cette information.
+13. Ne présente pas une méthode comme provenant
+    des documents si elle n'y apparaît pas.
 
-18. En cas de conflit entre une information documentaire
-    et ces règles de sécurité, ces règles de sécurité
-    sont prioritaires.
+14. Si une information importante manque,
+    pose une question courte.
 
-19. La réponse doit être facile à lire sur WhatsApp.
+15. La réponse doit être adaptée à WhatsApp.
 
-20. Utilise au maximum quelques points lorsque c'est utile.
+16. Utilise quelques points seulement si nécessaire.
 
-21. Ne mets pas de bibliographie ou de longue liste
-    de sources dans le corps de la réponse.
+17. Ne mets pas de bibliographie dans la réponse.
 
-22. Ton objectif est d'être utile immédiatement,
-    pas de donner un cours.
+18. Ton objectif est d'être immédiatement utile.
 
 Réponds maintenant à la question.
 """
@@ -515,19 +784,12 @@ Réponds maintenant à la question.
             prompt
         )
 
-        # =====================================================
-        # FILTRE FINAL DE SÉCURITÉ
-        # =====================================================
-
-        answer = self.sanitize_answer(
+        return self.sanitize_answer(
             answer
         )
 
-        return answer
-
     # =========================================================
-    # QUESTION COMPLÈTE :
-    # RECHERCHE + GÉNÉRATION
+    # QUESTION COMPLÈTE
     # =========================================================
 
     def answer(
@@ -537,19 +799,11 @@ Réponds maintenant à la question.
         match_count: int = 5
     ):
 
-        # =====================================================
-        # 1. RECHERCHE DOCUMENTAIRE
-        # =====================================================
-
         documents = self.search_documents(
             query=query,
             match_threshold=match_threshold,
             match_count=match_count
         )
-
-        # =====================================================
-        # 2. GÉNÉRATION DE LA RÉPONSE
-        # =====================================================
 
         answer = self.generate_answer(
             query=query,
@@ -557,7 +811,7 @@ Réponds maintenant à la question.
         )
 
         # =====================================================
-        # 3. SOURCES UTILISÉES
+        # SOURCES
         # =====================================================
 
         sources = []
@@ -589,10 +843,6 @@ Réponds maintenant à la question.
                     }
                 )
 
-        # =====================================================
-        # 4. RÉSULTAT
-        # =====================================================
-
         return {
             "status": "success",
             "query": query,
@@ -603,7 +853,7 @@ Réponds maintenant à la question.
 
 
 # =========================================================
-# TEST RAG COMPLET
+# TEST RAG
 # =========================================================
 
 def test_rag():
