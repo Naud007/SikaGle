@@ -84,6 +84,30 @@ class RAGService:
             f"{total_context_chars} caractères"
         )
 
+        # =====================================================
+        # DEBUG : TITRES ET SOURCE DES PASSAGES ENVOYÉS
+        #
+        # NOTE (diagnostic) :
+        #
+        # Ajouté pour comprendre pourquoi Gemini répond parfois
+        # "information non disponible" alors que du contexte
+        # est bien envoyé. On affiche ici, pour chaque passage,
+        # son titre, sa source de récupération (vector/keyword)
+        # et les 100 premiers caractères de son contenu.
+        # =====================================================
+
+        for index, (result, metadata) in enumerate(
+            zip(results, metadatas),
+            start=1,
+        ):
+
+            print(
+                f"🔍 [DEBUG] Passage {index} | "
+                f"source={getattr(result, 'source', '?')} | "
+                f"titre={metadata.get('title', '?')} | "
+                f"extrait={result.document[:100]!r}"
+            )
+
         start_generation = time.time()
 
         answer = self.response_generator.generate(
