@@ -1,5 +1,6 @@
 import base64
 import os
+import re
 import subprocess
 import tempfile
 import wave
@@ -35,9 +36,11 @@ class TextToSpeech:
 
     MODEL = "gemini-3.1-flash-tts-preview"
 
-    # Paramètres audio de sortie de Gemini TTS
+    # Paramètres audio de repli, utilisés uniquement si le
+    # mime_type réel de la réponse ne précise pas le taux
+    # d'échantillonnage (voir _parse_sample_rate ci-dessous).
     CHANNELS = 1
-    SAMPLE_RATE = 24000
+    DEFAULT_SAMPLE_RATE = 24000
     SAMPLE_WIDTH = 2  # 16 bits
 
     def __init__(self):
@@ -78,23 +81,12 @@ class TextToSpeech:
         )
 
         # =====================================================
-        # CORRECTIF (bruit statique, tentative n°2) :
-        #
-        # On ne suppose plus que le premier élément (parts[0])
-        # est forcément l'audio. Certains modèles Gemini récents
-        # renvoient plusieurs "parts" dans une même réponse,
-        # dont une "thought_signature" (signal de raisonnement
-        # interne) qui peut précéder la vraie donnée audio. Si
-        # on prend parts[0] à l'aveugle et que ce n'est pas
-        # l'audio, on écrit des données qui ne sont pas de la
-        # parole, produisant exactement ce genre de bruit.
-        #
-        # On cherche donc explicitement, parmi toutes les
-        # parts de la réponse, celle dont le mime_type
-        # commence par "audio/".
+        # RECHERCHE DE LA PARTIE AUDIO (pas parts[0] à l'aveugle)
         # =====================================================
 
         pcm_data = None
+
+        part_mime_type = ""
 
         parts = (
             response
@@ -114,7 +106,7 @@ class TextToSpeech:
             if inline_data is None:
                 continue
 
-            part_mime_type = (
+            candidate_mime_type = (
                 getattr(
                     inline_data,
                     "mime_type",
@@ -123,12 +115,16 @@ class TextToSpeech:
                 or ""
             )
 
-            if part_mime_type.startswith(
+            if candidate_mime_type.startswith(
                 "audio/"
             ):
 
                 pcm_data = (
                     inline_data.data
+                )
+
+                part_mime_type = (
+                    candidate_mime_type
                 )
 
                 break
@@ -141,11 +137,7 @@ class TextToSpeech:
             )
 
         # =====================================================
-        # CORRECTIF (bruit statique, tentative n°1) :
-        #
-        # Selon la version du SDK, les données peuvent être
-        # renvoyées soit comme des octets bruts (bytes) déjà
-        # décodés, soit comme une chaîne encodée en base64.
+        # DÉCODAGE BASE64 SI NÉCESSAIRE
         # =====================================================
 
         if isinstance(
@@ -156,6 +148,25 @@ class TextToSpeech:
             pcm_data = base64.b64decode(
                 pcm_data
             )
+
+        # =====================================================
+        # CORRECTIF (bruit statique, tentative n°3) :
+        #
+        # D'après la documentation officielle Google, le
+        # mime_type réel de la réponse est de la forme
+        # "audio/L16;codec=pcm;rate=24000" — le taux
+        # d'échantillonnage y est encodé explicitement et
+        # n'est pas garanti d'être toujours 24000. Écrire le
+        # WAV avec un taux différent de celui réellement utilisé
+        # par les données produit un son déformé/statique, même
+        # si les données elles-mêmes sont correctes. On extrait
+        # donc ce taux directement du mime_type plutôt que de le
+        # supposer fixe.
+        # =====================================================
+
+        sample_rate = self._parse_sample_rate(
+            part_mime_type
+        )
 
         # =====================================================
         # ÉCRITURE DU FICHIER WAV
@@ -183,7 +194,7 @@ class TextToSpeech:
             )
 
             wf.setframerate(
-                self.SAMPLE_RATE
+                sample_rate
             )
 
             wf.writeframes(
@@ -212,6 +223,32 @@ class TextToSpeech:
             language=language,
             voice=voice,
             speed=1.0,
+        )
+
+    # =========================================================
+    # EXTRACTION DU TAUX D'ÉCHANTILLONNAGE DEPUIS LE MIME TYPE
+    #
+    # Exemple attendu : "audio/L16;codec=pcm;rate=24000"
+    # =========================================================
+
+    def _parse_sample_rate(
+        self,
+        mime_type: str,
+    ) -> int:
+
+        match = re.search(
+            r"rate=(\d+)",
+            mime_type or "",
+        )
+
+        if match:
+
+            return int(
+                match.group(1)
+            )
+
+        return (
+            self.DEFAULT_SAMPLE_RATE
         )
 
     # =========================================================
