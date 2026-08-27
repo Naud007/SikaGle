@@ -1,3 +1,4 @@
+import base64
 import os
 import subprocess
 import tempfile
@@ -89,6 +90,29 @@ class TextToSpeech:
 
             raise ValueError(
                 "Gemini n'a retourné aucun audio."
+            )
+
+        # =====================================================
+        # CORRECTIF (bruit statique) :
+        #
+        # Selon la version du SDK, inline_data.data peut être
+        # retourné soit comme des octets bruts (bytes) déjà
+        # décodés, soit comme une chaîne de texte encodée en
+        # base64. Écrire une chaîne base64 directement comme
+        # si c'était du PCM produit un bruit statique/blanc au
+        # lieu de la voix (symptôme confirmé, problème connu
+        # du SDK google-genai — voir issue #837 sur son dépôt
+        # GitHub officiel). On détecte donc le type reçu et on
+        # décode si nécessaire.
+        # =====================================================
+
+        if isinstance(
+            pcm_data,
+            str,
+        ):
+
+            pcm_data = base64.b64decode(
+                pcm_data
             )
 
         # =====================================================
