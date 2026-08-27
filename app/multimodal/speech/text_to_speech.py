@@ -1,4 +1,5 @@
 import base64
+import binascii
 import os
 import re
 import subprocess
@@ -119,57 +120,62 @@ class TextToSpeech:
             )
 
         # =====================================================
-        # DIAGNOSTIC TEMPORAIRE GEMINI TTS
+        # CORRECTIF DÉFINITIF (bruit statique) :
+        #
+        # Diagnostic confirmé : le SDK renvoie un objet `bytes`,
+        # mais son CONTENU est en réalité du texte base64
+        # (l'alphabet observé ne contient que 64 valeurs
+        # d'octets distinctes, exactement la taille de
+        # l'alphabet base64 ; les octets décodés en ASCII
+        # forment bien des caractères base64 valides). Le
+        # simple test `isinstance(pcm_data, str)` d'avant ne
+        # suffisait pas puisque le type restait `bytes`. On
+        # tente donc maintenant de décoder le contenu comme du
+        # base64 (qu'il soit str ou bytes), et on ne garde les
+        # octets tels quels que si ce décodage échoue
+        # (preuve qu'il s'agissait bien de vraies données
+        # binaires).
         # =====================================================
 
-        print("🔬 TTS DEBUG — nombre de parts :", len(parts))
-        print("🔬 TTS DEBUG — mime_type :", part_mime_type)
-        print("🔬 TTS DEBUG — type données :", type(pcm_data))
-        print("🔬 TTS DEBUG — taille données :", len(pcm_data))
+        try:
 
-        if isinstance(pcm_data, bytes):
+            if isinstance(
+                pcm_data,
+                bytes,
+            ):
 
-            unique_bytes = len(set(pcm_data))
+                text_candidate = (
+                    pcm_data.decode(
+                        "ascii"
+                    )
+                )
 
-            print(
-                "🔬 TTS DEBUG — octets uniques dans tout le fichier :",
-                unique_bytes,
-            )
-            print(
-                "🔬 TTS DEBUG — premiers octets :",
-                pcm_data[:32].hex(),
-            )
-            print(
-                "🔬 TTS DEBUG — octets au milieu :",
-                pcm_data[
-                    len(pcm_data) // 2
-                    : len(pcm_data) // 2 + 32
-                ].hex(),
-            )
-            print(
-                "🔬 TTS DEBUG — derniers octets :",
-                pcm_data[-32:].hex(),
-            )
+            else:
 
-        elif isinstance(pcm_data, str):
-
-            print(
-                "🔬 TTS DEBUG — premiers caractères :",
-                pcm_data[:80],
-            )
-
-        # =====================================================
-        # DÉCODAGE BASE64 SI NÉCESSAIRE
-        # =====================================================
-
-        if isinstance(
-            pcm_data,
-            str,
-        ):
+                text_candidate = pcm_data
 
             pcm_data = base64.b64decode(
-                pcm_data
+                text_candidate,
+                validate=True,
             )
+
+        except (
+            UnicodeDecodeError,
+            binascii.Error,
+            ValueError,
+        ):
+
+            # Les données étaient déjà du binaire brut,
+            # on les garde telles quelles.
+
+            if isinstance(
+                pcm_data,
+                str,
+            ):
+
+                pcm_data = base64.b64decode(
+                    pcm_data
+                )
 
         sample_rate = self._parse_sample_rate(
             part_mime_type
