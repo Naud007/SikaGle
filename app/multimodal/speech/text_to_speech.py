@@ -22,6 +22,17 @@ class TextToSpeech:
     """
     Génère un fichier audio à partir d'un texte, en utilisant
     le modèle de synthèse vocale natif de Gemini.
+
+    Gemini TTS ne produit que de l'audio brut (PCM). Ce service
+    l'écrit d'abord dans un fichier WAV, puis le convertit en
+    MP3 (format accepté par l'API WhatsApp Cloud) grâce à
+    imageio-ffmpeg, qui embarque son propre binaire ffmpeg
+    (aucune installation système requise, fonctionne pareil
+    en local et sur Render).
+
+    Limite connue : ce modèle ne supporte officiellement que
+    le français parmi les langues de SikaGlé (pas Fon, Yoruba
+    ni Dendi pour l'instant).
     """
 
     MODEL = "gemini-3.1-flash-tts-preview"
@@ -120,21 +131,17 @@ class TextToSpeech:
             )
 
         # =====================================================
-        # CORRECTIF DÉFINITIF (bruit statique) :
+        # DÉCODAGE DES DONNÉES AUDIO
         #
-        # Diagnostic confirmé : le SDK renvoie un objet `bytes`,
-        # mais son CONTENU est en réalité du texte base64
-        # (l'alphabet observé ne contient que 64 valeurs
-        # d'octets distinctes, exactement la taille de
-        # l'alphabet base64 ; les octets décodés en ASCII
-        # forment bien des caractères base64 valides). Le
-        # simple test `isinstance(pcm_data, str)` d'avant ne
-        # suffisait pas puisque le type restait `bytes`. On
-        # tente donc maintenant de décoder le contenu comme du
-        # base64 (qu'il soit str ou bytes), et on ne garde les
-        # octets tels quels que si ce décodage échoue
-        # (preuve qu'il s'agissait bien de vraies données
-        # binaires).
+        # NOTE :
+        #
+        # Le SDK google-genai renvoie parfois un objet `bytes`
+        # dont le CONTENU est en réalité du texte base64 non
+        # décodé (et non de l'audio binaire brut). On tente
+        # donc systématiquement un décodage base64, et on ne
+        # garde les octets tels quels que si ce décodage
+        # échoue (preuve qu'il s'agissait bien de vraies
+        # données binaires).
         # =====================================================
 
         try:
@@ -164,9 +171,6 @@ class TextToSpeech:
             binascii.Error,
             ValueError,
         ):
-
-            # Les données étaient déjà du binaire brut,
-            # on les garde telles quelles.
 
             if isinstance(
                 pcm_data,
