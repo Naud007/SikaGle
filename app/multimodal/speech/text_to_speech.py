@@ -21,24 +21,10 @@ class TextToSpeech:
     """
     Génère un fichier audio à partir d'un texte, en utilisant
     le modèle de synthèse vocale natif de Gemini.
-
-    Gemini TTS ne produit que de l'audio brut (PCM). Ce service
-    l'écrit d'abord dans un fichier WAV, puis le convertit en
-    MP3 (format accepté par l'API WhatsApp Cloud) grâce à
-    imageio-ffmpeg, qui embarque son propre binaire ffmpeg
-    (aucune installation système requise, fonctionne pareil
-    en local et sur Render).
-
-    Limite connue : ce modèle ne supporte officiellement que
-    le français parmi les langues de SikaGlé (pas Fon, Yoruba
-    ni Dendi pour l'instant).
     """
 
     MODEL = "gemini-3.1-flash-tts-preview"
 
-    # Paramètres audio de repli, utilisés uniquement si le
-    # mime_type réel de la réponse ne précise pas le taux
-    # d'échantillonnage (voir _parse_sample_rate ci-dessous).
     CHANNELS = 1
     DEFAULT_SAMPLE_RATE = 24000
     SAMPLE_WIDTH = 2  # 16 bits
@@ -79,10 +65,6 @@ class TextToSpeech:
                 ),
             ),
         )
-
-        # =====================================================
-        # RECHERCHE DE LA PARTIE AUDIO (pas parts[0] à l'aveugle)
-        # =====================================================
 
         pcm_data = None
 
@@ -137,8 +119,24 @@ class TextToSpeech:
             )
 
         # =====================================================
-        # DÉCODAGE BASE64 SI NÉCESSAIRE
+        # DIAGNOSTIC TEMPORAIRE GEMINI TTS
         # =====================================================
+
+        print("🔬 TTS DEBUG — nombre de parts :", len(parts))
+        print("🔬 TTS DEBUG — mime_type :", part_mime_type)
+        print("🔬 TTS DEBUG — type données :", type(pcm_data))
+        print("🔬 TTS DEBUG — taille données :", len(pcm_data))
+
+        if isinstance(pcm_data, bytes):
+            print(
+                "🔬 TTS DEBUG — premiers octets :",
+                pcm_data[:32].hex(),
+            )
+        elif isinstance(pcm_data, str):
+            print(
+                "🔬 TTS DEBUG — premiers caractères :",
+                pcm_data[:80],
+            )
 
         if isinstance(
             pcm_data,
@@ -149,28 +147,9 @@ class TextToSpeech:
                 pcm_data
             )
 
-        # =====================================================
-        # CORRECTIF (bruit statique, tentative n°3) :
-        #
-        # D'après la documentation officielle Google, le
-        # mime_type réel de la réponse est de la forme
-        # "audio/L16;codec=pcm;rate=24000" — le taux
-        # d'échantillonnage y est encodé explicitement et
-        # n'est pas garanti d'être toujours 24000. Écrire le
-        # WAV avec un taux différent de celui réellement utilisé
-        # par les données produit un son déformé/statique, même
-        # si les données elles-mêmes sont correctes. On extrait
-        # donc ce taux directement du mime_type plutôt que de le
-        # supposer fixe.
-        # =====================================================
-
         sample_rate = self._parse_sample_rate(
             part_mime_type
         )
-
-        # =====================================================
-        # ÉCRITURE DU FICHIER WAV
-        # =====================================================
 
         wav_fd, wav_path_str = tempfile.mkstemp(
             suffix=".wav"
@@ -201,10 +180,6 @@ class TextToSpeech:
                 pcm_data
             )
 
-        # =====================================================
-        # CONVERSION EN MP3 (format accepté par WhatsApp)
-        # =====================================================
-
         mp3_path = wav_path.with_suffix(
             ".mp3"
         )
@@ -225,12 +200,6 @@ class TextToSpeech:
             speed=1.0,
         )
 
-    # =========================================================
-    # EXTRACTION DU TAUX D'ÉCHANTILLONNAGE DEPUIS LE MIME TYPE
-    #
-    # Exemple attendu : "audio/L16;codec=pcm;rate=24000"
-    # =========================================================
-
     def _parse_sample_rate(
         self,
         mime_type: str,
@@ -250,10 +219,6 @@ class TextToSpeech:
         return (
             self.DEFAULT_SAMPLE_RATE
         )
-
-    # =========================================================
-    # CONVERSION WAV → MP3
-    # =========================================================
 
     def _convert_to_mp3(
         self,
