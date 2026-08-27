@@ -77,33 +77,75 @@ class TextToSpeech:
             ),
         )
 
-        pcm_data = (
+        # =====================================================
+        # CORRECTIF (bruit statique, tentative n°2) :
+        #
+        # On ne suppose plus que le premier élément (parts[0])
+        # est forcément l'audio. Certains modèles Gemini récents
+        # renvoient plusieurs "parts" dans une même réponse,
+        # dont une "thought_signature" (signal de raisonnement
+        # interne) qui peut précéder la vraie donnée audio. Si
+        # on prend parts[0] à l'aveugle et que ce n'est pas
+        # l'audio, on écrit des données qui ne sont pas de la
+        # parole, produisant exactement ce genre de bruit.
+        #
+        # On cherche donc explicitement, parmi toutes les
+        # parts de la réponse, celle dont le mime_type
+        # commence par "audio/".
+        # =====================================================
+
+        pcm_data = None
+
+        parts = (
             response
             .candidates[0]
             .content
-            .parts[0]
-            .inline_data
-            .data
+            .parts
         )
+
+        for part in parts:
+
+            inline_data = getattr(
+                part,
+                "inline_data",
+                None,
+            )
+
+            if inline_data is None:
+                continue
+
+            part_mime_type = (
+                getattr(
+                    inline_data,
+                    "mime_type",
+                    "",
+                )
+                or ""
+            )
+
+            if part_mime_type.startswith(
+                "audio/"
+            ):
+
+                pcm_data = (
+                    inline_data.data
+                )
+
+                break
 
         if not pcm_data:
 
             raise ValueError(
-                "Gemini n'a retourné aucun audio."
+                "Gemini n'a retourné aucune "
+                "partie audio exploitable."
             )
 
         # =====================================================
-        # CORRECTIF (bruit statique) :
+        # CORRECTIF (bruit statique, tentative n°1) :
         #
-        # Selon la version du SDK, inline_data.data peut être
-        # retourné soit comme des octets bruts (bytes) déjà
-        # décodés, soit comme une chaîne de texte encodée en
-        # base64. Écrire une chaîne base64 directement comme
-        # si c'était du PCM produit un bruit statique/blanc au
-        # lieu de la voix (symptôme confirmé, problème connu
-        # du SDK google-genai — voir issue #837 sur son dépôt
-        # GitHub officiel). On détecte donc le type reçu et on
-        # décode si nécessaire.
+        # Selon la version du SDK, les données peuvent être
+        # renvoyées soit comme des octets bruts (bytes) déjà
+        # décodés, soit comme une chaîne encodée en base64.
         # =====================================================
 
         if isinstance(
