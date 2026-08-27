@@ -9,6 +9,7 @@ from app.integrations.media.media_service import (
     MediaService,
 )
 from app.integrations.whatsapp.sender import (
+    send_typing_indicator,
     send_whatsapp_message,
 )
 from app.multimodal.speech.speech_service import (
@@ -181,6 +182,26 @@ async def receive_webhook(
                         )
 
                         continue
+
+                # =================================================
+                # INDICATEUR "EN TRAIN D'ÉCRIRE"
+                #
+                # NOTE :
+                #
+                # Envoyé dès que le message est identifié comme
+                # nouveau, avant tout traitement RAG/Gemini, pour
+                # rassurer l'agriculteur que son message a bien
+                # été reçu pendant que SikaGlé prépare sa réponse.
+                # Un échec ici n'empêche jamais la suite du
+                # traitement (voir gestion d'erreurs dans
+                # send_typing_indicator elle-même).
+                # =================================================
+
+                if msg_id:
+
+                    send_typing_indicator(
+                        msg_id
+                    )
 
                 msg_type = msg.get(
                     "type",
