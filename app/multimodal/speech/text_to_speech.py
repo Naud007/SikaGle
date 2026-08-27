@@ -128,15 +128,39 @@ class TextToSpeech:
         print("🔬 TTS DEBUG — taille données :", len(pcm_data))
 
         if isinstance(pcm_data, bytes):
+
+            unique_bytes = len(set(pcm_data))
+
+            print(
+                "🔬 TTS DEBUG — octets uniques dans tout le fichier :",
+                unique_bytes,
+            )
             print(
                 "🔬 TTS DEBUG — premiers octets :",
                 pcm_data[:32].hex(),
             )
+            print(
+                "🔬 TTS DEBUG — octets au milieu :",
+                pcm_data[
+                    len(pcm_data) // 2
+                    : len(pcm_data) // 2 + 32
+                ].hex(),
+            )
+            print(
+                "🔬 TTS DEBUG — derniers octets :",
+                pcm_data[-32:].hex(),
+            )
+
         elif isinstance(pcm_data, str):
+
             print(
                 "🔬 TTS DEBUG — premiers caractères :",
                 pcm_data[:80],
             )
+
+        # =====================================================
+        # DÉCODAGE BASE64 SI NÉCESSAIRE
+        # =====================================================
 
         if isinstance(
             pcm_data,
