@@ -5,10 +5,14 @@ Service d'envoi des messages WhatsApp.
 """
 
 import os
+from pathlib import Path
 
 import requests
 
 from app.core.logging import logger
+from app.integrations.clients.whatsapp_client import (
+    WhatsAppClient,
+)
 
 
 WHATSAPP_TOKEN = os.getenv(
@@ -89,6 +93,109 @@ def send_whatsapp_message(
 
         logger.exception(
             "Erreur lors de l'envoi du message WhatsApp."
+        )
+
+        return False
+
+
+# =============================================================
+# ENVOI D'UN MESSAGE AUDIO (réponse vocale de SikaGlé)
+#
+# NOTE :
+#
+# Contrairement au texte, l'envoi audio nécessite d'abord
+# d'uploader le fichier vers WhatsApp (voir
+# WhatsAppClient.upload_media) pour obtenir un media_id,
+# avant de pouvoir envoyer le message qui le référence.
+# =============================================================
+
+def send_whatsapp_audio_message(
+    to_phone: str,
+    audio_path: Path,
+    mime_type: str = "audio/mpeg",
+) -> bool:
+    """
+    Envoie un message audio via WhatsApp Cloud API.
+    """
+
+    if (
+        not WHATSAPP_TOKEN
+        or not WHATSAPP_PHONE_ID
+    ):
+        logger.warning(
+            "Variables WHATSAPP_TOKEN ou WHATSAPP_PHONE_NUMBER_ID manquantes."
+        )
+        return False
+
+    try:
+
+        client = WhatsAppClient()
+
+        media_id = client.upload_media(
+            file_path=audio_path,
+            mime_type=mime_type,
+        )
+
+    except Exception:
+
+        logger.exception(
+            "Erreur lors de l'upload de l'audio "
+            "vers WhatsApp."
+        )
+
+        return False
+
+    url = (
+        f"https://graph.facebook.com/v18.0/"
+        f"{WHATSAPP_PHONE_ID}/messages"
+    )
+
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to_phone,
+        "type": "audio",
+        "audio": {
+            "id": media_id,
+        },
+    }
+
+    try:
+
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=30,
+        )
+
+        if response.status_code == 200:
+
+            logger.info(
+                "Message audio WhatsApp envoyé à %s",
+                to_phone,
+            )
+
+            return True
+
+        logger.error(
+            "Échec d'envoi audio WhatsApp (%s): %s",
+            response.status_code,
+            response.text,
+        )
+
+        return False
+
+    except Exception:
+
+        logger.exception(
+            "Erreur lors de l'envoi du message "
+            "audio WhatsApp."
         )
 
         return False

@@ -2,6 +2,7 @@ import asyncio
 import os
 import tempfile
 from datetime import date, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Request, Response
 
@@ -10,10 +11,14 @@ from app.integrations.media.media_service import (
 )
 from app.integrations.whatsapp.sender import (
     send_typing_indicator,
+    send_whatsapp_audio_message,
     send_whatsapp_message,
 )
 from app.multimodal.speech.speech_service import (
     SpeechService,
+)
+from app.multimodal.speech.text_to_speech import (
+    TextToSpeech,
 )
 from app.services.agricultural_assistant_service import (
     AgriculturalAssistantService,
@@ -47,6 +52,8 @@ assistant = AgriculturalAssistantService()
 media_service = MediaService()
 
 speech_service = SpeechService()
+
+text_to_speech = TextToSpeech()
 
 
 # =========================================================
@@ -185,16 +192,6 @@ async def receive_webhook(
 
                 # =================================================
                 # INDICATEUR "EN TRAIN D'ÉCRIRE"
-                #
-                # NOTE :
-                #
-                # Envoyé dès que le message est identifié comme
-                # nouveau, avant tout traitement RAG/Gemini, pour
-                # rassurer l'agriculteur que son message a bien
-                # été reçu pendant que SikaGlé prépare sa réponse.
-                # Un échec ici n'empêche jamais la suite du
-                # traitement (voir gestion d'erreurs dans
-                # send_typing_indicator elle-même).
                 # =================================================
 
                 if msg_id:
@@ -206,6 +203,25 @@ async def receive_webhook(
                 msg_type = msg.get(
                     "type",
                     "text",
+                )
+
+                # =================================================
+                # NOTE (correctif) :
+                #
+                # is_voice_message permet de savoir, plus loin, si
+                # la question venait d'un message vocal, pour :
+                # - transmettre input_type="audio" à
+                #   assistant.process() (formatage adapté à la voix,
+                #   sans markdown) ;
+                # - répondre en audio plutôt qu'en texte.
+                # =================================================
+
+                is_voice_message = (
+                    msg_type
+                    in [
+                        "audio",
+                        "voice",
+                    ]
                 )
 
                 sender_name = (
@@ -599,6 +615,11 @@ async def receive_webhook(
                             user_id
                         ),
                         message=content,
+                        input_type=(
+                            "audio"
+                            if is_voice_message
+                            else "text"
+                        ),
                     )
 
                 except Exception as e:
@@ -616,12 +637,54 @@ async def receive_webhook(
 
                 # =================================================
                 # RÉPONSE WHATSAPP
+                #
+                # NOTE (correctif TTS) :
+                #
+                # Si la question venait d'un message vocal, on
+                # répond en audio (généré par Gemini TTS). En cas
+                # d'échec de la synthèse vocale, on retombe sur le
+                # texte plutôt que de ne rien envoyer.
                 # =================================================
 
-                send_whatsapp_message(
-                    sender_phone,
-                    answer,
-                )
+                sent_as_audio = False
+
+                if is_voice_message:
+
+                    try:
+
+                        speech = (
+                            text_to_speech.synthesize(
+                                text=answer,
+                                language="fr",
+                            )
+                        )
+
+                        sent_as_audio = (
+                            send_whatsapp_audio_message(
+                                sender_phone,
+                                speech.audio_path,
+                            )
+                        )
+
+                        Path(
+                            speech.audio_path
+                        ).unlink(
+                            missing_ok=True
+                        )
+
+                    except Exception as e:
+
+                        print(
+                            "❌ Erreur génération/envoi "
+                            f"audio SikaGlé : {e}"
+                        )
+
+                if not sent_as_audio:
+
+                    send_whatsapp_message(
+                        sender_phone,
+                        answer,
+                    )
 
     except Exception as e:
 

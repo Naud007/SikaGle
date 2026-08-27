@@ -137,3 +137,90 @@ class WhatsAppClient:
             mime_type=whatsapp_mime_type,
             downloaded=True,
         )
+
+    # =========================================================
+    # UPLOAD D'UN MÉDIA (ex : réponse audio générée par SikaGlé)
+    #
+    # NOTE :
+    #
+    # Étape nécessaire avant de pouvoir envoyer un message
+    # audio : WhatsApp exige d'abord que le fichier soit
+    # uploadé sur ses serveurs, ce qui retourne un media_id
+    # à utiliser ensuite dans l'envoi du message.
+    # =========================================================
+
+    def upload_media(
+        self,
+        file_path: Path,
+        mime_type: str = "audio/mpeg",
+    ) -> str:
+
+        file_path = Path(file_path)
+
+        if not self.token:
+            raise ValueError(
+                "WHATSAPP_TOKEN est manquante."
+            )
+
+        if not self.phone_id:
+            raise ValueError(
+                "WHATSAPP_PHONE_ID est manquante."
+            )
+
+        if not file_path.exists():
+            raise FileNotFoundError(
+                f"Fichier introuvable : {file_path}"
+            )
+
+        url = (
+            f"{self.graph_url}/{self.phone_id}/media"
+        )
+
+        with open(
+            file_path,
+            "rb",
+        ) as f:
+
+            files = {
+                "file": (
+                    file_path.name,
+                    f,
+                    mime_type,
+                ),
+            }
+
+            data = {
+                "messaging_product": "whatsapp",
+                "type": mime_type,
+            }
+
+            response = requests.post(
+                url,
+                headers={
+                    "Authorization": (
+                        f"Bearer {self.token}"
+                    ),
+                },
+                files=files,
+                data=data,
+                timeout=60,
+            )
+
+        response.raise_for_status()
+
+        result = response.json()
+
+        media_id = result.get("id")
+
+        if not media_id:
+            raise ValueError(
+                "WhatsApp n'a retourné aucun media_id "
+                "après l'upload."
+            )
+
+        print(
+            "🎧 Média uploadé vers WhatsApp, media_id :",
+            media_id,
+        )
+
+        return media_id
