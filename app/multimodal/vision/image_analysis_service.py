@@ -4,6 +4,7 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
+from app.core.retry import call_with_retry
 from app.multimodal.models.vision_observation import (
     VisionObservation,
 )
@@ -117,7 +118,8 @@ réponse : ton rôle ici est uniquement d'observer l'image.
             self.PROMPT,
         ]
 
-        response = self.client.models.generate_content(
+        response = call_with_retry(
+            self.client.models.generate_content,
             model=self.MODEL,
             contents=contents,
             config=types.GenerateContentConfig(
