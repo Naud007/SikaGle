@@ -669,19 +669,57 @@ async def receive_webhook(
 
                             if not observation.photo_usable:
 
-                                send_whatsapp_message(
-                                    sender_phone,
+                                clarification_text = (
                                     observation.clarification_needed
                                     or (
                                         "Je n'arrive pas à bien voir "
                                         "cette photo. Peux-tu en "
                                         "renvoyer une plus nette et "
                                         "bien éclairée ?"
-                                    ),
+                                    )
+                                )
+
+                                # =========================================
+                                # CORRECTIF (doublon photo floue) :
+                                #
+                                # Sans cet enregistrement, la protection
+                                # anti-doublon en tout début de webhook
+                                # (basée sur whatsapp_message_id déjà
+                                # présent dans la table messages) ne
+                                # pouvait pas fonctionner ici, puisqu'on
+                                # sortait (continue) avant d'y avoir
+                                # jamais rien inséré. Si WhatsApp
+                                # renvoyait deux fois la même
+                                # notification (comportement connu),
+                                # Gemini Vision était donc appelé deux
+                                # fois pour la même photo, avec des
+                                # formulations légèrement différentes à
+                                # chaque fois (observé en test réel le
+                                # 28/08/2026).
+                                # =========================================
+
+                                (
+                                    supabase
+                                    .table("messages")
+                                    .insert({
+                                        "user_id":
+                                            user_id,
+                                        "whatsapp_message_id":
+                                            msg_id,
+                                        "message_type":
+                                            msg_type,
+                                        "content":
+                                            clarification_text,
+                                    })
+                                    .execute()
+                                )
+
+                                send_whatsapp_message(
+                                    sender_phone,
+                                    clarification_text,
                                 )
 
                                 continue
-
                             content = (
                                 observation.to_query_text()
                             )
