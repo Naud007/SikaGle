@@ -20,6 +20,9 @@ from app.multimodal.speech.speech_service import (
 from app.multimodal.speech.text_to_speech import (
     TextToSpeech,
 )
+from app.multimodal.vision.image_analysis_service import (
+    ImageAnalysisService,
+)
 from app.services.agricultural_assistant_service import (
     AgriculturalAssistantService,
 )
@@ -54,6 +57,8 @@ media_service = MediaService()
 speech_service = SpeechService()
 
 text_to_speech = TextToSpeech()
+
+image_analysis_service = ImageAnalysisService()
 
 
 # =========================================================
@@ -281,21 +286,36 @@ async def receive_webhook(
                     )
 
                 # =================================================
-                # IMAGE / DOCUMENT
+                # IMAGE (photo de plante)
                 # =================================================
 
-                elif msg_type in [
-                    "image",
-                    "document",
-                ]:
+                elif msg_type == "image":
+
+                    media_id = (
+                        msg
+                        .get(
+                            "image",
+                            {},
+                        )
+                        .get(
+                            "id",
+                            "",
+                        )
+                    )
+
+                # =================================================
+                # DOCUMENT (non analysé pour l'instant)
+                # =================================================
+
+                elif msg_type == "document":
 
                     content = (
-                        f"[{msg_type.upper()}] "
+                        "[DOCUMENT] "
                         "ID: "
                         + str(
                             msg
                             .get(
-                                msg_type,
+                                "document",
                                 {},
                             )
                             .get(
@@ -566,6 +586,117 @@ async def receive_webhook(
                             "Je n'ai pas pu comprendre "
                             "votre message vocal. "
                             "Veuillez réessayer.",
+                        )
+
+                        continue
+
+                # =================================================
+                # TRAITEMENT IMAGE (photo de plante)
+                # =================================================
+
+                if (
+                    msg_type == "image"
+                    and media_id
+                ):
+
+                    try:
+
+                        image_meta = (
+                            msg.get(
+                                "image",
+                                {},
+                            )
+                        )
+
+                        image_mime_type = (
+                            image_meta.get(
+                                "mime_type",
+                                "image/jpeg",
+                            )
+                        )
+
+                        image_caption = (
+                            image_meta.get(
+                                "caption"
+                            )
+                        )
+
+                        extension = (
+                            ".png"
+                            if "png"
+                            in image_mime_type
+                            else ".jpg"
+                        )
+
+                        with tempfile.TemporaryDirectory() as temp_dir:
+
+                            image_path = os.path.join(
+                                temp_dir,
+                                f"{media_id}{extension}",
+                            )
+
+                            media_file = (
+                                media_service.download(
+                                    media_id=media_id,
+                                    destination=image_path,
+                                    media_type="image",
+                                    mime_type=image_mime_type,
+                                )
+                            )
+
+                            if not media_file.downloaded:
+
+                                raise RuntimeError(
+                                    "Le fichier image WhatsApp "
+                                    "n'a pas été téléchargé."
+                                )
+
+                            observation = (
+                                image_analysis_service.analyze(
+                                    media_file.file_path,
+                                    mime_type=(
+                                        media_file.mime_type
+                                        or image_mime_type
+                                    ),
+                                    caption=image_caption,
+                                )
+                            )
+
+                            print(
+                                "🖼️ Observation image :",
+                                observation,
+                            )
+
+                            if not observation.photo_usable:
+
+                                send_whatsapp_message(
+                                    sender_phone,
+                                    observation.clarification_needed
+                                    or (
+                                        "Je n'arrive pas à bien voir "
+                                        "cette photo. Peux-tu en "
+                                        "renvoyer une plus nette et "
+                                        "bien éclairée ?"
+                                    ),
+                                )
+
+                                continue
+
+                            content = (
+                                observation.to_query_text()
+                            )
+
+                    except Exception as e:
+
+                        print(
+                            f"❌ Erreur traitement image : {e}"
+                        )
+
+                        send_whatsapp_message(
+                            sender_phone,
+                            "Je n'ai pas pu analyser cette "
+                            "photo. Peux-tu réessayer avec "
+                            "une autre image ?",
                         )
 
                         continue
