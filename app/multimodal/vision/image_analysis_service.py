@@ -125,6 +125,18 @@ réponse : ton rôle ici est uniquement d'observer l'image.
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=_GeminiVisionSchema,
+                # =====================================================
+                # TEMPÉRATURE BASSE :
+                #
+                # Une observation d'image (culture, symptômes, cause
+                # possible) doit être aussi cohérente que possible
+                # d'un appel à l'autre pour la même photo. Une
+                # température basse réduit la variabilité du modèle
+                # (sans jamais la supprimer totalement), comparé à la
+                # valeur par défaut plus élevée, pensée pour des
+                # tâches créatives.
+                # =====================================================
+                temperature=0.1,
             ),
         )
 
