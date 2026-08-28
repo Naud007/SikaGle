@@ -53,54 +53,62 @@ class VisionObservation:
 
     def to_query_text(self) -> str:
         """
-        Transforme cette observation en une question textuelle
-        exploitable par le pipeline RAG existant (RAGService /
-        KnowledgeService), pour ne jamais dupliquer la logique
-        de recherche et de sécurité déjà en place.
+        Transforme cette observation en une phrase naturelle,
+        comme la formulerait l'agriculteur lui-même, exploitable
+        par le pipeline RAG existant (RAGService / KnowledgeService).
 
-        IMPORTANT : reste volontairement dense en mots-clés,
-        proche de ce qu'un agriculteur taperait naturellement,
-        SANS étiquettes ("Culture :", "Symptômes observés :",
-        etc.) ni mots de liaison. Ces mots de liaison se
-        retrouvaient sinon dans la recherche par mots-clés du
-        RAG comme s'il s'agissait de vrais termes agricoles,
-        générant une requête trop large qui pouvait expirer
-        côté base de données (timeout PostgreSQL observé en
-        test réel le 28/08/2026).
+        Reste dense en mots-clés utiles pour la recherche, tout
+        en formulant les informations déjà connues (partie de la
+        plante, symptômes) comme des affirmations claires plutôt
+        que des mots isolés, pour éviter que Gemini ne redemande
+        une information déjà fournie par la photo (bug observé en
+        test réel le 28/08/2026 : SikaGlé redemandait "à quel
+        endroit ?" alors que la partie de la plante était déjà
+        connue).
         """
 
-        keywords: list[str] = []
+        crop_phrase = (
+            self.crop
+            if self.crop
+            else "une plante (je n'arrive pas à "
+            "identifier la culture sur la photo)"
+        )
 
-        if self.crop:
-
-            keywords.append(
-                self.crop
-            )
+        sentence = (
+            f"J'ai observé {crop_phrase}"
+        )
 
         if self.plant_part:
 
-            keywords.append(
-                self.plant_part
+            sentence += (
+                f", sur {self.plant_part}"
             )
 
-        keywords.extend(
-            self.symptoms
-        )
+        if self.symptoms:
+
+            sentence += (
+                " : "
+                + ", ".join(self.symptoms)
+            )
+
+        sentence += "."
 
         if self.possible_cause:
 
-            keywords.append(
-                self.possible_cause
+            sentence += (
+                " Cela pourrait être lié à "
+                f"{self.possible_cause}, "
+                "mais je n'en suis pas sûr."
             )
 
         if self.caption:
 
-            keywords.append(
-                self.caption
+            sentence += (
+                f' L\'agriculteur a ajouté : "{self.caption}"'
             )
 
-        query = " ".join(keywords)
-
-        return (
-            f"{query} : que puis-je faire ?"
+        sentence += (
+            " Que puis-je faire pour ce problème ?"
         )
+
+        return sentence
