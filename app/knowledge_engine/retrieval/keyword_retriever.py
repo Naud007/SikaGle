@@ -262,10 +262,29 @@ class KeywordRetriever:
 
         else:
 
-            search_query = " OR ".join(
+            # =============================================
+            # CORRECTIF (timeout PostgreSQL) :
+            #
+            # Sans limite, une question longue (typiquement
+            # une observation d'image transformée en phrase,
+            # mais ça pourrait aussi arriver avec une longue
+            # question texte) génère un OR géant que Postgres
+            # met trop de temps à évaluer et finit par
+            # abandonner (« canceling statement due to
+            # statement timeout »). On limite donc le nombre
+            # de mots-clés utilisés dans ce repli générique.
+            # =============================================
+
+            MAX_FALLBACK_TERMS = 8
+
+            limited_terms = list(
                 dict.fromkeys(
                     search_terms
                 )
+            )[:MAX_FALLBACK_TERMS]
+
+            search_query = " OR ".join(
+                limited_terms
             )
 
         print(
