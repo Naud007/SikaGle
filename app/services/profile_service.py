@@ -84,11 +84,15 @@ class ProfileService:
     def ensure_profile_exists(
         self,
         user_id,
-    ) -> dict:
+    ) -> tuple[dict, bool]:
         """
-        Retourne le profil de l'utilisateur, en le créant
-        (étape de collecte "language") s'il n'existe pas
-        encore.
+        Retourne (profil, was_just_created).
+
+        was_just_created est True uniquement lors du tout
+        premier contact de cet utilisateur : dans ce cas, le
+        message entrant ne doit PAS être traité comme une
+        réponse à la question de langue (il n'a jamais reçu
+        cette question), mais déclencher son envoi.
         """
 
         profile = self.get_profile(
@@ -97,7 +101,7 @@ class ProfileService:
 
         if profile:
 
-            return profile
+            return profile, False
 
         response = (
             self.supabase
@@ -110,7 +114,7 @@ class ProfileService:
             .execute()
         )
 
-        return response.data[0]
+        return response.data[0], True
 
     def is_onboarding_complete(
         self,

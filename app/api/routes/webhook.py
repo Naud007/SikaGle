@@ -507,7 +507,7 @@ async def receive_webhook(
                     supabase
                 )
 
-                profile = (
+                profile, profile_just_created = (
                     profile_service
                     .ensure_profile_exists(
                         user_id
@@ -524,13 +524,49 @@ async def receive_webhook(
 
                 if onboarding_in_progress:
 
-                    reply_text = (
-                        profile_service
-                        .save_onboarding_answer(
-                            profile,
-                            content,
+                    # =========================================
+                    # CORRECTIF : au tout premier contact, le
+                    # message entrant n'est pas une réponse à
+                    # la question de langue (elle n'a jamais
+                    # été posée) — on envoie donc directement
+                    # la première question, sans enregistrer
+                    # ce message comme une réponse.
+                    # =========================================
+
+                    if profile_just_created:
+
+                        reply_text = (
+                            profile_service
+                            .get_current_question(
+                                profile
+                            )
                         )
-                    )
+
+                    else:
+
+                        reply_text = (
+                            profile_service
+                            .save_onboarding_answer(
+                                profile,
+                                content,
+                            )
+                        )
+
+                        (
+                            supabase
+                            .table("messages")
+                            .insert({
+                                "user_id":
+                                    user_id,
+                                "whatsapp_message_id":
+                                    msg_id,
+                                "message_type":
+                                    msg_type,
+                                "content":
+                                    content,
+                            })
+                            .execute()
+                        )
 
                     (
                         supabase
@@ -546,22 +582,6 @@ async def receive_webhook(
                             "id",
                             user_id,
                         )
-                        .execute()
-                    )
-
-                    (
-                        supabase
-                        .table("messages")
-                        .insert({
-                            "user_id":
-                                user_id,
-                            "whatsapp_message_id":
-                                msg_id,
-                            "message_type":
-                                msg_type,
-                            "content":
-                                content,
-                        })
                         .execute()
                     )
 
