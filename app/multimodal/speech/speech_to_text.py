@@ -42,38 +42,108 @@ class SpeechToText:
             contents=[
                 uploaded_file,
                 """
-Transcris exactement le message audio.
+Transcris exactement le message audio, PUIS traduis-le en
+français si nécessaire.
 
-Retourne uniquement la transcription,
-sans commentaire.
+Réponds STRICTEMENT dans ce format, sur deux lignes,
+sans rien ajouter d'autre :
 
-Identifie également la langue utilisée.
+LANGUE: <fr, yo, fon, ou dendi>
+TEXTE: <le texte en français>
 
-Si le message est en français,
-retourne le texte en français.
+Si le message est déjà en français, la ligne TEXTE contient
+simplement la transcription telle quelle.
 
-Si le message est en Fon, Yoruba ou Dendi,
-conserve la langue originale.
+Si le message est en Yoruba, en Fon, ou en Dendi, la ligne
+TEXTE contient une traduction fidèle et naturelle en français
+du sens du message (pas une transcription phonétique).
+
+Ne traduis JAMAIS un nom propre, un nom de lieu, ou un nom de
+culture agricole de façon approximative : si tu n'es pas sûr
+d'un mot précis, garde-le tel quel plutôt que d'inventer une
+traduction.
 """,
             ],
         )
 
-        text = (
+        raw_text = (
             response.text
             if response.text
             else ""
         ).strip()
 
-        if not text:
+        if not raw_text:
 
             raise ValueError(
                 "Gemini n'a retourné aucune transcription."
             )
 
-        language = "fr"
+        language, translated_text = (
+            self._parse_response(
+                raw_text
+            )
+        )
 
         return Transcription(
-            text=text,
+            text=translated_text,
             language=language,
             confidence=1.0,
         )
+
+    def _parse_response(
+        self,
+        raw_text: str,
+    ) -> tuple[str, str]:
+        """
+        Extrait la langue et le texte français depuis la
+        réponse structurée de Gemini. En cas de format
+        inattendu (Gemini n'a pas respecté le format demandé),
+        on retombe sur le français par défaut avec le texte
+        brut, plutôt que de faire planter la transcription.
+        """
+
+        language = "fr"
+
+        text = raw_text
+
+        for line in raw_text.splitlines():
+
+            stripped = line.strip()
+
+            if stripped.upper().startswith(
+                "LANGUE:"
+            ):
+
+                language = (
+                    stripped
+                    .split(
+                        ":",
+                        1,
+                    )[1]
+                    .strip()
+                    .lower()
+                )
+
+            elif stripped.upper().startswith(
+                "TEXTE:"
+            ):
+
+                text = (
+                    stripped
+                    .split(
+                        ":",
+                        1,
+                    )[1]
+                    .strip()
+                )
+
+        if language not in (
+            "fr",
+            "yo",
+            "fon",
+            "dendi",
+        ):
+
+            language = "fr"
+
+        return language, text
