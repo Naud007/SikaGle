@@ -14,11 +14,17 @@ from app.integrations.whatsapp.sender import (
     send_whatsapp_audio_message,
     send_whatsapp_message,
 )
+from app.multimodal.speech.abena_text_to_speech import (
+    AbenaTextToSpeech,
+)
 from app.multimodal.speech.speech_service import (
     SpeechService,
 )
 from app.multimodal.speech.text_to_speech import (
     TextToSpeech,
+)
+from app.multimodal.translation.translation_service import (
+    TranslationService,
 )
 from app.multimodal.vision.image_analysis_service import (
     ImageAnalysisService,
@@ -60,6 +66,10 @@ media_service = MediaService()
 speech_service = SpeechService()
 
 text_to_speech = TextToSpeech()
+
+abena_text_to_speech = AbenaTextToSpeech()
+
+translation_service = TranslationService()
 
 image_analysis_service = ImageAnalysisService()
 
@@ -222,6 +232,12 @@ async def receive_webhook(
                 #   assistant.process() (formatage adapté à la voix,
                 #   sans markdown) ;
                 # - répondre en audio plutôt qu'en texte.
+                #
+                # detected_language retient la langue réellement
+                # détectée par SpeechToText (fr par défaut, ou yo/
+                # fon/dendi) pour router la réponse vers la bonne
+                # voix TTS plus loin (correctif Yoruba du
+                # 28/08/2026).
                 # =================================================
 
                 is_voice_message = (
@@ -231,6 +247,8 @@ async def receive_webhook(
                         "voice",
                     ]
                 )
+
+                detected_language = "fr"
 
                 sender_name = (
                     contacts[0]
@@ -352,10 +370,6 @@ async def receive_webhook(
                         sender_phone,
                     )
                     .execute()
-                )
-
-                is_new_user = (
-                    not user_res.data
                 )
 
                 if user_res.data:
@@ -524,15 +538,6 @@ async def receive_webhook(
 
                 if onboarding_in_progress:
 
-                    # =========================================
-                    # CORRECTIF : au tout premier contact, le
-                    # message entrant n'est pas une réponse à
-                    # la question de langue (elle n'a jamais
-                    # été posée) — on envoie donc directement
-                    # la première question, sans enregistrer
-                    # ce message comme une réponse.
-                    # =========================================
-
                     if profile_just_created:
 
                         reply_text = (
@@ -677,8 +682,14 @@ async def receive_webhook(
                                 transcription.text
                             )
 
+                            detected_language = (
+                                transcription.language
+                                or "fr"
+                            )
+
                             print(
-                                "🎙️ Audio transcrit :",
+                                "🎙️ Audio transcrit "
+                                f"({detected_language}) :",
                                 content,
                             )
 
@@ -896,12 +907,14 @@ async def receive_webhook(
                 # =================================================
                 # RÉPONSE WHATSAPP
                 #
-                # NOTE (correctif TTS) :
+                # NOTE (correctif Yoruba du 28/08/2026) :
                 #
-                # Si la question venait d'un message vocal, on
-                # répond en audio (généré par Gemini TTS). En cas
-                # d'échec de la synthèse vocale, on retombe sur le
-                # texte plutôt que de ne rien envoyer.
+                # Si la question venait d'un message vocal en une
+                # langue locale supportée par Abena AI (Yoruba
+                # pour l'instant), on traduit la réponse française
+                # vers cette langue puis on synthétise l'audio via
+                # Abena AI, au lieu du TTS français habituel. Sinon
+                # (français), comportement inchangé (Gemini TTS).
                 # =================================================
 
                 sent_as_audio = False
@@ -910,12 +923,40 @@ async def receive_webhook(
 
                     try:
 
-                        speech = (
-                            text_to_speech.synthesize(
-                                text=answer,
-                                language="fr",
+                        if (
+                            detected_language
+                            in AbenaTextToSpeech.VOICE_BY_LANGUAGE
+                        ):
+
+                            translated_answer = (
+                                translation_service
+                                .translate_from_french(
+                                    answer,
+                                    detected_language,
+                                )
                             )
-                        )
+
+                            print(
+                                "🌍 Réponse traduite "
+                                f"({detected_language}) :",
+                                translated_answer,
+                            )
+
+                            speech = (
+                                abena_text_to_speech.synthesize(
+                                    text=translated_answer,
+                                    language=detected_language,
+                                )
+                            )
+
+                        else:
+
+                            speech = (
+                                text_to_speech.synthesize(
+                                    text=answer,
+                                    language="fr",
+                                )
+                            )
 
                         sent_as_audio = (
                             send_whatsapp_audio_message(
