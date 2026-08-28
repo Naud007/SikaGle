@@ -57,46 +57,50 @@ class VisionObservation:
         exploitable par le pipeline RAG existant (RAGService /
         KnowledgeService), pour ne jamais dupliquer la logique
         de recherche et de sécurité déjà en place.
+
+        IMPORTANT : reste volontairement dense en mots-clés,
+        proche de ce qu'un agriculteur taperait naturellement,
+        SANS étiquettes ("Culture :", "Symptômes observés :",
+        etc.) ni mots de liaison. Ces mots de liaison se
+        retrouvaient sinon dans la recherche par mots-clés du
+        RAG comme s'il s'agissait de vrais termes agricoles,
+        générant une requête trop large qui pouvait expirer
+        côté base de données (timeout PostgreSQL observé en
+        test réel le 28/08/2026).
         """
 
-        parts: list[str] = []
+        keywords: list[str] = []
 
         if self.crop:
 
-            parts.append(
-                f"Culture : {self.crop}."
+            keywords.append(
+                self.crop
             )
 
         if self.plant_part:
 
-            parts.append(
-                f"Partie affectée : {self.plant_part}."
+            keywords.append(
+                self.plant_part
             )
 
-        if self.symptoms:
-
-            parts.append(
-                "Symptômes observés : "
-                + ", ".join(self.symptoms)
-                + "."
-            )
+        keywords.extend(
+            self.symptoms
+        )
 
         if self.possible_cause:
 
-            parts.append(
-                "Cause possible suggérée par l'observation "
-                f"visuelle : {self.possible_cause}."
+            keywords.append(
+                self.possible_cause
             )
 
         if self.caption:
 
-            parts.append(
-                "L'agriculteur a écrit : "
-                f'"{self.caption}"'
+            keywords.append(
+                self.caption
             )
 
-        parts.append(
-            "Que puis-je faire pour ce problème ?"
-        )
+        query = " ".join(keywords)
 
-        return " ".join(parts)
+        return (
+            f"{query} : que puis-je faire ?"
+        )
