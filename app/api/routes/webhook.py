@@ -26,6 +26,9 @@ from app.multimodal.vision.image_analysis_service import (
 from app.services.agricultural_assistant_service import (
     AgriculturalAssistantService,
 )
+from app.services.profile_service import (
+    ProfileService,
+)
 
 
 router = APIRouter()
@@ -351,6 +354,10 @@ async def receive_webhook(
                     .execute()
                 )
 
+                is_new_user = (
+                    not user_res.data
+                )
+
                 if user_res.data:
 
                     user = user_res.data[0]
@@ -481,6 +488,86 @@ async def receive_webhook(
                     send_whatsapp_message(
                         sender_phone,
                         alert_msg,
+                    )
+
+                    continue
+
+                # =================================================
+                # PROFIL AGRICULTEUR (collecte progressive)
+                #
+                # NOTE : la collecte ne se déclenche que pour les
+                # messages TEXTE. Une photo ou un audio est
+                # toujours traité normalement, sans être bloqué
+                # par le questionnaire (décision produit du
+                # 28/08/2026 : ne jamais retarder une demande
+                # agricole urgente).
+                # =================================================
+
+                profile_service = ProfileService(
+                    supabase
+                )
+
+                profile = (
+                    profile_service
+                    .ensure_profile_exists(
+                        user_id
+                    )
+                )
+
+                onboarding_in_progress = (
+                    msg_type == "text"
+                    and not profile_service
+                    .is_onboarding_complete(
+                        profile
+                    )
+                )
+
+                if onboarding_in_progress:
+
+                    reply_text = (
+                        profile_service
+                        .save_onboarding_answer(
+                            profile,
+                            content,
+                        )
+                    )
+
+                    (
+                        supabase
+                        .table("users")
+                        .update({
+                            "credits":
+                                user_credits
+                                - 1,
+                            "last_active_date":
+                                today_str,
+                        })
+                        .eq(
+                            "id",
+                            user_id,
+                        )
+                        .execute()
+                    )
+
+                    (
+                        supabase
+                        .table("messages")
+                        .insert({
+                            "user_id":
+                                user_id,
+                            "whatsapp_message_id":
+                                msg_id,
+                            "message_type":
+                                msg_type,
+                            "content":
+                                content,
+                        })
+                        .execute()
+                    )
+
+                    send_whatsapp_message(
+                        sender_phone,
+                        reply_text,
                     )
 
                     continue
@@ -679,25 +766,6 @@ async def receive_webhook(
                                     )
                                 )
 
-                                # =========================================
-                                # CORRECTIF (doublon photo floue) :
-                                #
-                                # Sans cet enregistrement, la protection
-                                # anti-doublon en tout début de webhook
-                                # (basée sur whatsapp_message_id déjà
-                                # présent dans la table messages) ne
-                                # pouvait pas fonctionner ici, puisqu'on
-                                # sortait (continue) avant d'y avoir
-                                # jamais rien inséré. Si WhatsApp
-                                # renvoyait deux fois la même
-                                # notification (comportement connu),
-                                # Gemini Vision était donc appelé deux
-                                # fois pour la même photo, avec des
-                                # formulations légèrement différentes à
-                                # chaque fois (observé en test réel le
-                                # 28/08/2026).
-                                # =========================================
-
                                 (
                                     supabase
                                     .table("messages")
@@ -720,6 +788,7 @@ async def receive_webhook(
                                 )
 
                                 continue
+
                             content = (
                                 observation.to_query_text()
                             )
