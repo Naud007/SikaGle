@@ -919,6 +919,25 @@ async def receive_webhook(
 
                 sent_as_audio = False
 
+                # =====================================================
+                # LANGUES SANS VOIX ENCORE DISPONIBLE (Fon, Dendi) :
+                #
+                # SikaGlé a compris la question (transcription +
+                # traduction déjà gérées par SpeechToText), mais
+                # aucune voix locale n'existe encore pour ces
+                # langues (voir recherche approfondie du 28/08/2026
+                # : aucune solution TTS Fon commercialement
+                # exploitable trouvée à ce jour). On répond donc en
+                # français, avec un message clair pour que
+                # l'agriculteur comprenne que sa langue a bien été
+                # reconnue, plutôt qu'un silence sur ce point.
+                # =====================================================
+
+                LANGUAGES_WITHOUT_LOCAL_VOICE = {
+                    "fon",
+                    "dendi",
+                }
+
                 if is_voice_message:
 
                     try:
@@ -946,6 +965,27 @@ async def receive_webhook(
                                 abena_text_to_speech.synthesize(
                                     text=translated_answer,
                                     language=detected_language,
+                                )
+                            )
+
+                        elif (
+                            detected_language
+                            in LANGUAGES_WITHOUT_LOCAL_VOICE
+                        ):
+
+                            answer_with_notice = (
+                                "J'ai bien compris votre "
+                                "question. Je n'ai pas encore "
+                                "de voix dans votre langue, "
+                                "je vous réponds donc en "
+                                "français pour l'instant.\n\n"
+                                + answer
+                            )
+
+                            speech = (
+                                text_to_speech.synthesize(
+                                    text=answer_with_notice,
+                                    language="fr",
                                 )
                             )
 
