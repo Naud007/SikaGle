@@ -5,9 +5,6 @@ from app.core.retry import call_with_retry
 
 # =============================================================
 # CODES MÉTÉO OPEN-METEO (WMO) → DESCRIPTION SIMPLE EN FRANÇAIS
-#
-# Liste volontairement réduite aux cas les plus utiles pour un
-# agriculteur (pluie, orage, ciel dégagé/couvert).
 # =============================================================
 
 WEATHER_CODE_DESCRIPTIONS = {
@@ -40,8 +37,7 @@ class WeatherService:
     NOTE (limite de licence) : Open-Meteo est gratuit pour un
     usage NON-COMMERCIAL, avec un plan payant disponible pour
     la production commerciale. Utilisé ici en phase MVP ; à
-    revoir avant un lancement commercial réel (voir décision du
-    29/08/2026 dans la mémoire du projet).
+    revoir avant un lancement commercial réel.
     """
 
     GEOCODING_URL = (
@@ -52,6 +48,12 @@ class WeatherService:
         "https://api.open-meteo.com/v1/forecast"
     )
 
+    # Code pays ISO du Bénin, utilisé pour prioriser les
+    # résultats de géocodage plutôt que d'injecter "Bénin"
+    # directement dans le texte recherché (voir correctif
+    # ci-dessous).
+    BENIN_COUNTRY_CODE = "BJ"
+
     def geocode(
         self,
         location_text: str,
@@ -61,35 +63,59 @@ class WeatherService:
         coordonnées (latitude, longitude). Retourne None si
         rien n'est trouvé, même après plusieurs variantes.
 
-        NOTE (correctif) : l'API de géocodage Open-Meteo s'est
-        révélée sensible au trait d'union — "Abomey-Calavi"
-        fonctionne mais "Abomey Calavi" (espace) ou "Abomey
-        calavi" (minuscule, sans tiret) échoue complètement,
-        alors qu'un agriculteur tapera naturellement sa commune
-        sans se soucier de la ponctuation exacte (observé en
-        test réel le 30/08/2026). On essaie donc plusieurs
-        variantes automatiquement avant d'abandonner.
+        NOTE (correctif définitif, 30/08/2026) :
+
+        Deux problèmes cumulés ont été identifiés en test réel :
+
+        1. L'API de géocodage Open-Meteo est sensible au trait
+           d'union : "Abomey-Calavi" fonctionne mais "Abomey
+           Calavi" (espace) échoue. On essaie donc plusieurs
+           variantes de PONCTUATION DU NOM DE LIEU SEUL.
+
+        2. Injecter le pays directement dans le texte recherché
+           (ex: "Abomey calavi, Bénin") casse tout : remplacer
+           les espaces par des tirets transforme aussi celui
+           après la virgule ("Abomey-calavi,-Bénin"), ce qui
+           n'est reconnu par aucune commune. Le nom de pays ne
+           doit donc JAMAIS être concaténé au texte de
+           recherche. À la place, on demande plusieurs résultats
+           à l'API (count=5) et on choisit en priorité celui
+           dont le country_code est "BJ" (Bénin), sans jamais
+           construire de chaîne "Ville, Pays".
+
+        location_text doit donc être UNIQUEMENT le nom de la
+        commune (ex: "Abomey Calavi"), jamais suffixé par le
+        pays — c'est cette méthode qui gère la priorité Bénin
+        en interne.
         """
 
         if not location_text or not location_text.strip():
 
             return None
 
-        cleaned = location_text.strip()
+        # Si un appelant a quand même ajouté un pays après une
+        # virgule (ex: ancien code, ou saisie utilisateur), on
+        # ne garde que la partie avant la virgule : c'est le
+        # nom de lieu seul qui doit être varié en tirets/espaces,
+        # jamais la chaîne complète.
+        city_only = (
+            location_text
+            .split(",")[0]
+            .strip()
+        )
 
         candidates = [
-            cleaned,
-            cleaned.replace(
+            city_only,
+            city_only.replace(
                 " ",
                 "-",
             ),
-            cleaned.replace(
+            city_only.replace(
                 "-",
                 " ",
             ),
         ]
 
-        # Retire les doublons tout en gardant l'ordre.
         candidates = list(
             dict.fromkeys(
                 candidates
@@ -112,6 +138,12 @@ class WeatherService:
         self,
         location_text: str,
     ) -> tuple[float, float] | None:
+        """
+        Interroge l'API de géocodage pour UN texte donné, en
+        demandant plusieurs résultats (count=5) et en
+        choisissant en priorité celui situé au Bénin, plutôt
+        que de se fier uniquement au premier résultat renvoyé.
+        """
 
         def _call():
 
@@ -119,7 +151,7 @@ class WeatherService:
                 self.GEOCODING_URL,
                 params={
                     "name": location_text,
-                    "count": 1,
+                    "count": 5,
                     "language": "fr",
                 },
                 timeout=15,
@@ -143,7 +175,20 @@ class WeatherService:
 
             return None
 
-        best_match = results[0]
+        benin_match = next(
+            (
+                r
+                for r in results
+                if r.get("country_code")
+                == self.BENIN_COUNTRY_CODE
+            ),
+            None,
+        )
+
+        best_match = (
+            benin_match
+            or results[0]
+        )
 
         return (
             best_match["latitude"],

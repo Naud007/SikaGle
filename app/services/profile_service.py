@@ -257,9 +257,18 @@ class ProfileService:
                 WeatherService()
             )
 
+            # =========================================================
+            # CORRECTIF (30/08/2026) : ne plus concaténer le pays
+            # dans le texte de recherche — ça cassait le géocodage
+            # (ex: "Abomey calavi, Bénin" → variantes malformées).
+            # WeatherService.geocode() priorise déjà les résultats
+            # situés au Bénin en interne, sans avoir besoin qu'on
+            # le lui précise dans le texte.
+            # =========================================================
+
             coordinates = (
                 weather_service.geocode(
-                    f"{location_text}, Bénin"
+                    location_text
                 )
             )
 
