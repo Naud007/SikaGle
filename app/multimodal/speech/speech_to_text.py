@@ -48,15 +48,16 @@ français si nécessaire.
 Réponds STRICTEMENT dans ce format, sur deux lignes,
 sans rien ajouter d'autre :
 
-LANGUE: <fr, yo, fon, ou dendi>
+LANGUE: <fr, yo, fon, dendi, bariba, adja, goun, ou fulfulde>
 TEXTE: <le texte en français>
 
 Si le message est déjà en français, la ligne TEXTE contient
 simplement la transcription telle quelle.
 
-Si le message est en Yoruba, en Fon, ou en Dendi, la ligne
-TEXTE contient une traduction fidèle et naturelle en français
-du sens du message (pas une transcription phonétique).
+Si le message est dans une autre langue (Yoruba, Fon, Dendi,
+Bariba, Adja, Goun, ou Fulfuldé), la ligne TEXTE contient une
+traduction fidèle et naturelle en français du sens du message
+(pas une transcription phonétique).
 
 Ne traduis JAMAIS un nom propre, un nom de lieu, ou un nom de
 culture agricole de façon approximative : si tu n'es pas sûr
@@ -142,6 +143,10 @@ traduction.
             "yo",
             "fon",
             "dendi",
+            "bariba",
+            "adja",
+            "goun",
+            "fulfulde",
         ):
 
             language = "fr"

@@ -936,6 +936,10 @@ async def receive_webhook(
                 LANGUAGES_WITHOUT_LOCAL_VOICE = {
                     "fon",
                     "dendi",
+                    "bariba",
+                    "adja",
+                    "goun",
+                    "fulfulde",
                 }
 
                 if is_voice_message:
