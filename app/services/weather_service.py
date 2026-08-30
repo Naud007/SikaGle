@@ -58,20 +58,67 @@ class WeatherService:
     ) -> tuple[float, float] | None:
         """
         Convertit un nom de lieu (ex: "Savalou") en
-        coordonnées (latitude, longitude), en cherchant en
-        priorité au Bénin. Retourne None si rien n'est trouvé.
+        coordonnées (latitude, longitude). Retourne None si
+        rien n'est trouvé, même après plusieurs variantes.
+
+        NOTE (correctif) : l'API de géocodage Open-Meteo s'est
+        révélée sensible au trait d'union — "Abomey-Calavi"
+        fonctionne mais "Abomey Calavi" (espace) ou "Abomey
+        calavi" (minuscule, sans tiret) échoue complètement,
+        alors qu'un agriculteur tapera naturellement sa commune
+        sans se soucier de la ponctuation exacte (observé en
+        test réel le 30/08/2026). On essaie donc plusieurs
+        variantes automatiquement avant d'abandonner.
         """
 
         if not location_text or not location_text.strip():
 
             return None
 
+        cleaned = location_text.strip()
+
+        candidates = [
+            cleaned,
+            cleaned.replace(
+                " ",
+                "-",
+            ),
+            cleaned.replace(
+                "-",
+                " ",
+            ),
+        ]
+
+        # Retire les doublons tout en gardant l'ordre.
+        candidates = list(
+            dict.fromkeys(
+                candidates
+            )
+        )
+
+        for candidate in candidates:
+
+            result = self._geocode_single(
+                candidate
+            )
+
+            if result:
+
+                return result
+
+        return None
+
+    def _geocode_single(
+        self,
+        location_text: str,
+    ) -> tuple[float, float] | None:
+
         def _call():
 
             return requests.get(
                 self.GEOCODING_URL,
                 params={
-                    "name": location_text.strip(),
+                    "name": location_text,
                     "count": 1,
                     "language": "fr",
                 },
