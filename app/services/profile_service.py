@@ -13,6 +13,12 @@
 # une demande agricole urgente derrière un profil incomplet.
 # =============================================================
 
+from datetime import datetime, timezone
+
+from app.services.weather_service import (
+    WeatherService,
+)
+
 
 ONBOARDING_QUESTIONS = {
     "language": (
@@ -158,6 +164,12 @@ class ProfileService:
         collecte en cours, avance à l'étape suivante, et
         retourne le message à renvoyer (question suivante, ou
         message de fin de collecte).
+
+        NOTE (météo) : quand l'étape "location" vient d'être
+        renseignée, on géocode immédiatement cette localisation
+        et on met en cache les coordonnées (latitude/longitude)
+        dans le profil, pour ne pas avoir à regéocoder à chaque
+        message futur.
         """
 
         current_step = profile.get(
@@ -197,6 +209,13 @@ class ProfileService:
                 next_step,
         }
 
+        if current_step == "location":
+
+            self._add_geocoding(
+                update_payload,
+                answer_text.strip(),
+            )
+
         (
             self.supabase
             .table("profiles")
@@ -217,3 +236,58 @@ class ProfileService:
         return ONBOARDING_QUESTIONS[
             next_step
         ]
+
+    def _add_geocoding(
+        self,
+        update_payload: dict,
+        location_text: str,
+    ) -> None:
+        """
+        Tente de géocoder la localisation donnée et ajoute
+        latitude/longitude/location_resolved_at au payload de
+        mise à jour. En cas d'échec (lieu introuvable, API
+        indisponible), n'ajoute rien : le profil reste
+        utilisable sans météo plutôt que de bloquer la
+        collecte.
+        """
+
+        try:
+
+            weather_service = (
+                WeatherService()
+            )
+
+            coordinates = (
+                weather_service.geocode(
+                    f"{location_text}, Bénin"
+                )
+            )
+
+            if coordinates:
+
+                latitude, longitude = (
+                    coordinates
+                )
+
+                update_payload[
+                    "latitude"
+                ] = latitude
+
+                update_payload[
+                    "longitude"
+                ] = longitude
+
+                update_payload[
+                    "location_resolved_at"
+                ] = (
+                    datetime
+                    .now(timezone.utc)
+                    .isoformat()
+                )
+
+        except Exception as e:
+
+            print(
+                "⚠️ Géocodage échoué pour "
+                f'"{location_text}" : {e}'
+            )
