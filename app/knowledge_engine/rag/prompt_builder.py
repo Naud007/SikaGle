@@ -59,6 +59,7 @@ Ton et style (très important) :
         contexts: list[str],
         language: str = "fr",
         input_type: str = "text",
+        weather_context: str | None = None,
     ) -> str:
 
         language = (language or "fr").lower().strip()
@@ -165,6 +166,33 @@ La réponse doit rester courte et pratique.
         context = "\n\n".join(contexts)
 
         # =====================================================
+        # CONTEXTE MÉTÉO (optionnel)
+        #
+        # NOTE : la météo est un contexte parallèle au RAG, pas
+        # une donnée qui a influencé la recherche documentaire
+        # elle-même. Gemini décide lui-même si elle est
+        # pertinente pour répondre à la question posée (ex:
+        # "puis-je traiter aujourd'hui ?" vs "comment reconnaître
+        # la chenille légionnaire ?") — voir décision du
+        # 29/08/2026 dans la mémoire du projet.
+        # =====================================================
+
+        if weather_context:
+
+            weather_section = f"""
+======================
+MÉTÉO ACTUELLE (contexte, à utiliser seulement si pertinent
+pour la question posée)
+======================
+
+{weather_context}
+"""
+
+        else:
+
+            weather_section = ""
+
+        # =====================================================
         # PROMPT FINAL
         # =====================================================
 
@@ -192,7 +220,7 @@ CONTEXTE SCIENTIFIQUE
 ======================
 
 {context}
-
+{weather_section}
 ======================
 QUESTION
 ======================
@@ -205,5 +233,5 @@ RÉPONSE
 
 Rédige maintenant la réponse finale.
 
-Respecte strictement la langue demandée, les règles de sécurité phytosanitaire, la précision culture/problème/solution, la fiabilité des traductions, le ton humain et naturel, et les règles de formatage.
+Respecte strictement la langue demandée, les règles de sécurité phytosanitaire, la précision culture/problème/solution, la fiabilité des traductions, le ton humain et naturel, et les règles de formatage. Utilise la météo uniquement si elle est réellement utile pour répondre à la question posée.
 """

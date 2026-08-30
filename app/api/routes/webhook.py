@@ -35,6 +35,9 @@ from app.services.agricultural_assistant_service import (
 from app.services.profile_service import (
     ProfileService,
 )
+from app.services.weather_service import (
+    WeatherService,
+)
 
 
 router = APIRouter()
@@ -72,6 +75,8 @@ abena_text_to_speech = AbenaTextToSpeech()
 translation_service = TranslationService()
 
 image_analysis_service = ImageAnalysisService()
+
+weather_service = WeatherService()
 
 
 # =========================================================
@@ -222,23 +227,6 @@ async def receive_webhook(
                     "type",
                     "text",
                 )
-
-                # =================================================
-                # NOTE (correctif) :
-                #
-                # is_voice_message permet de savoir, plus loin, si
-                # la question venait d'un message vocal, pour :
-                # - transmettre input_type="audio" à
-                #   assistant.process() (formatage adapté à la voix,
-                #   sans markdown) ;
-                # - répondre en audio plutôt qu'en texte.
-                #
-                # detected_language retient la langue réellement
-                # détectée par SpeechToText (fr par défaut, ou yo/
-                # fon/dendi) pour router la réponse vers la bonne
-                # voix TTS plus loin (correctif Yoruba du
-                # 28/08/2026).
-                # =================================================
 
                 is_voice_message = (
                     msg_type
@@ -508,13 +496,6 @@ async def receive_webhook(
 
                 # =================================================
                 # PROFIL AGRICULTEUR (collecte progressive)
-                #
-                # NOTE : la collecte ne se déclenche que pour les
-                # messages TEXTE. Une photo ou un audio est
-                # toujours traité normalement, sans être bloqué
-                # par le questionnaire (décision produit du
-                # 28/08/2026 : ne jamais retarder une demande
-                # agricole urgente).
                 # =================================================
 
                 profile_service = ProfileService(
@@ -596,6 +577,60 @@ async def receive_webhook(
                     )
 
                     continue
+
+                # =================================================
+                # MÉTÉO (contexte optionnel)
+                #
+                # NOTE (29/08/2026) : si le profil de l'agriculteur
+                # a des coordonnées géocodées, on récupère
+                # systématiquement la météo actuelle et on la
+                # transmet comme contexte à assistant.process().
+                # C'est Gemini qui décide ensuite si elle est
+                # pertinente pour répondre à la question posée,
+                # plutôt qu'une détection de mots-clés fragile
+                # côté webhook.
+                # =================================================
+
+                weather_context_text = None
+
+                profile_latitude = profile.get(
+                    "latitude"
+                )
+
+                profile_longitude = profile.get(
+                    "longitude"
+                )
+
+                if (
+                    profile_latitude is not None
+                    and profile_longitude is not None
+                ):
+
+                    try:
+
+                        weather_data = (
+                            weather_service
+                            .get_current_weather(
+                                profile_latitude,
+                                profile_longitude,
+                            )
+                        )
+
+                        if weather_data:
+
+                            weather_context_text = (
+                                weather_service
+                                .to_context_text(
+                                    weather_data
+                                )
+                            )
+
+                    except Exception as e:
+
+                        print(
+                            "⚠️ Récupération météo "
+                            f"échouée : {e}"
+                        )
 
                 # =================================================
                 # DÉCRÉMENT DU CRÉDIT
@@ -889,6 +924,9 @@ async def receive_webhook(
                             if is_voice_message
                             else "text"
                         ),
+                        weather_context=(
+                            weather_context_text
+                        ),
                     )
 
                 except Exception as e:
@@ -906,32 +944,9 @@ async def receive_webhook(
 
                 # =================================================
                 # RÉPONSE WHATSAPP
-                #
-                # NOTE (correctif Yoruba du 28/08/2026) :
-                #
-                # Si la question venait d'un message vocal en une
-                # langue locale supportée par Abena AI (Yoruba
-                # pour l'instant), on traduit la réponse française
-                # vers cette langue puis on synthétise l'audio via
-                # Abena AI, au lieu du TTS français habituel. Sinon
-                # (français), comportement inchangé (Gemini TTS).
                 # =================================================
 
                 sent_as_audio = False
-
-                # =====================================================
-                # LANGUES SANS VOIX ENCORE DISPONIBLE (Fon, Dendi) :
-                #
-                # SikaGlé a compris la question (transcription +
-                # traduction déjà gérées par SpeechToText), mais
-                # aucune voix locale n'existe encore pour ces
-                # langues (voir recherche approfondie du 28/08/2026
-                # : aucune solution TTS Fon commercialement
-                # exploitable trouvée à ce jour). On répond donc en
-                # français, avec un message clair pour que
-                # l'agriculteur comprenne que sa langue a bien été
-                # reconnue, plutôt qu'un silence sur ce point.
-                # =====================================================
 
                 LANGUAGES_WITHOUT_LOCAL_VOICE = {
                     "fon",

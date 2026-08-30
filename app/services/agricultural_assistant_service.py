@@ -72,6 +72,7 @@ class AgriculturalAssistantService:
         message: str,
         language: str = "fr",
         input_type: str = "text",
+        weather_context: str | None = None,
     ) -> str:
 
         # =====================================================
@@ -128,23 +129,31 @@ class AgriculturalAssistantService:
         # Il ne faut donc PAS appeler Gemini une deuxième fois
         # ici.
         #
-        # NOTE (correctif performance) :
+        # NOTE (correctif bug du 29/08/2026) :
         #
-        # top_k a été réduit de 20 à 8 : un prompt Gemini
-        # construit à partir de 20 passages complets atteignait
-        # ~60 000 caractères, ce qui provoquait des temps de
-        # génération de 10 à 70 secondes et un risque accru
-        # d'erreurs 429 (quota Gemini). Réduire à 8 passages
-        # garde largement assez de contexte pertinent (les
-        # résultats sont déjà classés par pertinence par
-        # SearchEngine.merge()) tout en réduisant fortement
-        # la taille du prompt.
+        # input_type était reçu en paramètre de process() mais
+        # n'était jamais transmis à self.knowledge.ask() : les
+        # règles de formatage spécifiques à l'audio (pas de
+        # Markdown, phrases naturelles) dans prompt_builder.py
+        # ne se déclenchaient donc jamais, même pour une
+        # question posée en vocal. Corrigé ci-dessous.
+        #
+        # NOTE (météo, 29/08/2026) :
+        #
+        # weather_context est un contexte optionnel, préparé en
+        # amont par webhook.py à partir du profil de
+        # l'agriculteur (coordonnées géocodées). Il est transmis
+        # tel quel jusqu'au prompt final ; c'est Gemini qui
+        # décide si la météo est pertinente pour la question
+        # posée.
         #
 
         rag_result = self.knowledge.ask(
             question=message,
             top_k=15,
             language=language,
+            input_type=input_type,
+            weather_context=weather_context,
         )
 
         # =====================================================

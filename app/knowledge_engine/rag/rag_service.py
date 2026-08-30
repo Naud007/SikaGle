@@ -35,6 +35,7 @@ class RAGService:
         input_type: str = "text",
         publication_type: str | None = None,
         publication_year: int | None = None,
+        weather_context: str | None = None,
     ) -> dict:
 
         search_query = SearchQuery(
@@ -115,6 +116,7 @@ class RAGService:
             contexts=contexts,
             language=language,
             input_type=input_type,
+            weather_context=weather_context,
         )
 
         print(

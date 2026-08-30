@@ -239,7 +239,8 @@ class ResponseGenerator:
             "\n* ",
             text,
         )
-                # -----------------------------------------------------
+
+        # -----------------------------------------------------
         # Réparer les astérisques Markdown mal fermés
         # -----------------------------------------------------
 
@@ -283,6 +284,7 @@ class ResponseGenerator:
         contexts: list[str],
         language: str = "fr",
         input_type: str = "text",
+        weather_context: str | None = None,
     ) -> str:
 
         # -----------------------------------------------------
@@ -294,6 +296,7 @@ class ResponseGenerator:
             contexts=contexts,
             language=language,
             input_type=input_type,
+            weather_context=weather_context,
         )
 
         # -----------------------------------------------------

@@ -162,6 +162,7 @@ class KnowledgeService:
         input_type: str = "text",
         publication_type: str | None = None,
         publication_year: int | None = None,
+        weather_context: str | None = None,
     ) -> dict:
 
         return self.rag.ask(
@@ -172,4 +173,5 @@ class KnowledgeService:
             input_type=input_type,
             publication_type=publication_type,
             publication_year=publication_year,
+            weather_context=weather_context,
         )
