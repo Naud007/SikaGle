@@ -601,6 +601,12 @@ async def receive_webhook(
                     "longitude"
                 )
 
+                print(
+                    "🌦️ Coordonnées du profil : "
+                    f"lat={profile_latitude}, "
+                    f"lon={profile_longitude}"
+                )
+
                 if (
                     profile_latitude is not None
                     and profile_longitude is not None
@@ -623,6 +629,20 @@ async def receive_webhook(
                                 .to_context_text(
                                     weather_data
                                 )
+                            )
+
+                            print(
+                                "🌦️ Contexte météo "
+                                "récupéré :",
+                                weather_context_text,
+                            )
+
+                        else:
+
+                            print(
+                                "🌦️ Météo indisponible "
+                                "(get_current_weather a "
+                                "retourné None)."
                             )
 
                     except Exception as e:
