@@ -4,6 +4,9 @@ from datetime import datetime, timezone
 
 from supabase import create_client, Client
 
+from app.knowledge_engine.connectors.dataverse_license_checker import (
+    DataverseLicenseChecker,
+)
 from app.knowledge_engine.connectors.registry import registry
 from app.knowledge_engine.storage.rag_ingestion import (
     RAGIngestion,
@@ -36,12 +39,38 @@ class OAIIngestionWorker:
 
     CACHE_BUCKET = "oai-cache"
 
+    # =========================================================
+    # SOURCES NÉCESSITANT UNE VÉRIFICATION DE LICENCE
+    # PAR DOCUMENT (31/08/2026)
+    #
+    # AfricaRice n'y figure PAS : son dépôt entier est en CC0
+    # (vérifié une fois pour toutes), donc inutile de faire un
+    # appel réseau supplémentaire par document.
+    #
+    # IRRI, Bioversity/CIAT, CIFOR (et toute future source
+    # Harvard Dataverse dont la licence n'est pas garantie en
+    # bloc) doivent être ajoutées ici pour activer le filtrage.
+    # =========================================================
+
+    SOURCES_REQUIRING_LICENSE_CHECK = {
+        "irri",
+        "bioversity",
+        "cifor",
+    }
+
     def __init__(
         self,
         source: str,
     ):
 
         self.source = source
+
+        self.license_checker = (
+            DataverseLicenseChecker()
+            if source
+            in self.SOURCES_REQUIRING_LICENSE_CHECK
+            else None
+        )
 
         # =====================================================
         # CONFIGURATION SUPABASE
@@ -428,6 +457,58 @@ class OAIIngestionWorker:
             document_offset + rag_limit
         ]
 
+        # =====================================================
+        # FILTRAGE PAR LICENCE (si nécessaire pour cette source)
+        #
+        # NOTE (31/08/2026) : contrairement à AfricaRice (CC0
+        # garanti pour tout le dépôt), certaines sources
+        # Harvard Dataverse ont des licences choisies document
+        # par document. On vérifie ici la licence réelle de
+        # chaque document via l'API native Dataverse (coûte un
+        # appel réseau par document, mais gratuit), et on
+        # exclut tout document dont la licence n'est pas
+        # clairement permissive (CC0/CC-BY) — y compris quand
+        # elle n'a pas pu être déterminée du tout, par
+        # prudence.
+        # =====================================================
+
+        licensed_out_count = 0
+
+        if self.license_checker:
+
+            filtered_batch = []
+
+            for document in batch:
+
+                identifier = document.get(
+                    "identifier"
+                )
+
+                is_permissive = (
+                    self.license_checker
+                    .is_license_permissive(
+                        identifier
+                    )
+                )
+
+                if is_permissive:
+
+                    filtered_batch.append(
+                        document
+                    )
+
+                else:
+
+                    licensed_out_count += 1
+
+                    print(
+                        "[LICENSE FILTER] Document "
+                        "exclu (licence non permissive "
+                        f"ou inconnue) : {identifier}"
+                    )
+
+            batch = filtered_batch
+
         ingestion = RAGIngestion()
 
         rag_result = (
@@ -496,6 +577,7 @@ class OAIIngestionWorker:
             "filtered_out": rag_result.get(
                 "filtered_out", 0
             ),
+            "licensed_out": licensed_out_count,
             "skipped": rag_result.get(
                 "skipped", 0
             ),
