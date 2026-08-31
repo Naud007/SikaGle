@@ -50,8 +50,7 @@ from app.services.weather_service import (
 # coupés). datetime.fromisoformat() de Python 3.10 est
 # strict et rejette ce format avec "Invalid isoformat
 # string", ce qui faisait planter le traitement de N'IMPORTE
-# QUEL message WhatsApp de façon imprévisible (observé en
-# production sur un vrai message vocal). Cette fonction
+# QUEL message WhatsApp de façon imprévisible. Cette fonction
 # normalise la précision des microsecondes à exactement 6
 # chiffres avant de parser, quel que soit le nombre de
 # chiffres reçu.
@@ -88,6 +87,121 @@ def _normalize_and_parse_timestamp(
     return datetime.fromisoformat(
         normalized
     )
+
+
+# =========================================================
+# CORRECTIF (31/08/2026) :
+#
+# Traduction + synthèse vocale + envoi WhatsApp, regroupés
+# dans une fonction SYNCHRONE à part, pour pouvoir être
+# exécutée via asyncio.to_thread() depuis le webhook async.
+# Ce bloc était auparavant exécuté directement dans
+# receive_webhook (async def), sans protection — exactement
+# le même problème qu'on avait déjà corrigé pour
+# assistant.process() au tout début du projet (event loop
+# bloqué, /health ne répond plus, Render tue et redémarre
+# l'instance en pleine génération). Observé en production
+# réelle : un message vocal en Fon a fait planter le serveur
+# pendant l'étape de synthèse audio, la réponse n'est jamais
+# arrivée à l'agriculteur.
+# =========================================================
+
+def _synthesize_and_send_audio(
+    sender_phone: str,
+    answer: str,
+    detected_language: str,
+) -> bool:
+
+    LANGUAGES_WITHOUT_LOCAL_VOICE = {
+        "fon",
+        "dendi",
+        "bariba",
+        "adja",
+        "goun",
+        "fulfulde",
+    }
+
+    sent_as_audio = False
+
+    try:
+
+        if (
+            detected_language
+            in AbenaTextToSpeech.VOICE_BY_LANGUAGE
+        ):
+
+            translated_answer = (
+                translation_service
+                .translate_from_french(
+                    answer,
+                    detected_language,
+                )
+            )
+
+            print(
+                "🌍 Réponse traduite "
+                f"({detected_language}) :",
+                translated_answer,
+            )
+
+            speech = (
+                abena_text_to_speech.synthesize(
+                    text=translated_answer,
+                    language=detected_language,
+                )
+            )
+
+        elif (
+            detected_language
+            in LANGUAGES_WITHOUT_LOCAL_VOICE
+        ):
+
+            answer_with_notice = (
+                "J'ai bien compris votre "
+                "question. Je n'ai pas encore "
+                "de voix dans votre langue, "
+                "je vous réponds donc en "
+                "français pour l'instant.\n\n"
+                + answer
+            )
+
+            speech = (
+                text_to_speech.synthesize(
+                    text=answer_with_notice,
+                    language="fr",
+                )
+            )
+
+        else:
+
+            speech = (
+                text_to_speech.synthesize(
+                    text=answer,
+                    language="fr",
+                )
+            )
+
+        sent_as_audio = (
+            send_whatsapp_audio_message(
+                sender_phone,
+                speech.audio_path,
+            )
+        )
+
+        Path(
+            speech.audio_path
+        ).unlink(
+            missing_ok=True
+        )
+
+    except Exception as e:
+
+        print(
+            "❌ Erreur génération/envoi "
+            f"audio SikaGlé : {e}"
+        )
+
+    return sent_as_audio
 
 
 router = APIRouter()
@@ -1001,98 +1115,27 @@ async def receive_webhook(
 
                 # =================================================
                 # RÉPONSE WHATSAPP
+                #
+                # NOTE (correctif 31/08/2026) : la traduction +
+                # synthèse vocale + envoi audio est maintenant
+                # exécutée via asyncio.to_thread() (fonction
+                # _synthesize_and_send_audio définie plus haut),
+                # pour ne plus bloquer l'event loop pendant cette
+                # étape potentiellement longue.
                 # =================================================
 
                 sent_as_audio = False
 
-                LANGUAGES_WITHOUT_LOCAL_VOICE = {
-                    "fon",
-                    "dendi",
-                    "bariba",
-                    "adja",
-                    "goun",
-                    "fulfulde",
-                }
-
                 if is_voice_message:
 
-                    try:
-
-                        if (
-                            detected_language
-                            in AbenaTextToSpeech.VOICE_BY_LANGUAGE
-                        ):
-
-                            translated_answer = (
-                                translation_service
-                                .translate_from_french(
-                                    answer,
-                                    detected_language,
-                                )
-                            )
-
-                            print(
-                                "🌍 Réponse traduite "
-                                f"({detected_language}) :",
-                                translated_answer,
-                            )
-
-                            speech = (
-                                abena_text_to_speech.synthesize(
-                                    text=translated_answer,
-                                    language=detected_language,
-                                )
-                            )
-
-                        elif (
-                            detected_language
-                            in LANGUAGES_WITHOUT_LOCAL_VOICE
-                        ):
-
-                            answer_with_notice = (
-                                "J'ai bien compris votre "
-                                "question. Je n'ai pas encore "
-                                "de voix dans votre langue, "
-                                "je vous réponds donc en "
-                                "français pour l'instant.\n\n"
-                                + answer
-                            )
-
-                            speech = (
-                                text_to_speech.synthesize(
-                                    text=answer_with_notice,
-                                    language="fr",
-                                )
-                            )
-
-                        else:
-
-                            speech = (
-                                text_to_speech.synthesize(
-                                    text=answer,
-                                    language="fr",
-                                )
-                            )
-
-                        sent_as_audio = (
-                            send_whatsapp_audio_message(
-                                sender_phone,
-                                speech.audio_path,
-                            )
+                    sent_as_audio = (
+                        await asyncio.to_thread(
+                            _synthesize_and_send_audio,
+                            sender_phone,
+                            answer,
+                            detected_language,
                         )
-
-                        Path(
-                            speech.audio_path
-                        ).unlink(
-                            missing_ok=True
-                        )
-
-                    except Exception as e:
-
-                        print(
-                            "❌ Erreur génération/envoi "
-                            f"audio SikaGlé : {e}"
-                        )
+                    )
 
                 if not sent_as_audio:
 
