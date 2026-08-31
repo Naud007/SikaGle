@@ -118,17 +118,10 @@ class FAOIngestionWorker:
         réutiliser un dataset déjà téléchargé (jusqu'à
         plusieurs dizaines de Mo) plutôt que de le retélécharger
         et le reparser en entier à CHAQUE batch de 30 secondes.
-        Sans ce cache, le worker crashait régulièrement sur
-        Render (status 137 = tué par manque de mémoire), un même
-        dataset de ~18 Mo étant retéléchargé des centaines de
-        fois avant d'être épuisé (batches de 10 documents sur
-        des datasets qui en contiennent parfois plusieurs
-        milliers).
 
         Passer explicitement None pour ces trois paramètres
         signifie "vider le cache" (dataset terminé, plus besoin
-        de le garder) ; ne pas les passer du tout (comportement
-        par défaut) laisse le cache existant inchangé.
+        de le garder).
         """
 
         update_payload = {
@@ -150,26 +143,16 @@ class FAOIngestionWorker:
 
             "last_error":
                 last_error,
+
+            "cached_dataset_url":
+                cached_dataset_url,
+
+            "cached_dataset_filename":
+                cached_dataset_filename,
+
+            "cached_dataset_content":
+                cached_dataset_content,
         }
-
-        if cached_dataset_url is not None or (
-            cached_dataset_url is None
-            and cached_dataset_content is None
-            and "cached_dataset_url"
-            in locals()
-        ):
-
-            update_payload[
-                "cached_dataset_url"
-            ] = cached_dataset_url
-
-            update_payload[
-                "cached_dataset_filename"
-            ] = cached_dataset_filename
-
-            update_payload[
-                "cached_dataset_content"
-            ] = cached_dataset_content
 
         (
             self.supabase
@@ -255,10 +238,6 @@ class FAOIngestionWorker:
 
         # =====================================================
         # RÉUTILISATION DU CACHE
-        #
-        # Si le dataset demandé est déjà celui stocké en cache
-        # (même URL), on réutilise son contenu au lieu de le
-        # retélécharger. C'est le cœur du correctif mémoire.
         # =====================================================
 
         cached_url = state.get(
@@ -403,6 +382,18 @@ class FAOIngestionWorker:
 
     # =========================================================
     # PARSER UN DATASET
+    #
+    # NOTE (correctif mémoire, 31/08/2026) :
+    #
+    # FAODatasetParser supporte offset/limit nativement (pensé
+    # exactement pour ce cas), mais ces paramètres n'étaient
+    # jamais transmis ici auparavant. Résultat : chaque batch
+    # parsait l'INTÉGRALITÉ du dataset (potentiellement
+    # plusieurs milliers d'enregistrements) et construisait un
+    # objet DocumentMetadata complet pour chacun, avant de n'en
+    # utiliser que quelques-uns (rag_limit) — c'était la vraie
+    # cause des crashs mémoire (status 137), bien plus que le
+    # téléchargement (déjà corrigé séparément par le cache).
     # =========================================================
 
     def parse_dataset(
@@ -410,6 +401,8 @@ class FAOIngestionWorker:
         xml_content,
         filename,
         source_url,
+        offset=0,
+        limit=None,
     ):
 
         parser = FAODatasetParser()
@@ -418,6 +411,8 @@ class FAOIngestionWorker:
             xml_content=xml_content,
             filename=filename,
             source_url=source_url,
+            offset=offset,
+            limit=limit,
         )
 
     # =========================================================
@@ -447,6 +442,8 @@ class FAOIngestionWorker:
             xml_content=xml_content,
             filename=filename,
             source_url=dataset_url,
+            offset=document_offset,
+            limit=rag_limit,
         )
 
         documents_count = len(
@@ -454,7 +451,8 @@ class FAOIngestionWorker:
         )
 
         # =====================================================
-        # DATASET VIDE
+        # DATASET VIDE OU TERMINÉ (moins de documents que
+        # rag_limit renvoyés = fin du dataset atteinte)
         # =====================================================
 
         if documents_count == 0:
@@ -501,6 +499,13 @@ class FAOIngestionWorker:
 
         # =====================================================
         # INGESTION RAG
+        #
+        # NOTE : le parseur a déjà limité les documents à
+        # rag_limit via son propre paramètre "limit" — on
+        # transmet donc ici la totalité de ce qui a été
+        # parsé, sans reappliquer de limite côté RAGIngestion
+        # (offset=0 puisque documents ne contient déjà QUE le
+        # sous-ensemble voulu, pas tout le dataset).
         # =====================================================
 
         ingestion = RAGIngestion()
@@ -509,7 +514,7 @@ class FAOIngestionWorker:
             ingestion.ingest_documents(
                 documents=documents,
                 limit=rag_limit,
-                offset=document_offset,
+                offset=0,
             )
         )
 
@@ -553,19 +558,25 @@ class FAOIngestionWorker:
             or 0
         )
 
-        next_offset = int(
-            rag_result.get(
-                "next_offset",
-                document_offset,
-            )
-            or document_offset
+        # =====================================================
+        # NOUVEL OFFSET
+        #
+        # NOTE : comme le parseur applique déjà offset/limit,
+        # le prochain offset à utiliser est simplement
+        # document_offset + le nombre de documents PARSÉS
+        # (documents_count), pas une valeur renvoyée par
+        # RAGIngestion (qui ne connaît plus l'offset global
+        # du dataset, seulement le sous-ensemble reçu).
+        # =====================================================
+
+        next_offset = (
+            document_offset
+            + documents_count
         )
 
-        has_more = bool(
-            rag_result.get(
-                "has_more",
-                False,
-            )
+        has_more = (
+            documents_count
+            >= rag_limit
         )
 
         return {
@@ -813,8 +824,6 @@ class FAOIngestionWorker:
             document_offset
         )
 
-        # Contenu à mettre en cache pour le prochain appel
-        # (None = vider le cache, dataset terminé)
         next_cached_url = None
         next_cached_filename = None
         next_cached_content_b64 = None
@@ -987,9 +996,6 @@ class FAOIngestionWorker:
                     current_document_offset
                 )
 
-                # En cas d'erreur, on vide le cache par
-                # précaution plutôt que de garder un état
-                # potentiellement incohérent.
                 next_cached_url = None
                 next_cached_filename = None
                 next_cached_content_b64 = None
