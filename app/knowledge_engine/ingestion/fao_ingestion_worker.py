@@ -1,4 +1,3 @@
-import base64
 import os
 from pathlib import Path
 
@@ -26,6 +25,25 @@ class FAOIngestionWorker:
     PIPELINE_NAME = "fao_agris"
 
     MAX_DATASET_LIMIT = 5
+
+    # =========================================================
+    # CACHE DE DATASET (Supabase Storage)
+    #
+    # NOTE (correctif, 31/08/2026) :
+    #
+    # Le dataset en cours (jusqu'à ~18 Mo de XML) était d'abord
+    # stocké encodé en base64 dans une colonne texte de
+    # fao_ingestion_state — ça déclenchait un nouveau problème :
+    # "canceling statement due to statement timeout" à chaque
+    # écriture, PostgreSQL n'étant pas fait pour des colonnes
+    # texte de cette taille. On utilise donc Supabase Storage
+    # (un vrai stockage de fichiers), avec seulement le CHEMIN
+    # du fichier gardé dans fao_ingestion_state.
+    # =========================================================
+
+    CACHE_BUCKET = "fao-cache"
+
+    CACHE_FILE_PATH = "current-dataset.xml"
 
     def __init__(self):
 
@@ -109,19 +127,12 @@ class FAOIngestionWorker:
         last_error=None,
         cached_dataset_url=None,
         cached_dataset_filename=None,
-        cached_dataset_content=None,
     ):
         """
-        NOTE (correctif mémoire, 31/08/2026) :
-
-        cached_dataset_url/filename/content permettent de
-        réutiliser un dataset déjà téléchargé (jusqu'à
-        plusieurs dizaines de Mo) plutôt que de le retélécharger
-        et le reparser en entier à CHAQUE batch de 30 secondes.
-
-        Passer explicitement None pour ces trois paramètres
-        signifie "vider le cache" (dataset terminé, plus besoin
-        de le garder).
+        NOTE : ne stocke plus que l'URL/nom du dataset en
+        cache (texte court) — le contenu lui-même vit dans
+        Supabase Storage, écrit/lu séparément via
+        _write_cache_file()/_read_cache_file().
         """
 
         update_payload = {
@@ -149,9 +160,6 @@ class FAOIngestionWorker:
 
             "cached_dataset_filename":
                 cached_dataset_filename,
-
-            "cached_dataset_content":
-                cached_dataset_content,
         }
 
         (
@@ -166,6 +174,96 @@ class FAOIngestionWorker:
             )
             .execute()
         )
+
+    # =========================================================
+    # CACHE FICHIER (Supabase Storage)
+    # =========================================================
+
+    def _write_cache_file(
+        self,
+        content: bytes,
+    ) -> None:
+
+        # Supabase Storage n'a pas d'upsert simple sur tous les
+        # SDK : on supprime d'abord si présent, puis on upload.
+
+        try:
+
+            (
+                self.supabase
+                .storage
+                .from_(
+                    self.CACHE_BUCKET
+                )
+                .remove(
+                    [self.CACHE_FILE_PATH]
+                )
+            )
+
+        except Exception:
+
+            # Le fichier n'existait peut-être pas encore,
+            # ce n'est pas une erreur bloquante.
+            pass
+
+        (
+            self.supabase
+            .storage
+            .from_(
+                self.CACHE_BUCKET
+            )
+            .upload(
+                self.CACHE_FILE_PATH,
+                content,
+            )
+        )
+
+    def _read_cache_file(
+        self,
+    ) -> bytes | None:
+
+        try:
+
+            return (
+                self.supabase
+                .storage
+                .from_(
+                    self.CACHE_BUCKET
+                )
+                .download(
+                    self.CACHE_FILE_PATH
+                )
+            )
+
+        except Exception as e:
+
+            print(
+                "[FAO CACHE] Lecture du "
+                f"cache impossible : {e}"
+            )
+
+            return None
+
+    def _clear_cache_file(
+        self,
+    ) -> None:
+
+        try:
+
+            (
+                self.supabase
+                .storage
+                .from_(
+                    self.CACHE_BUCKET
+                )
+                .remove(
+                    [self.CACHE_FILE_PATH]
+                )
+            )
+
+        except Exception:
+
+            pass
 
     # =========================================================
     # TÉLÉCHARGER + PARSER LE CATALOGUE AGRIS
@@ -222,7 +320,7 @@ class FAOIngestionWorker:
         }
 
     # =========================================================
-    # TÉLÉCHARGER UN DATASET (avec cache)
+    # TÉLÉCHARGER UN DATASET (avec cache Supabase Storage)
     # =========================================================
 
     def download_dataset(
@@ -244,38 +342,33 @@ class FAOIngestionWorker:
             "cached_dataset_url"
         )
 
-        cached_content_b64 = state.get(
-            "cached_dataset_content"
-        )
+        if cached_url == dataset_url:
 
-        if (
-            cached_url == dataset_url
-            and cached_content_b64
-        ):
-
-            print(
-                "[FAO CACHE] Réutilisation du "
-                f"dataset déjà téléchargé : {dataset_url}"
+            cached_content = (
+                self._read_cache_file()
             )
 
-            xml_content = base64.b64decode(
-                cached_content_b64
-            )
+            if cached_content:
 
-            actual_filename = state.get(
-                "cached_dataset_filename"
-            ) or (
-                dataset_url
-                .rstrip("/")
-                .split("/")[-1]
-            )
+                print(
+                    "[FAO CACHE] Réutilisation du "
+                    f"dataset déjà téléchargé : {dataset_url}"
+                )
 
-            return {
-                "url": dataset_url,
-                "filename": actual_filename,
-                "content": xml_content,
-                "from_cache": True,
-            }
+                actual_filename = state.get(
+                    "cached_dataset_filename"
+                ) or (
+                    dataset_url
+                    .rstrip("/")
+                    .split("/")[-1]
+                )
+
+                return {
+                    "url": dataset_url,
+                    "filename": actual_filename,
+                    "content": cached_content,
+                    "from_cache": True,
+                }
 
         # =====================================================
         # TÉLÉCHARGEMENT RÉEL
@@ -382,18 +475,6 @@ class FAOIngestionWorker:
 
     # =========================================================
     # PARSER UN DATASET
-    #
-    # NOTE (correctif mémoire, 31/08/2026) :
-    #
-    # FAODatasetParser supporte offset/limit nativement (pensé
-    # exactement pour ce cas), mais ces paramètres n'étaient
-    # jamais transmis ici auparavant. Résultat : chaque batch
-    # parsait l'INTÉGRALITÉ du dataset (potentiellement
-    # plusieurs milliers d'enregistrements) et construisait un
-    # objet DocumentMetadata complet pour chacun, avant de n'en
-    # utiliser que quelques-uns (rag_limit) — c'était la vraie
-    # cause des crashs mémoire (status 137), bien plus que le
-    # téléchargement (déjà corrigé séparément par le cache).
     # =========================================================
 
     def parse_dataset(
@@ -451,8 +532,7 @@ class FAOIngestionWorker:
         )
 
         # =====================================================
-        # DATASET VIDE OU TERMINÉ (moins de documents que
-        # rag_limit renvoyés = fin du dataset atteinte)
+        # DATASET VIDE OU TERMINÉ
         # =====================================================
 
         if documents_count == 0:
@@ -499,13 +579,6 @@ class FAOIngestionWorker:
 
         # =====================================================
         # INGESTION RAG
-        #
-        # NOTE : le parseur a déjà limité les documents à
-        # rag_limit via son propre paramètre "limit" — on
-        # transmet donc ici la totalité de ce qui a été
-        # parsé, sans reappliquer de limite côté RAGIngestion
-        # (offset=0 puisque documents ne contient déjà QUE le
-        # sous-ensemble voulu, pas tout le dataset).
         # =====================================================
 
         ingestion = RAGIngestion()
@@ -557,17 +630,6 @@ class FAOIngestionWorker:
             )
             or 0
         )
-
-        # =====================================================
-        # NOUVEL OFFSET
-        #
-        # NOTE : comme le parseur applique déjà offset/limit,
-        # le prochain offset à utiliser est simplement
-        # document_offset + le nombre de documents PARSÉS
-        # (documents_count), pas une valeur renvoyée par
-        # RAGIngestion (qui ne connaît plus l'offset global
-        # du dataset, seulement le sous-ensemble reçu).
-        # =====================================================
 
         next_offset = (
             document_offset
@@ -749,6 +811,8 @@ class FAOIngestionWorker:
 
         if dataset_offset >= total_datasets:
 
+            self._clear_cache_file()
+
             self.save_state(
                 dataset_offset=dataset_offset,
                 document_offset=document_offset,
@@ -762,7 +826,6 @@ class FAOIngestionWorker:
                 last_error=None,
                 cached_dataset_url=None,
                 cached_dataset_filename=None,
-                cached_dataset_content=None,
             )
 
             return {
@@ -826,7 +889,10 @@ class FAOIngestionWorker:
 
         next_cached_url = None
         next_cached_filename = None
-        next_cached_content_b64 = None
+
+        # Contenu à écrire dans le cache fichier APRÈS avoir
+        # sauvegardé l'état SQL (voir plus bas pourquoi).
+        content_to_cache = None
 
         # =====================================================
         # TRAITEMENT
@@ -957,12 +1023,8 @@ class FAOIngestionWorker:
                             )
                         )
 
-                        next_cached_content_b64 = (
-                            base64.b64encode(
-                                dataset_content
-                            ).decode(
-                                "ascii"
-                            )
+                        content_to_cache = (
+                            dataset_content
                         )
 
                     break
@@ -981,7 +1043,8 @@ class FAOIngestionWorker:
 
                 next_cached_url = None
                 next_cached_filename = None
-                next_cached_content_b64 = None
+
+                self._clear_cache_file()
 
             except Exception as exc:
 
@@ -998,7 +1061,8 @@ class FAOIngestionWorker:
 
                 next_cached_url = None
                 next_cached_filename = None
-                next_cached_content_b64 = None
+
+                self._clear_cache_file()
 
                 datasets_results.append({
 
@@ -1053,7 +1117,27 @@ class FAOIngestionWorker:
                 )
 
         # =====================================================
-        # SAUVEGARDE
+        # ÉCRITURE DU CACHE FICHIER
+        #
+        # NOTE : uniquement si le dataset qui vient d'être
+        # téléchargé (pas celui déjà en cache) doit être
+        # conservé pour le prochain cycle.
+        # =====================================================
+
+        if (
+            content_to_cache is not None
+            and next_cached_url
+            != state.get(
+                "cached_dataset_url"
+            )
+        ):
+
+            self._write_cache_file(
+                content_to_cache
+            )
+
+        # =====================================================
+        # SAUVEGARDE DE L'ÉTAT (SQL, léger désormais)
         # =====================================================
 
         self.save_state(
@@ -1069,7 +1153,6 @@ class FAOIngestionWorker:
             last_error=last_error,
             cached_dataset_url=next_cached_url,
             cached_dataset_filename=next_cached_filename,
-            cached_dataset_content=next_cached_content_b64,
         )
 
         # =====================================================
