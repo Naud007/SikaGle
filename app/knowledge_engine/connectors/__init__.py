@@ -2,6 +2,9 @@ from .base import BaseConnector
 from .brab import BRABConnector
 from .fao import FAOConnector
 from .africarice import AfricaRiceConnector
+from .irri import IRRIConnector
+from .bioversity import BioversityConnector
+from .cifor import CIFORConnector
 from .registry import registry
 
 registry.register(
@@ -16,11 +19,26 @@ registry.register(
     "africarice",
     AfricaRiceConnector,
 )
+registry.register(
+    "irri",
+    IRRIConnector,
+)
+registry.register(
+    "bioversity",
+    BioversityConnector,
+)
+registry.register(
+    "cifor",
+    CIFORConnector,
+)
 
 __all__ = [
     "BaseConnector",
     "FAOConnector",
     "BRABConnector",
     "AfricaRiceConnector",
+    "IRRIConnector",
+    "BioversityConnector",
+    "CIFORConnector",
     "registry",
 ]
