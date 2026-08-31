@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import tempfile
 from datetime import date, datetime
 from pathlib import Path
@@ -38,6 +39,55 @@ from app.services.profile_service import (
 from app.services.weather_service import (
     WeatherService,
 )
+
+
+# =========================================================
+# CORRECTIF (31/08/2026) :
+#
+# Supabase/PostgreSQL renvoie parfois des timestamps avec un
+# nombre de chiffres après la virgule différent de 3 ou 6
+# (ex: ".52269", 5 chiffres, car les zéros de fin sont
+# coupés). datetime.fromisoformat() de Python 3.10 est
+# strict et rejette ce format avec "Invalid isoformat
+# string", ce qui faisait planter le traitement de N'IMPORTE
+# QUEL message WhatsApp de façon imprévisible (observé en
+# production sur un vrai message vocal). Cette fonction
+# normalise la précision des microsecondes à exactement 6
+# chiffres avant de parser, quel que soit le nombre de
+# chiffres reçu.
+# =========================================================
+
+def _normalize_and_parse_timestamp(
+    timestamp_str: str,
+) -> datetime:
+
+    normalized = timestamp_str.replace(
+        "Z",
+        "+00:00",
+    )
+
+    def _pad_microseconds(
+        match: re.Match,
+    ) -> str:
+
+        digits = match.group(1)
+
+        padded = (
+            digits[:6]
+            .ljust(6, "0")
+        )
+
+        return f".{padded}"
+
+    normalized = re.sub(
+        r"\.(\d+)",
+        _pad_microseconds,
+        normalized,
+    )
+
+    return datetime.fromisoformat(
+        normalized
+    )
 
 
 router = APIRouter()
@@ -381,12 +431,8 @@ async def receive_webhook(
                     if created_at_str:
 
                         created_at_dt = (
-                            datetime
-                            .fromisoformat(
-                                created_at_str.replace(
-                                    "Z",
-                                    "+00:00",
-                                )
+                            _normalize_and_parse_timestamp(
+                                created_at_str
                             )
                             .date()
                         )
@@ -580,15 +626,6 @@ async def receive_webhook(
 
                 # =================================================
                 # MÉTÉO (contexte optionnel)
-                #
-                # NOTE (29/08/2026) : si le profil de l'agriculteur
-                # a des coordonnées géocodées, on récupère
-                # systématiquement la météo actuelle et on la
-                # transmet comme contexte à assistant.process().
-                # C'est Gemini qui décide ensuite si elle est
-                # pertinente pour répondre à la question posée,
-                # plutôt qu'une détection de mots-clés fragile
-                # côté webhook.
                 # =================================================
 
                 weather_context_text = None
