@@ -1,3 +1,4 @@
+import base64
 import os
 from pathlib import Path
 
@@ -106,34 +107,76 @@ class FAOIngestionWorker:
         datasets_completed,
         status,
         last_error=None,
+        cached_dataset_url=None,
+        cached_dataset_filename=None,
+        cached_dataset_content=None,
     ):
+        """
+        NOTE (correctif mémoire, 31/08/2026) :
+
+        cached_dataset_url/filename/content permettent de
+        réutiliser un dataset déjà téléchargé (jusqu'à
+        plusieurs dizaines de Mo) plutôt que de le retélécharger
+        et le reparser en entier à CHAQUE batch de 30 secondes.
+        Sans ce cache, le worker crashait régulièrement sur
+        Render (status 137 = tué par manque de mémoire), un même
+        dataset de ~18 Mo étant retéléchargé des centaines de
+        fois avant d'être épuisé (batches de 10 documents sur
+        des datasets qui en contiennent parfois plusieurs
+        milliers).
+
+        Passer explicitement None pour ces trois paramètres
+        signifie "vider le cache" (dataset terminé, plus besoin
+        de le garder) ; ne pas les passer du tout (comportement
+        par défaut) laisse le cache existant inchangé.
+        """
+
+        update_payload = {
+
+            "dataset_offset":
+                dataset_offset,
+
+            "document_offset":
+                document_offset,
+
+            "documents_processed":
+                documents_processed,
+
+            "datasets_completed":
+                datasets_completed,
+
+            "status":
+                status,
+
+            "last_error":
+                last_error,
+        }
+
+        if cached_dataset_url is not None or (
+            cached_dataset_url is None
+            and cached_dataset_content is None
+            and "cached_dataset_url"
+            in locals()
+        ):
+
+            update_payload[
+                "cached_dataset_url"
+            ] = cached_dataset_url
+
+            update_payload[
+                "cached_dataset_filename"
+            ] = cached_dataset_filename
+
+            update_payload[
+                "cached_dataset_content"
+            ] = cached_dataset_content
 
         (
             self.supabase
             .table(
                 "fao_ingestion_state"
             )
-            .update({
-
-                "dataset_offset":
-                    dataset_offset,
-
-                "document_offset":
-                    document_offset,
-
-                "documents_processed":
-                    documents_processed,
-
-                "datasets_completed":
-                    datasets_completed,
-
-                "status":
-                    status,
-
-                "last_error":
-                    last_error,
-
-            })
+            .update(update_payload)
             .eq(
                 "pipeline_name",
                 self.PIPELINE_NAME,
@@ -196,18 +239,68 @@ class FAOIngestionWorker:
         }
 
     # =========================================================
-    # TÉLÉCHARGER UN DATASET
+    # TÉLÉCHARGER UN DATASET (avec cache)
     # =========================================================
 
     def download_dataset(
         self,
         dataset,
         dataset_index,
+        state,
     ):
 
         dataset_url = str(
             dataset.url
         ).strip()
+
+        # =====================================================
+        # RÉUTILISATION DU CACHE
+        #
+        # Si le dataset demandé est déjà celui stocké en cache
+        # (même URL), on réutilise son contenu au lieu de le
+        # retélécharger. C'est le cœur du correctif mémoire.
+        # =====================================================
+
+        cached_url = state.get(
+            "cached_dataset_url"
+        )
+
+        cached_content_b64 = state.get(
+            "cached_dataset_content"
+        )
+
+        if (
+            cached_url == dataset_url
+            and cached_content_b64
+        ):
+
+            print(
+                "[FAO CACHE] Réutilisation du "
+                f"dataset déjà téléchargé : {dataset_url}"
+            )
+
+            xml_content = base64.b64decode(
+                cached_content_b64
+            )
+
+            actual_filename = state.get(
+                "cached_dataset_filename"
+            ) or (
+                dataset_url
+                .rstrip("/")
+                .split("/")[-1]
+            )
+
+            return {
+                "url": dataset_url,
+                "filename": actual_filename,
+                "content": xml_content,
+                "from_cache": True,
+            }
+
+        # =====================================================
+        # TÉLÉCHARGEMENT RÉEL
+        # =====================================================
 
         filename = (
             dataset_url
@@ -303,6 +396,9 @@ class FAOIngestionWorker:
 
             "content":
                 xml_content,
+
+            "from_cache":
+                False,
         }
 
     # =========================================================
@@ -334,11 +430,13 @@ class FAOIngestionWorker:
         dataset_index,
         document_offset,
         rag_limit,
+        state,
     ):
 
         downloaded = self.download_dataset(
             dataset=dataset,
             dataset_index=dataset_index,
+            state=state,
         )
 
         dataset_url = downloaded["url"]
@@ -390,6 +488,15 @@ class FAOIngestionWorker:
                     True,
 
                 "rag": {},
+
+                "dataset_url_for_cache":
+                    dataset_url,
+
+                "dataset_filename_for_cache":
+                    filename,
+
+                "dataset_content_for_cache":
+                    xml_content,
             }
 
         # =====================================================
@@ -510,6 +617,15 @@ class FAOIngestionWorker:
 
             "rag":
                 rag_result,
+
+            "dataset_url_for_cache":
+                dataset_url,
+
+            "dataset_filename_for_cache":
+                filename,
+
+            "dataset_content_for_cache":
+                xml_content,
         }
 
     # =========================================================
@@ -633,6 +749,9 @@ class FAOIngestionWorker:
                 ),
                 status="completed",
                 last_error=None,
+                cached_dataset_url=None,
+                cached_dataset_filename=None,
+                cached_dataset_content=None,
             )
 
             return {
@@ -694,6 +813,12 @@ class FAOIngestionWorker:
             document_offset
         )
 
+        # Contenu à mettre en cache pour le prochain appel
+        # (None = vider le cache, dataset terminé)
+        next_cached_url = None
+        next_cached_filename = None
+        next_cached_content_b64 = None
+
         # =====================================================
         # TRAITEMENT
         # =====================================================
@@ -720,6 +845,7 @@ class FAOIngestionWorker:
                     dataset_index=dataset_index,
                     document_offset=current_document_offset,
                     rag_limit=rag_limit,
+                    state=state,
                 )
 
                 datasets_results.append(
@@ -785,7 +911,7 @@ class FAOIngestionWorker:
                 )
 
                 # =============================================
-                # DATASET NON TERMINÉ
+                # DATASET NON TERMINÉ → on garde le cache
                 # =============================================
 
                 if result.get(
@@ -804,10 +930,36 @@ class FAOIngestionWorker:
                         )
                     )
 
+                    dataset_content = result.get(
+                        "dataset_content_for_cache"
+                    )
+
+                    if dataset_content:
+
+                        next_cached_url = (
+                            result.get(
+                                "dataset_url_for_cache"
+                            )
+                        )
+
+                        next_cached_filename = (
+                            result.get(
+                                "dataset_filename_for_cache"
+                            )
+                        )
+
+                        next_cached_content_b64 = (
+                            base64.b64encode(
+                                dataset_content
+                            ).decode(
+                                "ascii"
+                            )
+                        )
+
                     break
 
                 # =============================================
-                # DATASET TERMINÉ
+                # DATASET TERMINÉ → on vide le cache
                 # =============================================
 
                 datasets_completed_delta += 1
@@ -817,6 +969,10 @@ class FAOIngestionWorker:
                 )
 
                 next_document_offset = 0
+
+                next_cached_url = None
+                next_cached_filename = None
+                next_cached_content_b64 = None
 
             except Exception as exc:
 
@@ -830,6 +986,13 @@ class FAOIngestionWorker:
                 next_document_offset = (
                     current_document_offset
                 )
+
+                # En cas d'erreur, on vide le cache par
+                # précaution plutôt que de garder un état
+                # potentiellement incohérent.
+                next_cached_url = None
+                next_cached_filename = None
+                next_cached_content_b64 = None
 
                 datasets_results.append({
 
@@ -898,6 +1061,9 @@ class FAOIngestionWorker:
             ),
             status=pipeline_status,
             last_error=last_error,
+            cached_dataset_url=next_cached_url,
+            cached_dataset_filename=next_cached_filename,
+            cached_dataset_content=next_cached_content_b64,
         )
 
         # =====================================================
