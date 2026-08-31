@@ -19,22 +19,8 @@ class OAIIngestionWorker:
     Worker d'ingestion GÉNÉRIQUE pour toute source documentaire
     accessible via un connecteur du registry (registry.get(...))
     dont discover() retourne list[DocumentMetadata] — pensé pour
-    les sources OAI-PMH (AfricaRice, et plus tard IRRI,
-    Bioversity, CIFOR, tous hébergés sur la même plateforme
-    Harvard Dataverse) mais pas limité à OAI-PMH en soi.
-
-    NOTE (leçons du chantier FAO, 31/08/2026) : ce worker
-    applique dès le départ les 3 corrections qu'il a fallu
-    faire a posteriori pour fao_ingestion_worker.py :
-
-    1. discover() n'est appelé QU'UNE SEULE FOIS par source
-       (au premier batch), jamais reparcouru à chaque cycle —
-       la liste de documents déjà découverts est mise en cache.
-    2. Le cache est stocké dans Supabase Storage (fichier réel),
-       jamais dans une colonne de base de données texte.
-    3. Utilise la clé service_role (déjà corrigée globalement
-       sur Render), qui a tous les droits sur les buckets sans
-       avoir besoin de policies RLS par cas.
+    les sources OAI-PMH (AfricaRice, IRRI, Bioversity, CIFOR)
+    mais pas limité à OAI-PMH en soi.
     """
 
     CACHE_BUCKET = "oai-cache"
@@ -126,10 +112,6 @@ class OAIIngestionWorker:
         rows = response.data or []
 
         if not rows:
-
-            # Créé automatiquement si absent, pour permettre
-            # d'ajouter une nouvelle source sans étape SQL
-            # manuelle obligatoire à chaque fois.
 
             insert_response = (
                 self.supabase
@@ -396,8 +378,6 @@ class OAIIngestionWorker:
 
             if cached_documents is None:
 
-                # Cache perdu/expiré : on redécouvre.
-
                 connector = registry.get(
                     self.source
                 )
@@ -458,18 +438,23 @@ class OAIIngestionWorker:
         ]
 
         # =====================================================
-        # FILTRAGE PAR LICENCE (si nécessaire pour cette source)
+        # CORRECTIF (bug offset, 31/08/2026) :
         #
-        # NOTE (31/08/2026) : contrairement à AfricaRice (CC0
-        # garanti pour tout le dépôt), certaines sources
-        # Harvard Dataverse ont des licences choisies document
-        # par document. On vérifie ici la licence réelle de
-        # chaque document via l'API native Dataverse (coûte un
-        # appel réseau par document, mais gratuit), et on
-        # exclut tout document dont la licence n'est pas
-        # clairement permissive (CC0/CC-BY) — y compris quand
-        # elle n'a pas pu être déterminée du tout, par
-        # prudence.
+        # Retient le nombre de documents EXAMINÉS (avant
+        # filtrage licence), car c'est ce nombre qui doit faire
+        # avancer l'offset — sinon, un lot entièrement filtré
+        # (licence non permissive) bloquait l'ingestion
+        # indéfiniment sur le même lot, en boucle infinie
+        # (observé en test réel : offset figé à 78 sur IRRI
+        # pendant plusieurs dizaines de cycles).
+        # =====================================================
+
+        examined_count = len(
+            batch
+        )
+
+        # =====================================================
+        # FILTRAGE PAR LICENCE (si nécessaire pour cette source)
         # =====================================================
 
         licensed_out_count = 0
@@ -509,27 +494,38 @@ class OAIIngestionWorker:
 
             batch = filtered_batch
 
-        ingestion = RAGIngestion()
+        # =====================================================
+        # INGESTION RAG (seulement s'il reste des documents
+        # après filtrage — sinon RAGIngestion planterait sur
+        # une liste vide)
+        # =====================================================
 
-        rag_result = (
-            ingestion.ingest_documents(
-                documents=batch,
-                limit=rag_limit,
-                offset=0,
-            )
-        )
+        if batch:
 
-        batch_processed = int(
-            rag_result.get(
-                "batch_processed",
-                0,
+            ingestion = RAGIngestion()
+
+            rag_result = (
+                ingestion.ingest_documents(
+                    documents=batch,
+                    limit=rag_limit,
+                    offset=0,
+                )
             )
-            or 0
-        )
+
+        else:
+
+            rag_result = {
+                "inserted": 0,
+                "updated": 0,
+                "filtered_out": 0,
+                "skipped": 0,
+                "errors": 0,
+                "batch_processed": 0,
+            }
 
         next_offset = (
             document_offset
-            + len(batch)
+            + examined_count
         )
 
         has_more = (
@@ -545,7 +541,7 @@ class OAIIngestionWorker:
 
         new_documents_processed = (
             documents_processed_before
-            + batch_processed
+            + examined_count
         )
 
         if not has_more:
@@ -567,7 +563,7 @@ class OAIIngestionWorker:
             "source": self.source,
             "total_documents": total_documents,
             "batch_offset": document_offset,
-            "batch_processed": len(batch),
+            "batch_processed": examined_count,
             "inserted": rag_result.get(
                 "inserted", 0
             ),
