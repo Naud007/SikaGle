@@ -95,11 +95,20 @@ class OAIClient:
     def list_records(
         self,
         metadata_prefix="oai_dc",
+        set_spec: str | None = None,
     ):
 
+        params = {
+            "verb": "ListRecords",
+            "metadataPrefix": metadata_prefix,
+        }
+
+        if set_spec:
+
+            params["set"] = set_spec
+
         return self.request(
-            verb="ListRecords",
-            metadataPrefix=metadata_prefix,
+            **params
         )
 
     def list_records_from_token(

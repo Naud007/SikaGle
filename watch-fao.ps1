@@ -2,7 +2,7 @@ $ErrorActionPreference = "Continue"
 
 $BASE_URL = "https://sikagle-backend.onrender.com"
 
-$RAG_LIMIT = 10
+$RAG_LIMIT = 16
 $MAX_BATCHES = 1
 $CHECK_INTERVAL_SECONDS = 30
 

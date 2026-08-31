@@ -107,21 +107,40 @@ class OAINormalizer:
 
         # ==================================================
         # URL DE L'ARTICLE
+        #
+        # NOTE (correctif, 31/08/2026) : recherche d'abord un
+        # identifiant spécifique à un article (ex: plateforme
+        # OJS de BRAB), sinon retombe sur le premier identifiant
+        # qui ressemble à une vraie URL http(s) exploitable
+        # (par exemple un DOI, https://doi.org/...), plutôt que
+        # de toujours utiliser le repli générique example.org.
         # ==================================================
 
         article_url = "https://example.org"
+
+        fallback_url = None
 
         for identifier in record.raw_identifiers:
 
             identifier = identifier.strip()
 
-            if (
-                identifier.startswith("http")
-                and "/article/view/" in identifier
-            ):
+            if not identifier.startswith("http"):
+                continue
+
+            if "/article/view/" in identifier:
 
                 article_url = identifier
                 break
+
+            if fallback_url is None:
+
+                fallback_url = identifier
+
+        else:
+
+            if fallback_url:
+
+                article_url = fallback_url
 
         # ==================================================
         # PIÈCES JOINTES
