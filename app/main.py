@@ -5,6 +5,7 @@ from app.services.agricultural_assistant_service import (
     AgriculturalAssistantService,
 )
 from app.api.routes.fao import router as fao_router
+from app.api.routes.oai_ingestion import router as oai_ingestion_router
 from app.api.routes.ai import router as ai_router
 from app.api.routes.health import router as health_router
 from app.api.routes.system import router as system_router
@@ -127,6 +128,9 @@ app.include_router(
 )
 app.include_router(
     fao_router,
+)
+app.include_router(
+    oai_ingestion_router,
 )
 app.include_router(system_router)
 app.include_router(
