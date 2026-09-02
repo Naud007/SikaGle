@@ -19,8 +19,8 @@ class OAIIngestionWorker:
     Worker d'ingestion GÉNÉRIQUE pour toute source documentaire
     accessible via un connecteur du registry (registry.get(...))
     dont discover() retourne list[DocumentMetadata] — pensé pour
-    les sources OAI-PMH (AfricaRice, IRRI, Bioversity, CIFOR)
-    mais pas limité à OAI-PMH en soi.
+    les sources OAI-PMH (AfricaRice, IRRI, Bioversity, CIFOR,
+    ICRISAT) mais pas limité à OAI-PMH en soi.
     """
 
     CACHE_BUCKET = "oai-cache"
@@ -33,8 +33,8 @@ class OAIIngestionWorker:
     # (vérifié une fois pour toutes), donc inutile de faire un
     # appel réseau supplémentaire par document.
     #
-    # IRRI, Bioversity/CIAT, CIFOR (et toute future source
-    # Harvard Dataverse dont la licence n'est pas garantie en
+    # IRRI, Bioversity/CIAT, CIFOR, ICRISAT (et toute future
+    # source Dataverse dont la licence n'est pas garantie en
     # bloc) doivent être ajoutées ici pour activer le filtrage.
     # =========================================================
 
@@ -42,6 +42,17 @@ class OAIIngestionWorker:
         "irri",
         "bioversity",
         "cifor",
+        "icrisat",
+    }
+
+    # =========================================================
+    # URL DE BASE DATAVERSE PAR SOURCE (pour la vérification de
+    # licence). Par défaut, Harvard Dataverse — ICRISAT a sa
+    # propre instance, donc son propre point d'accès API.
+    # =========================================================
+
+    DATAVERSE_BASE_URL_BY_SOURCE = {
+        "icrisat": "https://dataverse.icrisat.org",
     }
 
     def __init__(
@@ -52,7 +63,14 @@ class OAIIngestionWorker:
         self.source = source
 
         self.license_checker = (
-            DataverseLicenseChecker()
+            DataverseLicenseChecker(
+                base_url=(
+                    self.DATAVERSE_BASE_URL_BY_SOURCE.get(
+                        source,
+                        "https://dataverse.harvard.edu",
+                    )
+                )
+            )
             if source
             in self.SOURCES_REQUIRING_LICENSE_CHECK
             else None
@@ -444,9 +462,7 @@ class OAIIngestionWorker:
         # filtrage licence), car c'est ce nombre qui doit faire
         # avancer l'offset — sinon, un lot entièrement filtré
         # (licence non permissive) bloquait l'ingestion
-        # indéfiniment sur le même lot, en boucle infinie
-        # (observé en test réel : offset figé à 78 sur IRRI
-        # pendant plusieurs dizaines de cycles).
+        # indéfiniment sur le même lot, en boucle infinie.
         # =====================================================
 
         examined_count = len(

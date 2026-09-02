@@ -5,6 +5,7 @@ from .africarice import AfricaRiceConnector
 from .irri import IRRIConnector
 from .bioversity import BioversityConnector
 from .cifor import CIFORConnector
+from .icrisat import ICRISATConnector
 from .registry import registry
 
 registry.register(
@@ -31,6 +32,10 @@ registry.register(
     "cifor",
     CIFORConnector,
 )
+registry.register(
+    "icrisat",
+    ICRISATConnector,
+)
 
 __all__ = [
     "BaseConnector",
@@ -40,5 +45,6 @@ __all__ = [
     "IRRIConnector",
     "BioversityConnector",
     "CIFORConnector",
+    "ICRISATConnector",
     "registry",
 ]
