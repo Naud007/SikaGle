@@ -7,38 +7,47 @@ class DataverseLicenseChecker:
     """
     Vérifie la licence réelle d'un dataset Dataverse (Harvard
     Dataverse ou toute autre instance, ex: ICRISAT), via l'API
-    native Dataverse, qui expose un champ "license" structuré
-    contrairement à OAI-PMH (dc:rights systématiquement absent
-    des métadonnées, vérifié en test réel le 31/08/2026).
+    native Dataverse.
 
-    Réutilisable pour toute source hébergée sur Dataverse
-    (AfricaRice, IRRI, Bioversity/CIAT, CIFOR, ICRISAT...), pas
-    spécifique à un connecteur en particulier.
+    NOTE (correctif, 02/09/2026) : certaines instances (Harvard)
+    renseignent un champ "license" structuré. D'autres (ICRISAT)
+    laissent ce champ à "NONE" et décrivent la vraie licence en
+    texte libre dans le champ "termsOfUse" à la place. On vérifie
+    donc les deux, dans cet ordre.
+
+    NOTE (correctif, 02/09/2026) : les mots-clés de détection
+    utilisent des EXPRESSIONS COMPLÈTES ("non-commercial", pas
+    juste "nc") plutôt que des fragments courts, car chercher de
+    courts fragments ("nc", "sa", "nd") dans du texte libre long
+    (comme termsOfUse) produirait de faux positifs fréquents
+    (ex: "nc" apparaît dans "since", "instance" ; "sa" dans "usa",
+    "data" ; "nd" dans "and").
     """
-
-    # Licences considérées comme utilisables commercialement.
-    # CC0 (domaine public) et CC-BY (attribution simple) sont
-    # sûres ; on exclut volontairement tout ce qui contient
-    # NC (non-commercial), ND (pas de dérivés) ou SA
-    # (partage à l'identique, qui pourrait obliger à republier
-    # nos propres contenus sous la même licence).
 
     PERMISSIVE_LICENSE_KEYWORDS = [
         "cc0",
         "public domain",
+        "creative commons zero",
         "cc-by",
         "cc by",
+        "creative commons attribution",
     ]
 
     RESTRICTIVE_LICENSE_KEYWORDS = [
-        "nc",
         "non-commercial",
         "noncommercial",
-        "nd",
+        "non commercial",
         "no derivatives",
-        "sa",
+        "noderivatives",
         "share-alike",
         "sharealike",
+        "share alike",
+        "cc-by-nc",
+        "cc by nc",
+        "cc-by-nd",
+        "cc by nd",
+        "cc-by-sa",
+        "cc by sa",
     ]
 
     def __init__(
@@ -71,6 +80,13 @@ class DataverseLicenseChecker:
         ou None si la licence n'a pas pu être déterminée (dans
         ce cas, l'appelant doit choisir prudemment de NE PAS
         ingérer le document, faute de certitude).
+
+        IMPORTANT : la détection de licence restrictive est
+        vérifiée EN PREMIER, sur l'ensemble du texte disponible
+        (licence structurée + termsOfUse). "CC-BY-NC" contient
+        "cc-by" (permissif) ET "non-commercial" (restrictif) —
+        si on vérifiait le permissif en premier, une licence
+        CC-BY-NC serait faussement acceptée comme permissive.
         """
 
         persistent_id = self._normalize_doi(
@@ -99,59 +115,71 @@ class DataverseLicenseChecker:
 
             data = response.json()
 
-            license_info = (
+            latest_version = (
                 data
                 .get("data", {})
                 .get("latestVersion", {})
-                .get("license", {})
             )
 
-            # =====================================================
-            # CORRECTIF (02/09/2026) :
-            #
-            # Harvard Dataverse renvoie la licence comme un objet
-            # structuré ({"name": "CC0 1.0", "uri": "..."}), mais
-            # l'instance ICRISAT (indépendante) la renvoie parfois
-            # comme un simple texte ("CC0 1.0"). On gère les deux
-            # formats pour éviter de rejeter systématiquement tous
-            # les documents à cause d'une erreur de lecture, plutôt
-            # que d'une vraie décision de licence.
-            # =====================================================
+            license_info = (
+                latest_version.get(
+                    "license",
+                    {},
+                )
+            )
 
             if isinstance(license_info, str):
 
-                license_name = (
+                license_text = (
                     license_info or ""
-                ).lower()
+                )
 
             else:
 
-                license_name = (
+                license_text = (
                     license_info.get("name")
                     or ""
-                ).lower()
+                )
 
-            if not license_name:
+            # =====================================================
+            # REPLI : champ "license" absent ou vide ("NONE")
+            # → on cherche la vraie information dans termsOfUse
+            # (texte libre), pratique observée sur ICRISAT.
+            # =====================================================
+
+            if (
+                not license_text
+                or license_text.strip().lower()
+                == "none"
+            ):
+
+                license_text = (
+                    latest_version.get(
+                        "termsOfUse",
+                        "",
+                    )
+                    or ""
+                )
+
+            license_text = license_text.lower()
+
+            if not license_text:
 
                 return None
 
             if any(
-                keyword in license_name
+                keyword in license_text
                 for keyword in self.RESTRICTIVE_LICENSE_KEYWORDS
             ):
 
                 return False
 
             if any(
-                keyword in license_name
+                keyword in license_text
                 for keyword in self.PERMISSIVE_LICENSE_KEYWORDS
             ):
 
                 return True
-
-            # Licence reconnue mais ambiguë (ni clairement
-            # permissive, ni clairement restrictive) : on
-            # reste prudent et on refuse par défaut.
 
             return None
 
