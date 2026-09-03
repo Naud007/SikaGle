@@ -6,6 +6,7 @@ from .irri import IRRIConnector
 from .bioversity import BioversityConnector
 from .cifor import CIFORConnector
 from .icrisat import ICRISATConnector
+from .iita import IITAConnector
 from .registry import registry
 
 registry.register(
@@ -36,6 +37,10 @@ registry.register(
     "icrisat",
     ICRISATConnector,
 )
+registry.register(
+    "iita",
+    IITAConnector,
+)
 
 __all__ = [
     "BaseConnector",
@@ -46,5 +51,6 @@ __all__ = [
     "BioversityConnector",
     "CIFORConnector",
     "ICRISATConnector",
+    "IITAConnector",
     "registry",
 ]
