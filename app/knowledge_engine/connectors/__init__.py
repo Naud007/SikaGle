@@ -9,6 +9,8 @@ from .icrisat import ICRISATConnector
 from .iita import IITAConnector
 from .world_agroforestry import WorldAgroforestryConnector
 from .iwmi import IWMIConnector
+from .icraf_direct import ICRAFDirectConnector
+from .cifor_direct import CIFORDirectConnector
 from .registry import registry
 
 registry.register(
@@ -51,6 +53,14 @@ registry.register(
     "iwmi",
     IWMIConnector,
 )
+registry.register(
+    "icraf_direct",
+    ICRAFDirectConnector,
+)
+registry.register(
+    "cifor_direct",
+    CIFORDirectConnector,
+)
 
 __all__ = [
     "BaseConnector",
@@ -64,5 +74,7 @@ __all__ = [
     "IITAConnector",
     "WorldAgroforestryConnector",
     "IWMIConnector",
+    "ICRAFDirectConnector",
+    "CIFORDirectConnector",
     "registry",
 ]

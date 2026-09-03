@@ -45,16 +45,21 @@ class OAIIngestionWorker:
         "icrisat",
         "world_agroforestry",
         "iwmi",
+        "icraf_direct",
+        "cifor_direct",
     }
 
     # =========================================================
     # URL DE BASE DATAVERSE PAR SOURCE (pour la vérification de
-    # licence). Par défaut, Harvard Dataverse — ICRISAT a sa
-    # propre instance, donc son propre point d'accès API.
+    # licence). Par défaut, Harvard Dataverse — certaines
+    # sources ont leur propre instance indépendante, donc leur
+    # propre point d'accès API.
     # =========================================================
 
     DATAVERSE_BASE_URL_BY_SOURCE = {
         "icrisat": "https://dataverse.icrisat.org",
+        "icraf_direct": "https://data.worldagroforestry.org",
+        "cifor_direct": "https://data.cifor.org",
     }
 
     def __init__(
