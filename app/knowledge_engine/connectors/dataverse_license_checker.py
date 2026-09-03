@@ -6,13 +6,13 @@ import requests
 class DataverseLicenseChecker:
     """
     Vérifie la licence réelle d'un dataset Dataverse (Harvard
-    Dataverse ou toute autre instance), via l'API native
-    Dataverse, qui expose un champ "license" structuré
+    Dataverse ou toute autre instance, ex: ICRISAT), via l'API
+    native Dataverse, qui expose un champ "license" structuré
     contrairement à OAI-PMH (dc:rights systématiquement absent
     des métadonnées, vérifié en test réel le 31/08/2026).
 
     Réutilisable pour toute source hébergée sur Dataverse
-    (AfricaRice, IRRI, Bioversity/CIAT, CIFOR...), pas
+    (AfricaRice, IRRI, Bioversity/CIAT, CIFOR, ICRISAT...), pas
     spécifique à un connecteur en particulier.
     """
 
@@ -106,10 +106,30 @@ class DataverseLicenseChecker:
                 .get("license", {})
             )
 
-            license_name = (
-                license_info.get("name")
-                or ""
-            ).lower()
+            # =====================================================
+            # CORRECTIF (02/09/2026) :
+            #
+            # Harvard Dataverse renvoie la licence comme un objet
+            # structuré ({"name": "CC0 1.0", "uri": "..."}), mais
+            # l'instance ICRISAT (indépendante) la renvoie parfois
+            # comme un simple texte ("CC0 1.0"). On gère les deux
+            # formats pour éviter de rejeter systématiquement tous
+            # les documents à cause d'une erreur de lecture, plutôt
+            # que d'une vraie décision de licence.
+            # =====================================================
+
+            if isinstance(license_info, str):
+
+                license_name = (
+                    license_info or ""
+                ).lower()
+
+            else:
+
+                license_name = (
+                    license_info.get("name")
+                    or ""
+                ).lower()
 
             if not license_name:
 
