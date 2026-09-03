@@ -29,6 +29,21 @@ class SearchEngine:
     """
 
     # =========================================================
+    # SEUIL MINIMUM DE PERTINENCE
+    #
+    # NOTE (correctif, 03/09/2026) : avant ce correctif, merge()
+    # renvoyait toujours EXACTEMENT top_k documents, même quand
+    # la majorité avait un score très négatif (concept demandé
+    # absent). Résultat observé en test réel : sur 15 documents
+    # envoyés à Gemini, 1 seul était vraiment pertinent, les 14
+    # autres étaient du bruit. Ce seuil filtre les documents peu
+    # pertinents, quitte à renvoyer moins de documents que
+    # top_k — voire aucun, préférable à envoyer du bruit.
+    # =========================================================
+
+    MINIMUM_RELEVANCE_SCORE = -1.0
+
+    # =========================================================
     # CONCEPTS AGRICOLES
     # =========================================================
 
@@ -198,8 +213,7 @@ class SearchEngine:
         # On exclut les documents dont le score est trop bas
         # (concept demandé absent), plutôt que de toujours
         # forcer top_k résultats même quand la plupart sont du
-        # bruit. Mieux vaut envoyer moins de documents à Gemini,
-        # tous pertinents, que 15 documents dont 14 hors-sujet.
+        # bruit.
         # =====================================================
 
         results = [
@@ -427,27 +441,7 @@ class SearchEngine:
             content_matches * 0.15,
             1.5,
         )
-        # =========================================================
-        # SEUIL MINIMUM DE PERTINENCE
-        #
-        # NOTE (correctif, 03/09/2026) :
-        #
-        # Avant ce correctif, merge() renvoyait toujours EXACTEMENT
-        # top_k documents, même quand la majorité avait un score
-        # très négatif (concept demandé absent, ex: "piment" ET
-        # "puceron" mentionnés mais le document ne parle ni de l'un
-        # ni de l'autre). Résultat observé en test réel : sur 15
-        # documents envoyés à Gemini, 1 seul était vraiment
-        # pertinent, les 14 autres étaient du bruit qui diluait le
-        # contexte utile. Ce seuil filtre les documents dont le
-        # score final est trop bas pour être utile, quitte à
-        # renvoyer moins de documents que top_k — voire aucun, ce
-        # qui est préférable à envoyer du bruit à Gemini.
-        # =========================================================
 
-        MINIMUM_RELEVANCE_SCORE = -1.0
-
-    
         # =====================================================
         # CONCEPTS AGRICOLES DEMANDÉS
         # =====================================================
