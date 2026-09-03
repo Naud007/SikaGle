@@ -7,6 +7,8 @@ from .bioversity import BioversityConnector
 from .cifor import CIFORConnector
 from .icrisat import ICRISATConnector
 from .iita import IITAConnector
+from .world_agroforestry import WorldAgroforestryConnector
+from .iwmi import IWMIConnector
 from .registry import registry
 
 registry.register(
@@ -41,6 +43,14 @@ registry.register(
     "iita",
     IITAConnector,
 )
+registry.register(
+    "world_agroforestry",
+    WorldAgroforestryConnector,
+)
+registry.register(
+    "iwmi",
+    IWMIConnector,
+)
 
 __all__ = [
     "BaseConnector",
@@ -52,5 +62,7 @@ __all__ = [
     "CIFORConnector",
     "ICRISATConnector",
     "IITAConnector",
+    "WorldAgroforestryConnector",
+    "IWMIConnector",
     "registry",
 ]

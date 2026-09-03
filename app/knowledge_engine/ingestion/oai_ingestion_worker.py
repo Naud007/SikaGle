@@ -43,6 +43,8 @@ class OAIIngestionWorker:
         "bioversity",
         "cifor",
         "icrisat",
+        "world_agroforestry",
+        "iwmi",
     }
 
     # =========================================================
