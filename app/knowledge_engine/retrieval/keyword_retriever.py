@@ -304,9 +304,28 @@ class KeywordRetriever:
                 "search_knowledge_keywords",
                 {
                     "search_query": search_query,
+                    
+                    # =========================================
+                    # CORRECTIF (04/09/2026) :
+                    #
+                    # Avec la croissance de la base (~1900
+                    # documents ajoutés en une session : TECA,
+                    # icraf_direct, cifor_direct), une limite de
+                    # 20 résultats bruts PostgreSQL était trop
+                    # basse — le vrai document pertinent (bon
+                    # ts_rank, mais pas le meilleur parmi TOUS
+                    # les documents mentionnant ne serait-ce
+                    # qu'un seul terme isolé comme "pepper")
+                    # n'atteignait plus le top 20 avant que le
+                    # filtrage strict Python (pest+crop) ne
+                    # puisse intervenir. Une limite plus large
+                    # donne plus de candidats à ce filtre.
+                    # =========================================
+
+
                     "result_limit": max(
                         query.top_k,
-                        20
+                        200
                     ),
                 },
             )
