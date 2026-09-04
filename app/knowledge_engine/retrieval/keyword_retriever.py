@@ -124,21 +124,6 @@ class KeywordRetriever:
             "cette",
             "plant",
             "plants",
-            # =================================================
-            # AJOUT (correctif généralisation) :
-            #
-            # "mais" est ambigu : c'est à la fois la conjonction
-            # française "mais" ET, une fois l'accent retiré, le
-            # mot "maïs" (culture) ET un mot portugais très
-            # courant signifiant "plus". Comme une partie de la
-            # base contient des documents en portugais, ce mot
-            # faisait remonter beaucoup de bruit hors sujet.
-            # On l'exclut des mots-clés de recherche ; le filtre
-            # de chevauchement générique ci-dessous protège
-            # quand même les vraies questions sur le maïs, tant
-            # qu'un autre mot-clé pertinent (ex: "epis",
-            # "chenilles") est présent.
-            #
             "mais",
             "puis",
         }
@@ -156,13 +141,6 @@ class KeywordRetriever:
 
         # =====================================================
         # TERMES AGRICOLES (piment / pucerons)
-        #
-        # NOTE : ces listes restent utilisées pour le bonus de
-        # reranking existant, spécifique au cas piment/pucerons
-        # déjà validé. Le nouveau filtre générique plus bas
-        # complète cette protection pour toutes les autres
-        # cultures et ravageurs, sans avoir besoin de connaître
-        # leurs noms à l'avance.
         # =====================================================
 
         pest_terms = {
@@ -213,18 +191,6 @@ class KeywordRetriever:
 
         # =====================================================
         # REQUÊTE CIBLÉE
-        #
-        # NOTE (limite connue) :
-        #
-        # websearch_to_tsquery (utilisé côté Supabase) ne
-        # comprend pas les parenthèses ni le mot AND — cette
-        # requête agit donc en pratique comme un simple OR
-        # géant côté PostgreSQL. C'est volontaire : on élargit
-        # large ici, puis on FILTRE strictement en Python
-        # ci-dessous pour ne garder que les documents qui
-        # contiennent réellement les concepts importants de la
-        # question, sans dépendre d'une syntaxe booléenne que
-        # websearch_to_tsquery n'applique pas.
         # =====================================================
 
         concept_query = []
@@ -262,19 +228,6 @@ class KeywordRetriever:
 
         else:
 
-            # =============================================
-            # CORRECTIF (timeout PostgreSQL) :
-            #
-            # Sans limite, une question longue (typiquement
-            # une observation d'image transformée en phrase,
-            # mais ça pourrait aussi arriver avec une longue
-            # question texte) génère un OR géant que Postgres
-            # met trop de temps à évaluer et finit par
-            # abandonner (« canceling statement due to
-            # statement timeout »). On limite donc le nombre
-            # de mots-clés utilisés dans ce repli générique.
-            # =============================================
-
             MAX_FALLBACK_TERMS = 8
 
             limited_terms = list(
@@ -304,7 +257,6 @@ class KeywordRetriever:
                 "search_knowledge_keywords",
                 {
                     "search_query": search_query,
-                    
                     # =========================================
                     # CORRECTIF (04/09/2026) :
                     #
@@ -312,17 +264,9 @@ class KeywordRetriever:
                     # documents ajoutés en une session : TECA,
                     # icraf_direct, cifor_direct), une limite de
                     # 20 résultats bruts PostgreSQL était trop
-                    # basse — le vrai document pertinent (bon
-                    # ts_rank, mais pas le meilleur parmi TOUS
-                    # les documents mentionnant ne serait-ce
-                    # qu'un seul terme isolé comme "pepper")
-                    # n'atteignait plus le top 20 avant que le
-                    # filtrage strict Python (pest+crop) ne
-                    # puisse intervenir. Une limite plus large
-                    # donne plus de candidats à ce filtre.
+                    # basse. Une limite plus large donne plus de
+                    # candidats au filtrage Python ci-dessous.
                     # =========================================
-
-
                     "result_limit": max(
                         query.top_k,
                         200
@@ -388,47 +332,20 @@ class KeywordRetriever:
                 for term in crop_terms
             )
 
-            # -------------------------------------------------
-            # PRIORITÉ RAVAGEUR
-            # -------------------------------------------------
-
             if has_pest:
 
                 if row_pest_match:
                     score += 2.0
-
-            # -------------------------------------------------
-            # PRIORITÉ CULTURE
-            # -------------------------------------------------
 
             if has_crop:
 
                 if row_crop_match:
                     score += 4.0
 
-            # -------------------------------------------------
-            # BONUS SI RAVAGEUR + CULTURE
-            # -------------------------------------------------
-
             if has_pest and has_crop:
 
                 if row_pest_match and row_crop_match:
                     score += 3.0
-
-            # -------------------------------------------------
-            # CHEVAUCHEMENT GÉNÉRIQUE AVEC LES MOTS-CLÉS
-            # DE LA QUESTION
-            #
-            # NOTE (correctif généralisation) :
-            #
-            # Compte combien des mots-clés extraits de la
-            # question de l'agriculteur (search_terms) sont
-            # réellement présents dans ce document, quel que
-            # soit le sujet (culture, ravageur, maladie...).
-            # Ce compte sert au filtre strict générique
-            # ci-dessous, applicable à TOUTE culture ou
-            # ravageur, sans liste figée à maintenir.
-            # -------------------------------------------------
 
             keyword_overlap_count = sum(
                 1
@@ -452,6 +369,8 @@ class KeywordRetriever:
         # FILTRE STRICT PEST+CROP (piment / pucerons)
         # =====================================================
 
+        specific_filter_applied = False
+
         if has_pest and has_crop:
 
             strict_matches = [
@@ -464,28 +383,28 @@ class KeywordRetriever:
 
                 reranked = strict_matches
 
+                specific_filter_applied = True
+
         # =====================================================
         # FILTRE STRICT GÉNÉRIQUE (toute culture / ravageur)
         #
-        # NOTE (correctif généralisation) :
+        # CORRECTIF (04/09/2026) :
         #
-        # Quand la question contient plusieurs mots-clés
-        # significatifs (au moins 2, après retrait des mots
-        # vides), on exige qu'un document en contienne au
-        # moins 2 pour être conservé. Ça élimine les faux
-        # positifs qui ne partagent qu'un seul mot ambigu
-        # avec la question (par exemple des documents en
-        # portugais qui contiennent seulement "mais" = "plus",
-        # sans aucun autre mot lié à la question), sans avoir
-        # besoin de connaître à l'avance le nom de la culture
-        # ou du ravageur concerné.
-        #
-        # Comme pour le filtre pest+crop, si ce filtre ne
-        # laisse aucun résultat, on retombe sur le classement
-        # normal plutôt que de renvoyer une liste vide.
+        # Ce filtre générique compare les mots EXACTS de la
+        # question (en français) au contenu du document — il
+        # échouait à tort sur des documents pertinents mais en
+        # anglais (ex: "Chilli"/"Aphis gossypii" pour une
+        # question sur "piment"/"pucerons"), même quand le
+        # filtre spécifique ci-dessus (qui connaît les
+        # équivalents multilingues) les avait déjà validés
+        # correctement. On ne l'applique donc que si le filtre
+        # spécifique n'a rien trouvé — jamais en plus de lui.
         # =====================================================
 
-        if len(normalized_terms) >= 2:
+        if (
+            not specific_filter_applied
+            and len(normalized_terms) >= 2
+        ):
 
             generic_matches = [
                 item
