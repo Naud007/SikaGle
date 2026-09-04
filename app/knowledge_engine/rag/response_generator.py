@@ -56,22 +56,12 @@ class ResponseGenerator:
 
         if input_type == "audio":
 
-            # -------------------------------------------------
-            # Gras Markdown
-            # **texte** -> texte
-            # -------------------------------------------------
-
             text = re.sub(
                 r"\*\*(.*?)\*\*",
                 r"\1",
                 text,
                 flags=re.DOTALL,
             )
-
-            # -------------------------------------------------
-            # Italique Markdown
-            # *texte* -> texte
-            # -------------------------------------------------
 
             text = re.sub(
                 r"(?<!\*)\*(?!\*)(.*?)\*(?!\*)",
@@ -80,21 +70,12 @@ class ResponseGenerator:
                 flags=re.DOTALL,
             )
 
-            # -------------------------------------------------
-            # Titres Markdown
-            # ## Titre -> Titre
-            # -------------------------------------------------
-
             text = re.sub(
                 r"^\s*#{1,6}\s*",
                 "",
                 text,
                 flags=re.MULTILINE,
             )
-
-            # -------------------------------------------------
-            # Puces
-            # -------------------------------------------------
 
             text = re.sub(
                 r"^\s*[-•]\s+",
@@ -110,20 +91,12 @@ class ResponseGenerator:
                 flags=re.MULTILINE,
             )
 
-            # -------------------------------------------------
-            # Listes numérotées
-            # -------------------------------------------------
-
             text = re.sub(
                 r"^\s*\d+[\.\)]\s+",
                 "",
                 text,
                 flags=re.MULTILINE,
             )
-
-            # -------------------------------------------------
-            # Blocs de code
-            # -------------------------------------------------
 
             text = re.sub(
                 r"```.*?```",
@@ -132,18 +105,10 @@ class ResponseGenerator:
                 flags=re.DOTALL,
             )
 
-            # -------------------------------------------------
-            # Symboles Markdown inutiles pour la voix
-            # -------------------------------------------------
-
             text = text.replace("[", "")
             text = text.replace("]", "")
             text = text.replace("{", "")
             text = text.replace("}", "")
-
-            # -------------------------------------------------
-            # Nettoyage des espaces
-            # -------------------------------------------------
 
             text = re.sub(
                 r"[ \t]+",
@@ -163,7 +128,6 @@ class ResponseGenerator:
         # TEXTE / WHATSAPP
         # =====================================================
 
-        # Gras Markdown -> italique WhatsApp
         text = re.sub(
             r"\*\*(.*?)\*\*",
             r"*\1*",
@@ -171,7 +135,6 @@ class ResponseGenerator:
             flags=re.DOTALL,
         )
 
-        # Titres Markdown
         text = re.sub(
             r"^\s*#{1,6}\s*",
             "",
@@ -179,7 +142,6 @@ class ResponseGenerator:
             flags=re.MULTILINE,
         )
 
-        # Tirets de liste -> liste WhatsApp
         text = re.sub(
             r"^\s*[-•]\s+",
             "* ",
@@ -187,7 +149,6 @@ class ResponseGenerator:
             flags=re.MULTILINE,
         )
 
-        # Listes numérotées -> liste WhatsApp
         text = re.sub(
             r"^\s*\d+[\.\)]\s+",
             "* ",
@@ -195,7 +156,6 @@ class ResponseGenerator:
             flags=re.MULTILINE,
         )
 
-        # Supprimer les tableaux Markdown
         lines = text.splitlines()
         cleaned_lines = []
 
@@ -220,7 +180,6 @@ class ResponseGenerator:
 
         text = "\n".join(cleaned_lines)
 
-        # Espaces
         text = re.sub(
             r"[ \t]+",
             " ",
@@ -233,28 +192,21 @@ class ResponseGenerator:
             text,
         )
 
-        # Espaces avant/après les paragraphes
         text = re.sub(
             r"\n\s+\* ",
             "\n* ",
             text,
         )
 
-        # -----------------------------------------------------
-        # Réparer les astérisques Markdown mal fermés
-        # -----------------------------------------------------
-
         lines = text.splitlines()
         repaired_lines = []
 
         for line in lines:
 
-            # Une ligne de liste doit commencer par "* "
             if line.strip().startswith("* "):
 
                 content = line.strip()[2:].strip()
 
-                # Supprimer les astérisques isolés
                 content = content.replace("*", "")
 
                 repaired_lines.append(
@@ -263,8 +215,6 @@ class ResponseGenerator:
 
             else:
 
-                # Pour les autres lignes, conserver uniquement
-                # les astérisques correctement utilisés.
                 if line.count("*") % 2 != 0:
                     line = line.replace("*", "")
 
@@ -285,6 +235,8 @@ class ResponseGenerator:
         language: str = "fr",
         input_type: str = "text",
         weather_context: str | None = None,
+        conversation_history: str | None = None,
+        reasoning_summary: str | None = None,
     ) -> str:
 
         # -----------------------------------------------------
@@ -297,6 +249,8 @@ class ResponseGenerator:
             language=language,
             input_type=input_type,
             weather_context=weather_context,
+            conversation_history=conversation_history,
+            reasoning_summary=reasoning_summary,
         )
 
         # -----------------------------------------------------

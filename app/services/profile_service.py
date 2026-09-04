@@ -23,8 +23,14 @@ from app.services.weather_service import (
 ONBOARDING_QUESTIONS = {
     "language": (
         "Bonjour ! 👋 Je suis SikaGlé, votre assistant "
-        "agricole.\n\nPour mieux vous aider, dans quelle "
-        "langue préférez-vous recevoir mes réponses ?"
+        "agricole.\n\nJe peux vous répondre en français et "
+        "en yoruba, à l'écrit comme à l'oral. Je comprends "
+        "aussi le fon, le bariba, l'adja, le goun, le dendi "
+        "et le fulfuldé — pour ces langues, je vous réponds "
+        "pour l'instant en français, le temps de développer "
+        "une vraie voix dans chacune d'elles.\n\nPour mieux "
+        "vous aider, dans quelle langue préférez-vous "
+        "recevoir mes réponses ?"
     ),
     "crops": (
         "D'accord 👍 Quelle(s) culture(s) cultivez-vous ?"
@@ -256,15 +262,6 @@ class ProfileService:
             weather_service = (
                 WeatherService()
             )
-
-            # =========================================================
-            # CORRECTIF (30/08/2026) : ne plus concaténer le pays
-            # dans le texte de recherche — ça cassait le géocodage
-            # (ex: "Abomey calavi, Bénin" → variantes malformées).
-            # WeatherService.geocode() priorise déjà les résultats
-            # situés au Bénin en interne, sans avoir besoin qu'on
-            # le lui précise dans le texte.
-            # =========================================================
 
             coordinates = (
                 weather_service.geocode(

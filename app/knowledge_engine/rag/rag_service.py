@@ -36,6 +36,8 @@ class RAGService:
         publication_type: str | None = None,
         publication_year: int | None = None,
         weather_context: str | None = None,
+        conversation_history: str | None = None,
+        reasoning_summary: str | None = None,
     ) -> dict:
 
         search_query = SearchQuery(
@@ -87,14 +89,6 @@ class RAGService:
 
         # =====================================================
         # DEBUG : TITRES ET SOURCE DES PASSAGES ENVOYÉS
-        #
-        # NOTE (diagnostic) :
-        #
-        # Ajouté pour comprendre pourquoi Gemini répond parfois
-        # "information non disponible" alors que du contexte
-        # est bien envoyé. On affiche ici, pour chaque passage,
-        # son titre, sa source de récupération (vector/keyword)
-        # et les 100 premiers caractères de son contenu.
         # =====================================================
 
         for index, (result, metadata) in enumerate(
@@ -117,6 +111,8 @@ class RAGService:
             language=language,
             input_type=input_type,
             weather_context=weather_context,
+            conversation_history=conversation_history,
+            reasoning_summary=reasoning_summary,
         )
 
         print(
