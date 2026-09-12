@@ -36,6 +36,9 @@ from app.multimodal.vision.plantvillage_similarity_service import (
 from app.services.agricultural_assistant_service import (
     AgriculturalAssistantService,
 )
+from app.services.agronomist_service import (
+    AgronomistService,
+)
 from app.services.profile_service import (
     ProfileService,
 )
@@ -98,15 +101,6 @@ def _normalize_and_parse_timestamp(
 # Traduction + synthèse vocale + envoi WhatsApp, regroupés
 # dans une fonction SYNCHRONE à part, pour pouvoir être
 # exécutée via asyncio.to_thread() depuis le webhook async.
-# Ce bloc était auparavant exécuté directement dans
-# receive_webhook (async def), sans protection — exactement
-# le même problème qu'on avait déjà corrigé pour
-# assistant.process() au tout début du projet (event loop
-# bloqué, /health ne répond plus, Render tue et redémarre
-# l'instance en pleine génération). Observé en production
-# réelle : un message vocal en Fon a fait planter le serveur
-# pendant l'étape de synthèse audio, la réponse n'est jamais
-# arrivée à l'agriculteur.
 # =========================================================
 
 def _synthesize_and_send_audio(
@@ -207,6 +201,37 @@ def _synthesize_and_send_audio(
     return sent_as_audio
 
 
+# =========================================================
+# NOUVEAU (12/09/2026) : phrases d'incertitude utilisées par
+# SikaGlé lui-même (voir PromptBuilder) — leur présence dans
+# la réponse déclenche l'ajout d'une proposition de mise en
+# relation avec un agronome.
+# =========================================================
+
+UNCERTAINTY_PHRASES = [
+    "je n'ai pas assez d'informations",
+    "je n'ai pas d'information assez précise",
+    "je n'en suis pas sûr",
+    "je ne suis pas sûr",
+    "difficile de vous dire avec certitude",
+    "je ne peux pas confirmer",
+]
+
+
+def _answer_shows_uncertainty(
+    answer: str,
+) -> bool:
+
+    normalized = (
+        answer or ""
+    ).lower()
+
+    return any(
+        phrase in normalized
+        for phrase in UNCERTAINTY_PHRASES
+    )
+
+
 router = APIRouter()
 
 
@@ -243,14 +268,9 @@ translation_service = TranslationService()
 
 image_analysis_service = ImageAnalysisService()
 
-# =========================================================
-# NOUVEAU (12/09/2026) : instancié à la demande dans
-# receive_webhook, car ce service a besoin de "supabase",
-# qui n'est disponible qu'à l'intérieur de la fonction (via
-# "from app.main import supabase").
-# =========================================================
-
 plantvillage_similarity_service = None
+
+agronomist_service = None
 
 weather_service = WeatherService()
 
@@ -309,6 +329,7 @@ async def receive_webhook(
     from app.main import supabase
 
     global plantvillage_similarity_service
+    global agronomist_service
 
     data = await request.json()
 
@@ -364,10 +385,6 @@ async def receive_webhook(
                     "id"
                 )
 
-                # =================================================
-                # PROTECTION CONTRE LES DOUBLONS WHATSAPP
-                # =================================================
-
                 if msg_id:
 
                     existing_message = (
@@ -390,10 +407,6 @@ async def receive_webhook(
                         )
 
                         continue
-
-                # =================================================
-                # INDICATEUR "EN TRAIN D'ÉCRIRE"
-                # =================================================
 
                 if msg_id:
 
@@ -433,10 +446,6 @@ async def receive_webhook(
 
                 media_id = None
 
-                # =================================================
-                # MESSAGE TEXTE
-                # =================================================
-
                 if msg_type == "text":
 
                     content = (
@@ -450,10 +459,6 @@ async def receive_webhook(
                             "",
                         )
                     )
-
-                # =================================================
-                # MESSAGE AUDIO / VOCAL
-                # =================================================
 
                 elif msg_type in [
                     "audio",
@@ -472,10 +477,6 @@ async def receive_webhook(
                         )
                     )
 
-                # =================================================
-                # IMAGE (photo de plante)
-                # =================================================
-
                 elif msg_type == "image":
 
                     media_id = (
@@ -489,10 +490,6 @@ async def receive_webhook(
                             "",
                         )
                     )
-
-                # =================================================
-                # DOCUMENT (non analysé pour l'instant)
-                # =================================================
 
                 elif msg_type == "document":
 
@@ -512,10 +509,6 @@ async def receive_webhook(
                         )
                     )
 
-                # =================================================
-                # DATE / QUOTA UTILISATEUR
-                # =================================================
-
                 today_date = date.today()
 
                 today_str = (
@@ -529,7 +522,8 @@ async def receive_webhook(
                         "id, "
                         "credits, "
                         "last_active_date, "
-                        "created_at"
+                        "created_at, "
+                        "is_subscriber"
                     )
                     .eq(
                         "phone_number",
@@ -620,10 +614,6 @@ async def receive_webhook(
                         daily_limit
                     )
 
-                # =================================================
-                # QUOTA ÉPUISÉ
-                # =================================================
-
                 if user_credits <= 0:
 
                     print(
@@ -667,10 +657,6 @@ async def receive_webhook(
                     )
 
                     continue
-
-                # =================================================
-                # PROFIL AGRICULTEUR (collecte progressive)
-                # =================================================
 
                 profile_service = ProfileService(
                     supabase
@@ -753,8 +739,151 @@ async def receive_webhook(
                     continue
 
                 # =================================================
-                # MÉTÉO (contexte optionnel)
+                # DEMANDE EXPLICITE D'UN AGRONOME (12/09/2026)
+                #
+                # Court-circuite tout le pipeline RAG. Réservé
+                # aux abonnés payants (décision utilisateur) :
+                # l'agriculteur non-abonné reçoit une invitation
+                # à s'abonner plutôt qu'une vraie mise en relation.
+                #
+                # C'est TOUJOURS l'agronome qui contacte
+                # l'agriculteur ensuite, jamais l'inverse.
                 # =================================================
+
+                if (
+                    msg_type == "text"
+                    and agronomist_service is None
+                ):
+
+                    agronomist_service = (
+                        AgronomistService(
+                            supabase
+                        )
+                    )
+
+                if (
+                    msg_type == "text"
+                    and agronomist_service.is_explicit_request(
+                        content
+                    )
+                ):
+
+                    is_subscriber = (
+                        user.get(
+                            "is_subscriber",
+                            False,
+                        )
+                        if user_res.data
+                        else False
+                    )
+
+                    (
+                        supabase
+                        .table("messages")
+                        .insert({
+                            "user_id":
+                                user_id,
+                            "whatsapp_message_id":
+                                msg_id,
+                            "message_type":
+                                msg_type,
+                            "content":
+                                content,
+                        })
+                        .execute()
+                    )
+
+                    (
+                        supabase
+                        .table("users")
+                        .update({
+                            "credits":
+                                user_credits
+                                - 1,
+                            "last_active_date":
+                                today_str,
+                        })
+                        .eq(
+                            "id",
+                            user_id,
+                        )
+                        .execute()
+                    )
+
+                    if not is_subscriber:
+
+                        send_whatsapp_message(
+                            sender_phone,
+                            "📞 La mise en relation "
+                            "directe avec un agronome "
+                            "est réservée aux "
+                            "abonnés SikaGlé.\n\n"
+                            "👉 Abonnez-vous pour "
+                            "profiter de cet "
+                            "accompagnement "
+                            "personnalisé !"
+                        )
+
+                        continue
+
+                    farmer_region = profile.get(
+                        "location"
+                    )
+
+                    agronomist = (
+                        agronomist_service
+                        .find_best_agronomist(
+                            region=farmer_region
+                        )
+                    )
+
+                    if agronomist:
+
+                        notification_text = (
+                            agronomist_service
+                            .notify_agronomist(
+                                agronomist,
+                                farmer_phone=(
+                                    sender_phone
+                                ),
+                                farmer_name=(
+                                    sender_name
+                                ),
+                                issue_summary=(
+                                    content
+                                ),
+                            )
+                        )
+
+                        send_whatsapp_message(
+                            agronomist[
+                                "phone_number"
+                            ],
+                            notification_text,
+                        )
+
+                        send_whatsapp_message(
+                            sender_phone,
+                            "✅ Votre demande a été "
+                            "transmise à un agronome, "
+                            "qui va vous contacter "
+                            "directement très "
+                            "bientôt."
+                        )
+
+                    else:
+
+                        send_whatsapp_message(
+                            sender_phone,
+                            "Aucun agronome n'est "
+                            "disponible pour "
+                            "l'instant. Vous pouvez "
+                            "continuer à poser vos "
+                            "questions ici en "
+                            "attendant."
+                        )
+
+                    continue
 
                 weather_context_text = None
 
@@ -817,10 +946,6 @@ async def receive_webhook(
                             f"échouée : {e}"
                         )
 
-                # =================================================
-                # DÉCRÉMENT DU CRÉDIT
-                # =================================================
-
                 remaining_credits = (
                     user_credits - 1
                 )
@@ -840,10 +965,6 @@ async def receive_webhook(
                     )
                     .execute()
                 )
-
-                # =================================================
-                # TRAITEMENT AUDIO
-                # =================================================
 
                 if (
                     msg_type in [
@@ -928,10 +1049,6 @@ async def receive_webhook(
 
                         continue
 
-                # =================================================
-                # TRAITEMENT IMAGE (photo de plante)
-                # =================================================
-
                 if (
                     msg_type == "image"
                     and media_id
@@ -999,16 +1116,6 @@ async def receive_webhook(
                                     caption=image_caption,
                                 )
                             )
-
-                            # =========================================
-                            # RECHERCHE PAR SIMILARITÉ PLANTVILLAGE
-                            # (12/09/2026)
-                            #
-                            # Enrichissement optionnel : ne bloque
-                            # jamais l'analyse principale en cas
-                            # d'échec (find_similar_cases ne lève
-                            # jamais d'exception).
-                            # =========================================
 
                             if observation.photo_usable:
 
@@ -1101,10 +1208,6 @@ async def receive_webhook(
 
                         continue
 
-                # =================================================
-                # ENREGISTREMENT DU MESSAGE
-                # =================================================
-
                 (
                     supabase
                     .table("messages")
@@ -1128,10 +1231,6 @@ async def receive_webhook(
                     f"{remaining_credits}/"
                     f"{daily_limit}"
                 )
-
-                # =================================================
-                # ASSISTANT AGRICOLE
-                # =================================================
 
                 try:
 
@@ -1169,16 +1268,17 @@ async def receive_webhook(
                         "quelques instants."
                     )
 
-                # =================================================
-                # RÉPONSE WHATSAPP
-                #
-                # NOTE (correctif 31/08/2026) : la traduction +
-                # synthèse vocale + envoi audio est maintenant
-                # exécutée via asyncio.to_thread() (fonction
-                # _synthesize_and_send_audio définie plus haut),
-                # pour ne plus bloquer l'event loop pendant cette
-                # étape potentiellement longue.
-                # =================================================
+                if _answer_shows_uncertainty(
+                    answer
+                ):
+
+                    answer += (
+                        "\n\nSi vous voulez, je peux "
+                        "vous mettre en contact avec "
+                        "un agronome pour vous aider "
+                        "davantage — il suffit de me "
+                        "le demander."
+                    )
 
                 sent_as_audio = False
 
