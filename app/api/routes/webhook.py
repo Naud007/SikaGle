@@ -47,21 +47,6 @@ from app.services.weather_service import (
 )
 
 
-# =========================================================
-# CORRECTIF (31/08/2026) :
-#
-# Supabase/PostgreSQL renvoie parfois des timestamps avec un
-# nombre de chiffres après la virgule différent de 3 ou 6
-# (ex: ".52269", 5 chiffres, car les zéros de fin sont
-# coupés). datetime.fromisoformat() de Python 3.10 est
-# strict et rejette ce format avec "Invalid isoformat
-# string", ce qui faisait planter le traitement de N'IMPORTE
-# QUEL message WhatsApp de façon imprévisible. Cette fonction
-# normalise la précision des microsecondes à exactement 6
-# chiffres avant de parser, quel que soit le nombre de
-# chiffres reçu.
-# =========================================================
-
 def _normalize_and_parse_timestamp(
     timestamp_str: str,
 ) -> datetime:
@@ -94,14 +79,6 @@ def _normalize_and_parse_timestamp(
         normalized
     )
 
-
-# =========================================================
-# CORRECTIF (31/08/2026) :
-#
-# Traduction + synthèse vocale + envoi WhatsApp, regroupés
-# dans une fonction SYNCHRONE à part, pour pouvoir être
-# exécutée via asyncio.to_thread() depuis le webhook async.
-# =========================================================
 
 def _synthesize_and_send_audio(
     sender_phone: str,
@@ -201,13 +178,6 @@ def _synthesize_and_send_audio(
     return sent_as_audio
 
 
-# =========================================================
-# NOUVEAU (12/09/2026) : phrases d'incertitude utilisées par
-# SikaGlé lui-même (voir PromptBuilder) — leur présence dans
-# la réponse déclenche l'ajout d'une proposition de mise en
-# relation avec un agronome.
-# =========================================================
-
 UNCERTAINTY_PHRASES = [
     "je n'ai pas assez d'informations",
     "je n'ai pas d'information assez précise",
@@ -229,6 +199,46 @@ def _answer_shows_uncertainty(
     return any(
         phrase in normalized
         for phrase in UNCERTAINTY_PHRASES
+    )
+
+
+# =========================================================
+# NOUVEAU (12/09/2026) : compteur mensuel de consultations
+# agronome — 3 incluses par mois dans l'abonnement, réinitialisé
+# automatiquement à chaque nouveau mois calendaire, même
+# principe que les crédits quotidiens.
+# =========================================================
+
+MONTHLY_AGRONOMIST_CONSULTATIONS_LIMIT = 3
+
+
+def _get_agronomist_consultations_remaining(
+    user: dict,
+    current_month: str,
+) -> int:
+
+    stored_month = user.get(
+        "agronomist_consultations_month"
+    )
+
+    used = (
+        user.get(
+            "agronomist_consultations_used",
+            0,
+        )
+        or 0
+    )
+
+    if stored_month != current_month:
+
+        return (
+            MONTHLY_AGRONOMIST_CONSULTATIONS_LIMIT
+        )
+
+    return max(
+        0,
+        MONTHLY_AGRONOMIST_CONSULTATIONS_LIMIT
+        - used,
     )
 
 
@@ -275,10 +285,6 @@ agronomist_service = None
 weather_service = WeatherService()
 
 
-# =========================================================
-# VÉRIFICATION DU WEBHOOK WHATSAPP
-# =========================================================
-
 @router.get("/webhook")
 def verify_webhook(
     request: Request,
@@ -316,10 +322,6 @@ def verify_webhook(
         status_code=403,
     )
 
-
-# =========================================================
-# RÉCEPTION DES MESSAGES WHATSAPP
-# =========================================================
 
 @router.post("/webhook")
 async def receive_webhook(
@@ -515,6 +517,12 @@ async def receive_webhook(
                     today_date.isoformat()
                 )
 
+                current_month_str = (
+                    today_date.strftime(
+                        "%Y-%m"
+                    )
+                )
+
                 user_res = (
                     supabase
                     .table("users")
@@ -523,7 +531,9 @@ async def receive_webhook(
                         "credits, "
                         "last_active_date, "
                         "created_at, "
-                        "is_subscriber"
+                        "is_subscriber, "
+                        "agronomist_consultations_used, "
+                        "agronomist_consultations_month"
                     )
                     .eq(
                         "phone_number",
@@ -613,6 +623,8 @@ async def receive_webhook(
                     user_credits = (
                         daily_limit
                     )
+
+                    user = {}
 
                 if user_credits <= 0:
 
@@ -741,11 +753,10 @@ async def receive_webhook(
                 # =================================================
                 # DEMANDE EXPLICITE D'UN AGRONOME (12/09/2026)
                 #
-                # Court-circuite tout le pipeline RAG. Réservé
-                # aux abonnés payants (décision utilisateur) :
-                # l'agriculteur non-abonné reçoit une invitation
-                # à s'abonner plutôt qu'une vraie mise en relation.
-                #
+                # Réservé aux abonnés (is_subscriber), avec un
+                # quota de MONTHLY_AGRONOMIST_CONSULTATIONS_LIMIT
+                # consultations gratuites par mois calendaire.
+                # Priorité de sélection : langue > région > culture.
                 # C'est TOUJOURS l'agronome qui contacte
                 # l'agriculteur ensuite, jamais l'inverse.
                 # =================================================
@@ -773,8 +784,6 @@ async def receive_webhook(
                             "is_subscriber",
                             False,
                         )
-                        if user_res.data
-                        else False
                     )
 
                     (
@@ -826,6 +835,36 @@ async def receive_webhook(
 
                         continue
 
+                    consultations_remaining = (
+                        _get_agronomist_consultations_remaining(
+                            user,
+                            current_month_str,
+                        )
+                    )
+
+                    if consultations_remaining <= 0:
+
+                        send_whatsapp_message(
+                            sender_phone,
+                            "📞 Vous avez déjà "
+                            "utilisé vos "
+                            f"{MONTHLY_AGRONOMIST_CONSULTATIONS_LIMIT} "
+                            "consultations agronome "
+                            "incluses ce mois-ci.\n\n"
+                            "👉 Pour parler à un "
+                            "agronome supplémentaire "
+                            "ce mois-ci, un abonnement "
+                            "complémentaire est "
+                            "nécessaire. Contactez-nous "
+                            "pour en savoir plus."
+                        )
+
+                        continue
+
+                    farmer_language = profile.get(
+                        "language"
+                    )
+
                     farmer_region = profile.get(
                         "location"
                     )
@@ -833,7 +872,10 @@ async def receive_webhook(
                     agronomist = (
                         agronomist_service
                         .find_best_agronomist(
-                            region=farmer_region
+                            language=(
+                                farmer_language
+                            ),
+                            region=farmer_region,
                         )
                     )
 
@@ -862,13 +904,54 @@ async def receive_webhook(
                             notification_text,
                         )
 
+                        new_used = (
+                            (
+                                user.get(
+                                    "agronomist_consultations_used",
+                                    0,
+                                )
+                                or 0
+                            )
+                            + 1
+                            if user.get(
+                                "agronomist_consultations_month"
+                            )
+                            == current_month_str
+                            else 1
+                        )
+
+                        (
+                            supabase
+                            .table("users")
+                            .update({
+                                "agronomist_consultations_used":
+                                    new_used,
+                                "agronomist_consultations_month":
+                                    current_month_str,
+                            })
+                            .eq(
+                                "id",
+                                user_id,
+                            )
+                            .execute()
+                        )
+
+                        remaining_after = (
+                            consultations_remaining
+                            - 1
+                        )
+
                         send_whatsapp_message(
                             sender_phone,
                             "✅ Votre demande a été "
                             "transmise à un agronome, "
                             "qui va vous contacter "
                             "directement très "
-                            "bientôt."
+                            "bientôt.\n\n"
+                            f"Il vous reste "
+                            f"{remaining_after} "
+                            "consultation(s) agronome "
+                            "gratuite(s) ce mois-ci."
                         )
 
                     else:
