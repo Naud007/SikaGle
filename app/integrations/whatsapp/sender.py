@@ -99,14 +99,112 @@ def send_whatsapp_message(
 
 
 # =============================================================
+# ENVOI D'UN MESSAGE VIA MODÈLE (TEMPLATE)
+#
+# NOTE (12/09/2026) :
+#
+# Contrairement à send_whatsapp_message (texte libre), un
+# modèle peut être envoyé à tout moment, même si le
+# destinataire n'a jamais écrit à ce numéro WhatsApp Business
+# — nécessaire pour notifier un agronome qui n'a pas encore
+# interagi avec SikaGlé (règle des 24h de WhatsApp, erreur
+# 131047 rencontrée en test réel le 12/09/2026).
+# =============================================================
+
+def send_whatsapp_template_message(
+    to_phone: str,
+    template_name: str,
+    language_code: str,
+    body_parameters: list[str],
+) -> bool:
+    """
+    Envoie un message basé sur un modèle pré-approuvé par
+    Meta. body_parameters doit contenir les valeurs dans le
+    même ordre que les variables {{1}}, {{2}}, {{3}}... du
+    modèle.
+    """
+
+    if (
+        not WHATSAPP_TOKEN
+        or not WHATSAPP_PHONE_ID
+    ):
+        logger.warning(
+            "Variables WHATSAPP_TOKEN ou WHATSAPP_PHONE_NUMBER_ID manquantes."
+        )
+        return False
+
+    url = (
+        f"https://graph.facebook.com/v18.0/"
+        f"{WHATSAPP_PHONE_ID}/messages"
+    )
+
+    headers = {
+        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": to_phone,
+        "type": "template",
+        "template": {
+            "name": template_name,
+            "language": {
+                "code": language_code,
+            },
+            "components": [
+                {
+                    "type": "body",
+                    "parameters": [
+                        {
+                            "type": "text",
+                            "text": value,
+                        }
+                        for value in body_parameters
+                    ],
+                }
+            ],
+        },
+    }
+
+    try:
+
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=30,
+        )
+
+        if response.status_code == 200:
+
+            logger.info(
+                "Message modèle WhatsApp envoyé à %s",
+                to_phone,
+            )
+
+            return True
+
+        logger.error(
+            "Échec d'envoi modèle WhatsApp (%s): %s",
+            response.status_code,
+            response.text,
+        )
+
+        return False
+
+    except Exception:
+
+        logger.exception(
+            "Erreur lors de l'envoi du modèle WhatsApp."
+        )
+
+        return False
+
+
+# =============================================================
 # ENVOI D'UN MESSAGE AUDIO (réponse vocale de SikaGlé)
-#
-# NOTE :
-#
-# Contrairement au texte, l'envoi audio nécessite d'abord
-# d'uploader le fichier vers WhatsApp (voir
-# WhatsAppClient.upload_media) pour obtenir un media_id,
-# avant de pouvoir envoyer le message qui le référence.
 # =============================================================
 
 def send_whatsapp_audio_message(
@@ -203,17 +301,6 @@ def send_whatsapp_audio_message(
 
 # =============================================================
 # INDICATEUR "EN TRAIN D'ÉCRIRE"
-#
-# NOTE :
-#
-# L'API WhatsApp Cloud ne propose qu'un seul type
-# d'indicateur générique ("text"), quel que soit le type
-# du message reçu (texte ou audio) — il n'existe pas de
-# variante "enregistrement audio en cours" côté bot.
-#
-# Cet indicateur marque aussi automatiquement le message
-# reçu comme lu, et disparaît de lui-même après 25 secondes
-# ou dès qu'on envoie la vraie réponse (send_whatsapp_message).
 # =============================================================
 
 def send_typing_indicator(

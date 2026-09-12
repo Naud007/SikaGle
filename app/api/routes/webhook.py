@@ -14,6 +14,7 @@ from app.integrations.whatsapp.sender import (
     send_typing_indicator,
     send_whatsapp_audio_message,
     send_whatsapp_message,
+    send_whatsapp_template_message,
 )
 from app.multimodal.speech.abena_text_to_speech import (
     AbenaTextToSpeech,
@@ -201,13 +202,6 @@ def _answer_shows_uncertainty(
         for phrase in UNCERTAINTY_PHRASES
     )
 
-
-# =========================================================
-# NOUVEAU (12/09/2026) : compteur mensuel de consultations
-# agronome — 3 incluses par mois dans l'abonnement, réinitialisé
-# automatiquement à chaque nouveau mois calendaire, même
-# principe que les crédits quotidiens.
-# =========================================================
 
 MONTHLY_AGRONOMIST_CONSULTATIONS_LIMIT = 3
 
@@ -750,17 +744,6 @@ async def receive_webhook(
 
                     continue
 
-                # =================================================
-                # DEMANDE EXPLICITE D'UN AGRONOME (12/09/2026)
-                #
-                # Réservé aux abonnés (is_subscriber), avec un
-                # quota de MONTHLY_AGRONOMIST_CONSULTATIONS_LIMIT
-                # consultations gratuites par mois calendaire.
-                # Priorité de sélection : langue > région > culture.
-                # C'est TOUJOURS l'agronome qui contacte
-                # l'agriculteur ensuite, jamais l'inverse.
-                # =================================================
-
                 if (
                     msg_type == "text"
                     and agronomist_service is None
@@ -881,27 +864,31 @@ async def receive_webhook(
 
                     if agronomist:
 
-                        notification_text = (
-                            agronomist_service
-                            .notify_agronomist(
-                                agronomist,
-                                farmer_phone=(
-                                    sender_phone
-                                ),
-                                farmer_name=(
-                                    sender_name
-                                ),
-                                issue_summary=(
-                                    content
-                                ),
-                            )
-                        )
+                        # =========================================
+                        # NOUVEAU (12/09/2026) : envoi via modèle
+                        # pré-approuvé, pas message texte libre —
+                        # fonctionne même si l'agronome n'a jamais
+                        # écrit à SikaGlé (contourne la règle des
+                        # 24h de WhatsApp, erreur 131047 rencontrée
+                        # en test réel).
+                        # =========================================
 
-                        send_whatsapp_message(
-                            agronomist[
-                                "phone_number"
+                        send_whatsapp_template_message(
+                            to_phone=(
+                                agronomist[
+                                    "phone_number"
+                                ]
+                            ),
+                            template_name=(
+                                "agronomist_notification"
+                            ),
+                            language_code="fr",
+                            body_parameters=[
+                                sender_name
+                                or "un agriculteur",
+                                sender_phone,
+                                content,
                             ],
-                            notification_text,
                         )
 
                         new_used = (
