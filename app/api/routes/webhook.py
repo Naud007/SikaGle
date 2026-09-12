@@ -30,6 +30,9 @@ from app.multimodal.translation.translation_service import (
 from app.multimodal.vision.image_analysis_service import (
     ImageAnalysisService,
 )
+from app.multimodal.vision.plantvillage_similarity_service import (
+    PlantVillageSimilarityService,
+)
 from app.services.agricultural_assistant_service import (
     AgriculturalAssistantService,
 )
@@ -240,6 +243,15 @@ translation_service = TranslationService()
 
 image_analysis_service = ImageAnalysisService()
 
+# =========================================================
+# NOUVEAU (12/09/2026) : instancié à la demande dans
+# receive_webhook, car ce service a besoin de "supabase",
+# qui n'est disponible qu'à l'intérieur de la fonction (via
+# "from app.main import supabase").
+# =========================================================
+
+plantvillage_similarity_service = None
+
 weather_service = WeatherService()
 
 
@@ -295,6 +307,8 @@ async def receive_webhook(
 ):
 
     from app.main import supabase
+
+    global plantvillage_similarity_service
 
     data = await request.json()
 
@@ -985,6 +999,48 @@ async def receive_webhook(
                                     caption=image_caption,
                                 )
                             )
+
+                            # =========================================
+                            # RECHERCHE PAR SIMILARITÉ PLANTVILLAGE
+                            # (12/09/2026)
+                            #
+                            # Enrichissement optionnel : ne bloque
+                            # jamais l'analyse principale en cas
+                            # d'échec (find_similar_cases ne lève
+                            # jamais d'exception).
+                            # =========================================
+
+                            if observation.photo_usable:
+
+                                if (
+                                    plantvillage_similarity_service
+                                    is None
+                                ):
+
+                                    plantvillage_similarity_service = (
+                                        PlantVillageSimilarityService(
+                                            supabase
+                                        )
+                                    )
+
+                                similar_cases = (
+                                    plantvillage_similarity_service
+                                    .find_similar_cases(
+                                        media_file.file_path
+                                    )
+                                )
+
+                                observation.similar_cases = (
+                                    similar_cases
+                                )
+
+                                if similar_cases:
+
+                                    print(
+                                        "🔍 Cas similaires "
+                                        "PlantVillage :",
+                                        similar_cases,
+                                    )
 
                             print(
                                 "🖼️ Observation image :",

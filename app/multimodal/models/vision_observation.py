@@ -51,6 +51,19 @@ class VisionObservation:
     # photo (ex: "mes plants ont des taches").
     caption: str | None = None
 
+    # =========================================================
+    # NOUVEAU (12/09/2026) : cas similaires trouvés dans la
+    # base PlantVillage (43456 images), par similarité visuelle
+    # (embeddings Jina) — voir PlantVillageSimilarityService.
+    # Reste une similarité visuelle, jamais un diagnostic
+    # confirmé — le RAG texte (RAGService) garde seul la
+    # responsabilité du conseil final.
+    # =========================================================
+
+    similar_cases: list[str] = field(
+        default_factory=list
+    )
+
     def to_query_text(self) -> str:
         """
         Transforme cette observation en une phrase naturelle,
@@ -99,6 +112,16 @@ class VisionObservation:
                 " Cela pourrait être lié à "
                 f"{self.possible_cause}, "
                 "mais je n'en suis pas sûr."
+            )
+
+        if self.similar_cases:
+
+            sentence += (
+                " Une comparaison visuelle avec "
+                "des cas connus évoque : "
+                + ", ".join(self.similar_cases)
+                + " (à confirmer, pas une "
+                "certitude)."
             )
 
         if self.caption:
