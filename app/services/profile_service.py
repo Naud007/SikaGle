@@ -297,3 +297,41 @@ class ProfileService:
                 "⚠️ Géocodage échoué pour "
                 f'"{location_text}" : {e}'
             )
+
+    # =========================================================
+    # POSITION GPS PRÉCISE (12/09/2026)
+    #
+    # Remplace les coordonnées approximatives (issues du
+    # géocodage du texte de localisation) par la vraie position
+    # GPS, quand l'agriculteur la partage via WhatsApp. Les
+    # fonctionnalités existantes (météo) et futures
+    # (surveillance satellite) utilisent automatiquement ces
+    # coordonnées mises à jour, sans logique supplémentaire —
+    # même colonne, juste une meilleure valeur.
+    # =========================================================
+
+    def update_precise_location(
+        self,
+        profile_id,
+        latitude: float,
+        longitude: float,
+    ) -> None:
+
+        (
+            self.supabase
+            .table("profiles")
+            .update({
+                "latitude": latitude,
+                "longitude": longitude,
+                "location_resolved_at":
+                    datetime
+                    .now(timezone.utc)
+                    .isoformat(),
+                "location_is_precise": True,
+            })
+            .eq(
+                "id",
+                profile_id,
+            )
+            .execute()
+        )
