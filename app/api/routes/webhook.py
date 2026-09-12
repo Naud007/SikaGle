@@ -487,23 +487,91 @@ async def receive_webhook(
                         )
                     )
 
-                elif msg_type == "document":
+                # =================================================
+                # POSITION GPS PRÉCISE (12/09/2026)
+                #
+                # Traité tout de suite, avant même la vérification
+                # du profil/crédits — un partage de position n'est
+                # pas une vraie question agricole, pas besoin de
+                # consommer un crédit ni de passer par tout le
+                # reste du pipeline.
+                # =================================================
 
-                    content = (
-                        "[DOCUMENT] "
-                        "ID: "
-                        + str(
-                            msg
-                            .get(
-                                "document",
-                                {},
-                            )
-                            .get(
-                                "id",
-                                "",
-                            )
+                elif msg_type == "location":
+
+                    location_data = msg.get(
+                        "location",
+                        {},
+                    )
+
+                    precise_latitude = (
+                        location_data.get(
+                            "latitude"
                         )
                     )
+
+                    precise_longitude = (
+                        location_data.get(
+                            "longitude"
+                        )
+                    )
+
+                    if (
+                        precise_latitude
+                        is not None
+                        and precise_longitude
+                        is not None
+                    ):
+
+                        temp_user_res = (
+                            supabase
+                            .table("users")
+                            .select("id")
+                            .eq(
+                                "phone_number",
+                                sender_phone,
+                            )
+                            .execute()
+                        )
+
+                        if temp_user_res.data:
+
+                            temp_user_id = (
+                                temp_user_res
+                                .data[0]["id"]
+                            )
+
+                            temp_profile_service = (
+                                ProfileService(
+                                    supabase
+                                )
+                            )
+
+                            temp_profile, _ = (
+                                temp_profile_service
+                                .ensure_profile_exists(
+                                    temp_user_id
+                                )
+                            )
+
+                            temp_profile_service.update_precise_location(
+                                temp_profile["id"],
+                                precise_latitude,
+                                precise_longitude,
+                            )
+
+                            send_whatsapp_message(
+                                sender_phone,
+                                "📍 Merci ! J'ai bien "
+                                "enregistré votre "
+                                "position précise — "
+                                "elle me permettra de "
+                                "vous donner une météo "
+                                "plus exacte pour votre "
+                                "exploitation."
+                            )
+
+                    continue
 
                 today_date = date.today()
 
