@@ -48,6 +48,20 @@ from app.services.weather_service import (
 )
 
 
+# =========================================================
+# NOUVEAU (14/09/2026, TEMPORAIRE) :
+#
+# Le paiement n'est pas encore intégré (FedaPay pas codé) —
+# le temps de la phase de test, TOUT LE MONDE peut demander
+# un agronome, sans condition d'abonnement.
+#
+# ⚠️ QUAND LE PAIEMENT SERA PRÊT : repasser cette valeur à
+# True pour réactiver la restriction aux abonnés.
+# =========================================================
+
+AGRONOMIST_REQUIRES_SUBSCRIPTION = False
+
+
 def _normalize_and_parse_timestamp(
     timestamp_str: str,
 ) -> datetime:
@@ -487,15 +501,23 @@ async def receive_webhook(
                         )
                     )
 
-                # =================================================
-                # POSITION GPS PRÉCISE (12/09/2026)
-                #
-                # Traité tout de suite, avant même la vérification
-                # du profil/crédits — un partage de position n'est
-                # pas une vraie question agricole, pas besoin de
-                # consommer un crédit ni de passer par tout le
-                # reste du pipeline.
-                # =================================================
+                elif msg_type == "document":
+
+                    content = (
+                        "[DOCUMENT] "
+                        "ID: "
+                        + str(
+                            msg
+                            .get(
+                                "document",
+                                {},
+                            )
+                            .get(
+                                "id",
+                                "",
+                            )
+                        )
+                    )
 
                 elif msg_type == "location":
 
@@ -572,6 +594,99 @@ async def receive_webhook(
                             )
 
                     continue
+
+                # =================================================
+                # TRAITEMENT AUDIO — DÉPLACÉ EN AMONT (14/09/2026)
+                #
+                # NOTE : la transcription se fait maintenant ICI,
+                # AVANT la vérification "demande d'agronome"
+                # ci-dessous — pour que cette dernière puisse
+                # aussi fonctionner sur un message vocal, pas
+                # seulement sur un message texte.
+                # =================================================
+
+                if (
+                    msg_type in [
+                        "audio",
+                        "voice",
+                    ]
+                    and media_id
+                ):
+
+                    try:
+
+                        with tempfile.TemporaryDirectory() as temp_dir:
+
+                            audio_path = os.path.join(
+                                temp_dir,
+                                f"{media_id}.ogg",
+                            )
+
+                            media_file = (
+                                media_service.download(
+                                    media_id=media_id,
+                                    destination=audio_path,
+                                    media_type="audio",
+                                    mime_type=(
+                                        msg
+                                        .get(
+                                            msg_type,
+                                            {},
+                                        )
+                                        .get(
+                                            "mime_type",
+                                            "audio/ogg",
+                                        )
+                                    ),
+                                )
+                            )
+
+                            if not media_file.downloaded:
+
+                                raise RuntimeError(
+                                    "Le fichier audio WhatsApp "
+                                    "n'a pas été téléchargé."
+                                )
+
+                            transcription = (
+                                speech_service.transcribe(
+                                    media_file.file_path,
+                                    mime_type=(
+                                        media_file.mime_type
+                                        or "audio/ogg"
+                                    ),
+                                )
+                            )
+
+                            content = (
+                                transcription.text
+                            )
+
+                            detected_language = (
+                                transcription.language
+                                or "fr"
+                            )
+
+                            print(
+                                "🎙️ Audio transcrit "
+                                f"({detected_language}) :",
+                                content,
+                            )
+
+                    except Exception as e:
+
+                        print(
+                            f"❌ Erreur traitement audio : {e}"
+                        )
+
+                        send_whatsapp_message(
+                            sender_phone,
+                            "Je n'ai pas pu comprendre "
+                            "votre message vocal. "
+                            "Veuillez réessayer.",
+                        )
+
+                        continue
 
                 today_date = date.today()
 
@@ -812,8 +927,25 @@ async def receive_webhook(
 
                     continue
 
+                # =================================================
+                # DEMANDE EXPLICITE D'UN AGRONOME
+                #
+                # NOTE (14/09/2026) : fonctionne maintenant pour
+                # TEXTE et AUDIO (content est déjà résolu pour les
+                # deux à ce stade). Pas encore supporté pour
+                # d'autres langues que le français — mots-clés à
+                # étendre une fois les traductions natives
+                # fournies (Fon, Bariba, Adja, Goun, Dendi,
+                # Fulfuldé).
+                #
+                # ⚠️ TEMPORAIRE : voir AGRONOMIST_REQUIRES_
+                # SUBSCRIPTION en haut du fichier — actuellement
+                # False, donc accessible à tous pendant les tests,
+                # sans condition d'abonnement.
+                # =================================================
+
                 if (
-                    msg_type == "text"
+                    content
                     and agronomist_service is None
                 ):
 
@@ -824,7 +956,8 @@ async def receive_webhook(
                     )
 
                 if (
-                    msg_type == "text"
+                    content
+                    and agronomist_service
                     and agronomist_service.is_explicit_request(
                         content
                     )
@@ -870,7 +1003,10 @@ async def receive_webhook(
                         .execute()
                     )
 
-                    if not is_subscriber:
+                    if (
+                        AGRONOMIST_REQUIRES_SUBSCRIPTION
+                        and not is_subscriber
+                    ):
 
                         send_whatsapp_message(
                             sender_phone,
@@ -893,7 +1029,10 @@ async def receive_webhook(
                         )
                     )
 
-                    if consultations_remaining <= 0:
+                    if (
+                        AGRONOMIST_REQUIRES_SUBSCRIPTION
+                        and consultations_remaining <= 0
+                    ):
 
                         send_whatsapp_message(
                             sender_phone,
@@ -931,15 +1070,6 @@ async def receive_webhook(
                     )
 
                     if agronomist:
-
-                        # =========================================
-                        # NOUVEAU (12/09/2026) : envoi via modèle
-                        # pré-approuvé, pas message texte libre —
-                        # fonctionne même si l'agronome n'a jamais
-                        # écrit à SikaGlé (contourne la règle des
-                        # 24h de WhatsApp, erreur 131047 rencontrée
-                        # en test réel).
-                        # =========================================
 
                         send_whatsapp_template_message(
                             to_phone=(
@@ -991,22 +1121,13 @@ async def receive_webhook(
                             .execute()
                         )
 
-                        remaining_after = (
-                            consultations_remaining
-                            - 1
-                        )
-
                         send_whatsapp_message(
                             sender_phone,
                             "✅ Votre demande a été "
                             "transmise à un agronome, "
                             "qui va vous contacter "
                             "directement très "
-                            "bientôt.\n\n"
-                            f"Il vous reste "
-                            f"{remaining_after} "
-                            "consultation(s) agronome "
-                            "gratuite(s) ce mois-ci."
+                            "bientôt."
                         )
 
                     else:
@@ -1103,89 +1224,6 @@ async def receive_webhook(
                     )
                     .execute()
                 )
-
-                if (
-                    msg_type in [
-                        "audio",
-                        "voice",
-                    ]
-                    and media_id
-                ):
-
-                    try:
-
-                        with tempfile.TemporaryDirectory() as temp_dir:
-
-                            audio_path = os.path.join(
-                                temp_dir,
-                                f"{media_id}.ogg",
-                            )
-
-                            media_file = (
-                                media_service.download(
-                                    media_id=media_id,
-                                    destination=audio_path,
-                                    media_type="audio",
-                                    mime_type=(
-                                        msg
-                                        .get(
-                                            msg_type,
-                                            {},
-                                        )
-                                        .get(
-                                            "mime_type",
-                                            "audio/ogg",
-                                        )
-                                    ),
-                                )
-                            )
-
-                            if not media_file.downloaded:
-
-                                raise RuntimeError(
-                                    "Le fichier audio WhatsApp "
-                                    "n'a pas été téléchargé."
-                                )
-
-                            transcription = (
-                                speech_service.transcribe(
-                                    media_file.file_path,
-                                    mime_type=(
-                                        media_file.mime_type
-                                        or "audio/ogg"
-                                    ),
-                                )
-                            )
-
-                            content = (
-                                transcription.text
-                            )
-
-                            detected_language = (
-                                transcription.language
-                                or "fr"
-                            )
-
-                            print(
-                                "🎙️ Audio transcrit "
-                                f"({detected_language}) :",
-                                content,
-                            )
-
-                    except Exception as e:
-
-                        print(
-                            f"❌ Erreur traitement audio : {e}"
-                        )
-
-                        send_whatsapp_message(
-                            sender_phone,
-                            "Je n'ai pas pu comprendre "
-                            "votre message vocal. "
-                            "Veuillez réessayer.",
-                        )
-
-                        continue
 
                 if (
                     msg_type == "image"
